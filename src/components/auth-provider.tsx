@@ -193,46 +193,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       // Carrega/cria profile em public.users
-      let { data: profile, error: profileError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', supabaseUser.id)
-        .single();
+      let profile: any = null;
 
-      console.log('[AUTH] profile result', { profile, profileError });
-
-      if (profileError && profileError.code !== 'PGRST116') {
-        console.error('[AUTH] Profile fetch error:', profileError);
-      }
-
-      if (!profile) {
-        const { error: insertError } = await supabase
+      try {
+        const res = await supabase
           .from('users')
-          .insert({ id: supabaseUser.id, email: supabaseUser.email });
+          .select('*')
+          .eq('id', supabaseUser.id)
+          .single();
 
-        console.log('[AUTH] profile insert result', { insertError });
+        profile = res.data;
 
-        if (insertError) {
-          console.error('[AUTH] Error creating user profile:', insertError);
-          // Se der erro de permissão aqui, você precisa criar policy na tabela users
-          await supabase.auth.signOut();
-          setUser(null);
-          setStore(null);
-          setProductsState([]);
-          setSalesState([]);
-          setCashRegistersState([]);
-          return;
+        console.log('[AUTH] profile result', { profile, profileError: res.error });
+
+        if (res.error && res.error.code !== 'PGRST116') {
+          console.error('[AUTH] Profile fetch error:', res.error);
         }
 
-        profile = {
+        if (!profile) {
+          const { error: insertError } = await supabase
+            .from('users')
+            .insert({ id: supabaseUser.id, email: supabaseUser.email });
+
+          console.log('[AUTH] profile insert result', { insertError });
+
+          if (insertError) {
+            // ✅ NÃO DESLOGA: se faltar policy/tabela, mantém sessão e segue com fallback
+            console.error('[AUTH] Error creating user profile:', insertError);
+          } else {
+            profile = {
+              id: supabaseUser.id,
+              email: supabaseUser.email!,
+              name: undefined,
+              avatar_url: undefined,
+            };
+          }
+        }
+      } catch (e) {
+        // ✅ NÃO DESLOGA: mantém sessão e usa fallback
+        console.error('[AUTH] Profile flow exception:', e);
+      }
+
+      const safeProfile =
+        profile ??
+        ({
           id: supabaseUser.id,
           email: supabaseUser.email!,
           name: undefined,
           avatar_url: undefined,
-        };
-      }
+        } as any);
 
-      setUser(profile as User);
+      setUser(safeProfile as User);
       await fetchStoreData(supabaseUser.id);
     },
     [supabase, fetchStoreData]
