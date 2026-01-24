@@ -405,10 +405,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           throw saleError;
         }
 
-        // Step 2: Prepare and insert sale items.
-        const itemsToInsert: Omit<SaleItem, 'id'>[] = [];
+        // Step 2: Insert sale items one by one for robust error handling.
         for (const item of cart) {
-            itemsToInsert.push({
+            const { error: itemError } = await supabase.from('sale_items').insert({
                 sale_id: saleId,
                 product_id: item.product_id,
                 product_name_snapshot: item.product_name_snapshot,
@@ -416,17 +415,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 unit_price_cents: item.unit_price_cents,
                 subtotal_cents: item.subtotal_cents,
             });
+
+            if (itemError) {
+                console.error(`[SALE] Error creating sale item ${item.product_name_snapshot}, rolling back...`, itemError);
+                // Rollback: delete any items already inserted for this sale, then delete the sale itself.
+                await supabase.from('sale_items').delete().eq('sale_id', saleId);
+                await supabase.from('sales').delete().eq('id', saleId);
+                throw itemError;
+            }
         }
         
-        const { error: itemsError } = await supabase.from('sale_items').insert(itemsToInsert);
-
-        if (itemsError) {
-          console.error('[SALE] Error creating sale items, rolling back...', itemsError);
-          // If inserting items fails, we must delete the sale record to maintain consistency.
-          await supabase.from('sales').delete().eq('id', saleId);
-          throw itemsError;
-        }
-
         // Step 3: Decrement stock for each product sold using an RPC call
         const stockUpdatePromises = cart.map(item =>
           supabase.rpc('decrement_stock', {
@@ -441,8 +439,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (firstRpcError) {
           console.error('[SALE] Error during stock decrement, rolling back sale...', firstRpcError.error);
+          // Rollback both sale items and the sale itself
           await supabase.from('sale_items').delete().eq('sale_id', saleId);
           await supabase.from('sales').delete().eq('id', saleId);
+          // Note: Reverting stock is complex and not implemented here, but the sale is fully rolled back.
           throw firstRpcError.error;
         }
 
