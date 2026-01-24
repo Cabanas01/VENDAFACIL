@@ -398,21 +398,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { error: saleError } = await supabase.from('sales').insert(saleData);
         if (saleError) throw saleError;
 
-        const saleItemsData = cart.map((cartItem) => {
-          const { stock_qty, ...itemData } = cartItem;
-          return {
-            ...itemData,
-            id: `item_${saleId}_${cartItem.product_id}`,
-            sale_id: saleId,
-          };
-        });
+        const saleItemsData = cart.map((cartItem) => ({
+          id: `item_${saleId}_${cartItem.product_id}`,
+          sale_id: saleId,
+          product_id: cartItem.product_id,
+          product_name_snapshot: cartItem.product_name_snapshot,
+          quantity: cartItem.quantity,
+          unit_price_cents: cartItem.unit_price_cents,
+          subtotal_cents: cartItem.subtotal_cents,
+        }));
 
         const { error: itemsError } = await supabase.from('sale_items').insert(saleItemsData);
         if (itemsError) {
+          // Attempt to roll back the sale insertion
           await supabase.from('sales').delete().eq('id', saleId);
           throw itemsError;
         }
 
+        // All DB writes succeeded, now update stock and refetch data
         const stockUpdates = cart.map((cartItem) => 
           supabase.rpc('decrement_stock', { p_product_id: cartItem.product_id, p_quantity: cartItem.quantity })
         );
@@ -420,7 +423,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await Promise.all(stockUpdates);
         await fetchStoreData(user.id);
       } catch (error: any) {
-         console.error('[SALE] Error creating sale', error);
+         // Log the specific error to help with debugging
+         if (error.message.includes('sale_items')) {
+            console.error('[SALE] Error creating sale items', error);
+         } else {
+            console.error('[SALE] Error creating sale', error);
+         }
       }
     },
     [supabase, store, user, fetchStoreData]
