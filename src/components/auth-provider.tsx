@@ -20,6 +20,9 @@ type AuthContextType = {
   store: Store | null;
   loading: boolean;
 
+  storeStatus: 'unknown' | 'none' | 'has' | 'error';
+  storeError: string | null;
+
   login: (email: string, password: string) => Promise<{ error: AuthError | null }>;
   signup: (email: string, password: string) => Promise<{ error: AuthError | null }>;
   logout: () => Promise<void>;
@@ -50,6 +53,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const [user, setUser] = useState<User | null>(null);
   const [store, setStore] = useState<Store | null>(null);
+  const [storeStatus, setStoreStatus] = useState<'unknown' | 'none' | 'has' | 'error'>('unknown');
+  const [storeError, setStoreError] = useState<string | null>(null);
 
   const [products, setProductsState] = useState<Product[]>([]);
   const [sales, setSalesState] = useState<Sale[]>([]);
@@ -69,6 +74,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!supabase) return;
 
       console.log('[STORE] fetchStoreData', { userId });
+
+      setStoreStatus('unknown');
+      setStoreError(null);
 
       let storeDataResult: any = null;
 
@@ -120,10 +128,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (!storeDataResult) {
+        // Se não existe loja (no rows), manda para onboarding.
+        // Se falhou por permissão/policy, evita loop e mostra estado de erro.
+        const permLike =
+          (storeError && storeError.code && storeError.code !== 'PGRST116') ||
+          (storeError && /permission|rls|not allowed|forbidden/i.test(storeError.message || '')) ||
+          (memberError && memberError.code && memberError.code !== 'PGRST116') ||
+          (memberError && /permission|rls|not allowed|forbidden/i.test(memberError.message || ''));
+
+        if (permLike) {
+          setStore(null);
+          setProductsState([]);
+          setSalesState([]);
+          setCashRegistersState([]);
+          setStoreStatus('error');
+          setStoreError(
+            (storeError?.message || memberError?.message || 'Sem permissão para ler stores/store_members. Verifique RLS/policies no Supabase.')
+          );
+          return;
+        }
+
         setStore(null);
         setProductsState([]);
         setSalesState([]);
         setCashRegistersState([]);
+        setStoreStatus('none');
+        setStoreError(null);
         return;
       }
 
@@ -144,6 +174,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const storeWithMembers = { ...storeDataResult, members: membersData };
       setStore(storeWithMembers as Store);
+      setStoreStatus('has');
+      setStoreError(null);
 
       // 4) fetch related data
       const [productsRes, salesRes, cashRes] = await Promise.all([
@@ -186,6 +218,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!supabaseUser) {
         setUser(null);
         setStore(null);
+        setStoreStatus('unknown');
+        setStoreError(null);
         setProductsState([]);
         setSalesState([]);
         setCashRegistersState([]);
@@ -345,41 +379,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (storeData: any): Promise<Store | null> => {
       if (!supabase || !user) return null;
 
-      try {
-        const rpcParams = {
-          p_name: storeData.name,
-          p_legal_name: storeData.legal_name,
-          p_cnpj: storeData.cnpj,
-          p_address: storeData.address,
-          p_phone: storeData.phone,
-          p_timezone: storeData.timezone,
-        };
+      const rpcParams = {
+        p_name: storeData.name,
+        p_legal_name: storeData.legal_name,
+        p_cnpj: storeData.cnpj,
+        p_address: storeData.address,
+        p_phone: storeData.phone,
+        p_timezone: storeData.timezone,
+      };
 
-        const { data, error } = await supabase.rpc('create_new_store', rpcParams);
+      const { data: newStoreData, error } = await supabase
+        .rpc('create_new_store', rpcParams)
+        .select()
+        .single();
 
-        if (error) {
-          console.error('[STORE] Error creating store:', error);
-          return null;
-        }
-
-        const newStore = Array.isArray(data) ? data[0] : data;
-        if (!newStore) {
-          console.error('[STORE] create_new_store returned empty data');
-          return null;
-        }
-
-        setStore(newStore as Store);
-
-        // Garante que a loja/memberships sejam recarregadas antes do layout decidir o redirect
-        await fetchStoreData(user.id);
-
-        return newStore as Store;
-      } catch (e) {
-        console.error('[STORE] createStore exception:', e);
+      if (error) {
+        console.error('[STORE] Error creating store:', error);
         return null;
       }
+
+      setStore(newStoreData as Store);
+      return newStoreData as Store;
     },
-    [supabase, user, fetchStoreData]
+    [supabase, user]
   );
 
   const updateStore = useCallback(
@@ -562,6 +584,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isAuthenticated: !!user,
     store,
     loading,
+    storeStatus,
+    storeError,
     login,
     signup,
     logout,
