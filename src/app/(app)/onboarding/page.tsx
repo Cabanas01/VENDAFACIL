@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -56,6 +57,7 @@ const steps = [
 ];
 
 export default function OnboardingPage() {
+  const router = useRouter();
   const { createStore } = useAuth();
   const { toast } = useToast();
   const [currentStep, setCurrentStep] = useState(0);
@@ -130,12 +132,14 @@ export default function OnboardingPage() {
 
   const onSubmit = async (values: OnboardingValues) => {
     setLoading(true);
-    toast({
-      title: 'Criando sua loja...',
-      description: 'Aguarde um momento.',
-    });
 
-    const storeData = {
+    try {
+      toast({
+        title: 'Criando sua loja...',
+        description: 'Aguarde um momento.',
+      });
+
+      const storeData = {
         name: values.name,
         cnpj: values.cnpj,
         legal_name: values.legal_name,
@@ -150,25 +154,36 @@ export default function OnboardingPage() {
         },
         phone: values.phone,
         timezone: values.timezone,
-    };
+      };
 
-    const newStore = await createStore(storeData);
-    
-    if (newStore) {
+      const newStore = await createStore(storeData);
+
+      if (!newStore) {
         toast({
-            title: 'Loja criada com sucesso!',
-            description: 'Você será redirecionado para o painel.',
+          variant: 'destructive',
+          title: 'Erro ao criar loja',
+          description:
+            'Não foi possível criar sua loja. Verifique no Supabase se as funções/policies foram aplicadas (create_new_store, stores, store_members).',
         });
-        // Navigation is now handled by the AuthProvider and Layout
-    } else {
-        toast({
-            variant: 'destructive',
-            title: 'Erro',
-            description: 'Não foi possível criar sua loja. Tente novamente.',
-        });
+        return;
+      }
+
+      toast({
+        title: 'Loja criada com sucesso!',
+        description: 'Redirecionando para o painel...',
+      });
+
+      router.replace('/dashboard');
+    } catch (e: any) {
+      console.error('[ONBOARDING] create store exception', e);
+      toast({
+        variant: 'destructive',
+        title: 'Erro inesperado',
+        description: e?.message || 'Falha ao criar loja.',
+      });
+    } finally {
+      setLoading(false);
     }
-    
-    setLoading(false);
   };
 
   const progress = ((currentStep + 1) / steps.length) * 100;
