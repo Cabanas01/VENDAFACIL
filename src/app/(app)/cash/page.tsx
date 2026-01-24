@@ -2,9 +2,9 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { format, formatDistanceToNow, parseISO, endOfDay, startOfDay } from 'date-fns';
+import { format, formatDistanceToNow, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { DollarSign, Coins, CreditCard, PiggyBank, Briefcase, History, CheckCircle, XCircle, FileDown, PlusCircle } from 'lucide-react';
+import { Coins, CreditCard, PiggyBank, Briefcase, History, CheckCircle, XCircle, PlusCircle } from 'lucide-react';
 
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,7 +20,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
@@ -40,8 +39,8 @@ export default function CashPage() {
   const router = useRouter();
   
   const calculateSalesForPeriod = (from: string, to: string | null) => {
-    const fromDate = startOfDay(parseISO(from));
-    const toDate = to ? endOfDay(parseISO(to)) : endOfDay(new Date());
+    const fromDate = parseISO(from);
+    const toDate = to ? parseISO(to) : new Date();
 
     const salesInPeriod = sales.filter(sale => {
       const saleDate = parseISO(sale.created_at);

@@ -68,7 +68,7 @@ export type Sale = {
 };
 
 export type SaleItem = {
-  id: string;
+  id?: string;
   sale_id: string;
   product_id: string;
   product_name_snapshot: string;
@@ -87,3 +87,5 @@ export type CashRegister = {
   opening_amount_cents: number;
   closing_amount_cents: number | null;
 };
+
+export type StoreStatus = 'unknown' | 'loading' | 'has' | 'none' | 'error';

@@ -12,9 +12,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import type { AuthError, Session } from '@supabase/supabase-js';
-import type { User, Store, Product, Sale, CashRegister, StoreMember, CartItem, SaleItem } from '@/lib/types';
-
-type StoreStatus = 'unknown' | 'loading' | 'has' | 'none' | 'error';
+import type { User, Store, Product, Sale, CashRegister, StoreMember, CartItem, SaleItem, StoreStatus } from '@/lib/types';
 
 type AuthContextType = {
   user: User | null;
@@ -387,66 +385,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!cart || cart.length === 0) {
         throw new Error("O carrinho não pode estar vazio.");
       }
-
-      const saleId = `sale_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  
       const total_cents = cart.reduce((sum, item) => sum + item.subtotal_cents, 0);
-
+      const saleId = `sale_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  
       try {
-        // Step 1: Insert the main sale record
         const { error: saleError } = await supabase.from('sales').insert({
           id: saleId,
           store_id: store.id,
-          total_cents: total_cents,
-          payment_method: paymentMethod,
+          total_cents,
+          payment_method,
         });
-
+  
         if (saleError) {
           console.error('[SALE] Error creating sale', saleError);
           throw saleError;
         }
-
-        // Step 2: Insert sale items one by one for robust error handling.
+  
+        // Sequentially insert sale items for better error handling
         for (const item of cart) {
-            const { error: itemError } = await supabase.from('sale_items').insert({
-                sale_id: saleId,
-                product_id: item.product_id,
-                product_name_snapshot: item.product_name_snapshot,
-                quantity: item.quantity,
-                unit_price_cents: item.unit_price_cents,
-                subtotal_cents: item.subtotal_cents,
-            });
-
-            if (itemError) {
-                console.error(`[SALE] Error creating sale item ${item.product_name_snapshot}, rolling back...`, itemError);
-                // Rollback: delete any items already inserted for this sale, then delete the sale itself.
-                await supabase.from('sale_items').delete().eq('sale_id', saleId);
-                await supabase.from('sales').delete().eq('id', saleId);
-                throw itemError;
-            }
+          const { error: itemError } = await supabase.from('sale_items').insert({
+            sale_id: saleId,
+            product_id: item.product_id,
+            product_name_snapshot: item.product_name_snapshot,
+            quantity: item.quantity,
+            unit_price_cents: item.unit_price_cents,
+            subtotal_cents: item.subtotal_cents,
+          });
+  
+          if (itemError) {
+            console.error(`[SALE] Error creating sale item ${item.product_name_snapshot}, rolling back...`, itemError);
+            await supabase.from('sales').delete().eq('id', saleId);
+            throw itemError;
+          }
         }
-        
-        // Step 3: Decrement stock for each product sold using an RPC call
+  
         const stockUpdatePromises = cart.map(item =>
           supabase.rpc('decrement_stock', {
             p_product_id: item.product_id,
             p_quantity: item.quantity,
           })
         );
-        
+  
         const stockUpdateResults = await Promise.all(stockUpdatePromises);
-        
         const firstRpcError = stockUpdateResults.find(res => res.error);
-
+  
         if (firstRpcError) {
           console.error('[SALE] Error during stock decrement, rolling back sale...', firstRpcError.error);
-          // Rollback both sale items and the sale itself
           await supabase.from('sale_items').delete().eq('sale_id', saleId);
           await supabase.from('sales').delete().eq('id', saleId);
-          // Note: Reverting stock is complex and not implemented here, but the sale is fully rolled back.
           throw firstRpcError.error;
         }
-
-        // Step 4: Refresh all local data to reflect the new sale and updated stock
+  
         await fetchStoreData(user.id);
       } catch (error) {
         console.error('[SALE] Full sale creation process failed:', error);
