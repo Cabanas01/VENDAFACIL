@@ -86,10 +86,11 @@ export default function LoginPage() {
   });
 
   useEffect(() => {
-    if (isAuthenticated) {
+    // Só redireciona automaticamente se vier com ?redirect=...
+    if (isAuthenticated && searchParams.get('redirect')) {
       router.replace(redirectPath);
     }
-  }, [isAuthenticated, router, redirectPath]);
+  }, [isAuthenticated, router, redirectPath, searchParams]);
 
   const handleLogin = async (values: z.infer<typeof loginSchema>) => {
     setLoading(true);
