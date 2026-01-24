@@ -30,7 +30,7 @@ if (!store && pathname !== '/onboarding') {
 }
   }, [isAuthenticated, store, loading, router, pathname]);
 
-  const showSkeleton = loading || !isAuthenticated || (!store && pathname !== '/onboarding');
+ const showSkeleton = loading;
 
   if (showSkeleton) {
     return (
