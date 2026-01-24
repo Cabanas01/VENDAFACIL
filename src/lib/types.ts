@@ -77,6 +77,8 @@ export type SaleItem = {
   subtotal_cents: number;
 };
 
+export type CartItem = Omit<SaleItem, 'id' | 'sale_id'> & { stock_qty: number };
+
 export type CashRegister = {
   id:string;
   store_id: string;

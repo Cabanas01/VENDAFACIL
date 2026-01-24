@@ -12,7 +12,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import type { AuthError, Session } from '@supabase/supabase-js';
-import type { User, Store, Product, Sale, CashRegister, StoreMember } from '@/lib/types';
+import type { User, Store, Product, Sale, CashRegister, StoreMember, CartItem } from '@/lib/types';
 
 type StoreStatus = 'unknown' | 'loading' | 'has' | 'none' | 'error';
 
@@ -46,7 +46,7 @@ type AuthContextType = {
   setSales: (action: React.SetStateAction<Sale[]>) => Promise<void>;
   setCashRegisters: (action: React.SetStateAction<CashRegister[]>) => Promise<void>;
 
-  addSale: (sale: Omit<Sale, 'id' | 'store_id'>) => Promise<void>;
+  addSale: (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -380,45 +380,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
   
   const addSale = useCallback(
-    async (newSale: Omit<Sale, 'id' | 'store_id'>) => {
+    async (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => {
       if (!supabase || !store || !user) return;
-      const { items, ...saleData } = newSale;
-      
-      const saleId = `sale_${Date.now()}`;
 
-      const { data: saleResult, error: saleError } = await supabase
-        .from('sales')
-        .insert([{ ...saleData, id: saleId, store_id: store.id }])
-        .select()
-        .single();
+      try {
+        const total_cents = cart.reduce((sum, item) => sum + item.subtotal_cents, 0);
+        const saleId = `sale_${Date.now()}`;
         
-      if (saleError || !saleResult) {
-        console.error('[SALE] Error creating sale', saleError);
-        return;
-      }
-
-      const saleItemsData = items.map((item) => {
-        const { stock_qty, ...dbItem } = item as any;
-        return { 
-          ...dbItem, 
-          sale_id: saleResult.id 
+        const saleData: Omit<Sale, 'items'> = {
+          id: saleId,
+          store_id: store.id,
+          created_at: new Date().toISOString(),
+          payment_method: paymentMethod,
+          total_cents: total_cents,
         };
-      });
 
-      const { error: itemsError } = await supabase.from('sale_items').insert(saleItemsData);
+        const { error: saleError } = await supabase.from('sales').insert(saleData);
+        if (saleError) throw saleError;
 
-      if (itemsError) {
-        console.error('[SALE] Error creating sale items', itemsError);
-        await supabase.from('sales').delete().eq('id', saleResult.id);
-        return;
+        const saleItemsData = cart.map((cartItem) => {
+          const { stock_qty, ...itemData } = cartItem;
+          return {
+            ...itemData,
+            id: `item_${saleId}_${cartItem.product_id}`,
+            sale_id: saleId,
+          };
+        });
+
+        const { error: itemsError } = await supabase.from('sale_items').insert(saleItemsData);
+        if (itemsError) {
+          await supabase.from('sales').delete().eq('id', saleId);
+          throw itemsError;
+        }
+
+        const stockUpdates = cart.map((cartItem) => 
+          supabase.rpc('decrement_stock', { p_product_id: cartItem.product_id, p_quantity: cartItem.quantity })
+        );
+        
+        await Promise.all(stockUpdates);
+        await fetchStoreData(user.id);
+      } catch (error: any) {
+         console.error('[SALE] Error creating sale', error);
       }
-      
-      const stockUpdates = items.map((item) => 
-        supabase.rpc('decrement_stock', { p_product_id: item.product_id, p_quantity: item.quantity })
-      );
-      
-      await Promise.all(stockUpdates);
-      await fetchStoreData(user.id);
     },
     [supabase, store, user, fetchStoreData]
   );

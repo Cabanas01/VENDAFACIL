@@ -23,9 +23,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useAuth } from '@/components/auth-provider';
-import type { Product, Sale, SaleItem } from '@/lib/types';
-
-type CartItem = Omit<SaleItem, 'id' | 'sale_id'> & { stock_qty: number };
+import type { Product, CartItem } from '@/lib/types';
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value / 100);
@@ -100,15 +98,7 @@ export default function NewSalePage() {
       return;
     }
 
-    const saleId = `sale_${Date.now()}`;
-    const newSalePayload: Omit<Sale, 'id' | 'store_id'> = {
-      created_at: new Date().toISOString(),
-      payment_method: paymentMethod,
-      items: cart.map(item => ({ ...item, id: `item_${saleId}_${item.product_id}`, sale_id: saleId })),
-      total_cents: cartTotal,
-    };
-    
-    addSale(newSalePayload);
+    addSale(cart, paymentMethod);
 
     toast({ title: 'Venda realizada com sucesso!', description: `Total: ${formatCurrency(cartTotal)}` });
     setCart([]);
