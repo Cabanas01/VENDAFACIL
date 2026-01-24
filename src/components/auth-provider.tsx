@@ -316,7 +316,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         password,
         options: {
           emailRedirectTo: process.env.NEXT_PUBLIC_SITE_URL
-            ? `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback?type=signup&next=${encodeURIComponent('/login')}`
+            ? `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`
             : undefined,
         },
       });
@@ -345,29 +345,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (storeData: any): Promise<Store | null> => {
       if (!supabase || !user) return null;
 
-      const rpcParams = {
-        p_name: storeData.name,
-        p_legal_name: storeData.legal_name,
-        p_cnpj: storeData.cnpj,
-        p_address: storeData.address,
-        p_phone: storeData.phone,
-        p_timezone: storeData.timezone,
-      };
+      try {
+        const rpcParams = {
+          p_name: storeData.name,
+          p_legal_name: storeData.legal_name,
+          p_cnpj: storeData.cnpj,
+          p_address: storeData.address,
+          p_phone: storeData.phone,
+          p_timezone: storeData.timezone,
+        };
 
-      const { data: newStoreData, error } = await supabase
-        .rpc('create_new_store', rpcParams)
-        .select()
-        .single();
+        const { data, error } = await supabase.rpc('create_new_store', rpcParams);
 
-      if (error) {
-        console.error('[STORE] Error creating store:', error);
+        if (error) {
+          console.error('[STORE] Error creating store:', error);
+          return null;
+        }
+
+        const newStore = Array.isArray(data) ? data[0] : data;
+        if (!newStore) {
+          console.error('[STORE] create_new_store returned empty data');
+          return null;
+        }
+
+        setStore(newStore as Store);
+
+        // Garante que a loja/memberships sejam recarregadas antes do layout decidir o redirect
+        await fetchStoreData(user.id);
+
+        return newStore as Store;
+      } catch (e) {
+        console.error('[STORE] createStore exception:', e);
         return null;
       }
-
-      setStore(newStoreData as Store);
-      return newStoreData as Store;
     },
-    [supabase, user]
+    [supabase, user, fetchStoreData]
   );
 
   const updateStore = useCallback(
