@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider } from "@/components/auth-provider";
@@ -8,6 +8,12 @@ export const metadata: Metadata = {
   title: "VendaFacil",
   description: "Seu ponto de venda fácil e inteligente.",
 };
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+};
+
 
 export default function RootLayout({
   children,
@@ -31,8 +37,12 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&display=swap"
           rel="stylesheet"
         />
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        <meta name="theme-color" content="#0f172a" />
+        <link rel="manifest" href="/manifest.webmanifest" />
+        <link rel="apple-touch-icon" href="/logo.png" />
       </head>
-      <body className="font-body antialiased">
+      <body className="font-body antialiased min-h-screen">
         <Suspense fallback={null}>
           <AuthProvider>
             {children}
