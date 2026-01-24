@@ -406,8 +406,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         // Step 2: Prepare and insert sale items.
-        // This robust loop ensures we only pass clean data to the database,
-        // preventing errors from extra properties in the cart state.
         const itemsToInsert: Omit<SaleItem, 'id'>[] = [];
         for (const item of cart) {
             itemsToInsert.push({
@@ -416,14 +414,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 product_name_snapshot: item.product_name_snapshot,
                 quantity: item.quantity,
                 unit_price_cents: item.unit_price_cents,
-                subtotal_cents: item.subtotal_cents
+                subtotal_cents: item.subtotal_cents,
             });
         }
         
         const { error: itemsError } = await supabase.from('sale_items').insert(itemsToInsert);
 
         if (itemsError) {
-          // This log indicates a problem inserting the items, even after the sale record was created.
           console.error('[SALE] Error creating sale items, rolling back...', itemsError);
           // If inserting items fails, we must delete the sale record to maintain consistency.
           await supabase.from('sales').delete().eq('id', saleId);
@@ -438,7 +435,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           })
         );
         
-        await Promise.all(stockUpdatePromises);
+        const stockUpdateResults = await Promise.all(stockUpdatePromises);
+        
+        const firstRpcError = stockUpdateResults.find(res => res.error);
+
+        if (firstRpcError) {
+          console.error('[SALE] Error during stock decrement, rolling back sale...', firstRpcError.error);
+          await supabase.from('sale_items').delete().eq('sale_id', saleId);
+          await supabase.from('sales').delete().eq('id', saleId);
+          throw firstRpcError.error;
+        }
 
         // Step 4: Refresh all local data to reflect the new sale and updated stock
         await fetchStoreData(user.id);
