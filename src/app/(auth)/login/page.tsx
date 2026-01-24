@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -78,26 +77,35 @@ export default function LoginPage() {
   });
 
   useEffect(() => {
-    if (isAuthenticated) router.replace(redirectPath);
+    if (isAuthenticated) {
+      router.replace(redirectPath);
+    }
   }, [isAuthenticated, router, redirectPath]);
 
   const handleLogin = async (values: z.infer<typeof loginSchema>) => {
     setLoading(true);
-    const { error } = await login(values.email, values.password);
+    try {
+      const { error } = await login(values.email, values.password);
+      if (error) {
+        toast({
+          variant: 'destructive',
+          title: 'Erro no login',
+          description: error.message || 'Email ou senha inválidos.',
+        });
+        return;
+      }
 
-    if (error) {
+      toast({ title: 'Login realizado!', description: 'Redirecionando...' });
+      router.replace(redirectPath);
+    } catch (e: any) {
       toast({
         variant: 'destructive',
-        title: 'Erro no login',
-        description: error.message || 'Email ou senha inválidos.',
+        title: 'Erro inesperado',
+        description: e?.message || 'Falha ao autenticar.',
       });
+    } finally {
       setLoading(false);
-      return;
     }
-
-    toast({ title: 'Login realizado!', description: 'Redirecionando...' });
-    router.replace(redirectPath);
-    setLoading(false);
   };
 
   const handleSignup = async (values: z.infer<typeof signupSchema>) => {
@@ -123,38 +131,40 @@ export default function LoginPage() {
       toast({
         variant: 'destructive',
         title: 'Supabase não configurado',
-        description: 'Faltam variáveis NEXT_PUBLIC_SUPABASE_URL/ANON_KEY.',
+        description: 'Defina NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY.',
       });
       return;
     }
 
-    const email = lastSignupEmail || signupForm.getValues('email') || resetForm.getValues('email');
+    const email = lastSignupEmail;
     if (!email) {
       toast({
         variant: 'destructive',
-        title: 'Informe um email',
+        title: 'Email não disponível',
         description: 'Crie a conta novamente para reenviar a confirmação.',
       });
       return;
     }
 
     setLoading(true);
-    const { error } = await supabase.auth.resend({ type: 'signup', email });
-    setLoading(false);
+    try {
+      const { error } = await supabase.auth.resend({ type: 'signup', email });
+      if (error) {
+        toast({
+          variant: 'destructive',
+          title: 'Não foi possível reenviar',
+          description: error.message,
+        });
+        return;
+      }
 
-    if (error) {
       toast({
-        variant: 'destructive',
-        title: 'Não foi possível reenviar',
-        description: error.message,
+        title: 'Confirmação reenviada',
+        description: 'Verifique sua caixa de entrada e spam.',
       });
-      return;
+    } finally {
+      setLoading(false);
     }
-
-    toast({
-      title: 'Confirmação reenviada',
-      description: 'Verifique sua caixa de entrada e spam.',
-    });
   };
 
   const handleReset = async (values: z.infer<typeof resetSchema>) => {
@@ -162,35 +172,37 @@ export default function LoginPage() {
       toast({
         variant: 'destructive',
         title: 'Supabase não configurado',
-        description: 'Faltam variáveis NEXT_PUBLIC_SUPABASE_URL/ANON_KEY.',
+        description: 'Defina NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY.',
       });
       return;
     }
 
     setLoading(true);
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
-    const { error } = await supabase.auth.resetPasswordForEmail(values.email, {
-      redirectTo: siteUrl ? `${siteUrl}/auth/update-password` : undefined,
-    });
-    setLoading(false);
-
-    // Por segurança, não revelamos se o email existe ou não
-    if (error) {
-      toast({
-        variant: 'destructive',
-        title: 'Erro ao enviar link',
-        description: error.message,
+    try {
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+      const { error } = await supabase.auth.resetPasswordForEmail(values.email, {
+        redirectTo: siteUrl ? `${siteUrl}/auth/update-password` : undefined,
       });
-      return;
+
+      if (error) {
+        toast({
+          variant: 'destructive',
+          title: 'Erro ao enviar link',
+          description: error.message,
+        });
+        return;
+      }
+
+      toast({
+        title: 'Se esse email existir, enviamos um link',
+        description: 'Verifique sua caixa de entrada e spam.',
+      });
+
+      resetForm.reset();
+      setMode('login');
+    } finally {
+      setLoading(false);
     }
-
-    toast({
-      title: 'Se esse email existir, enviamos um link',
-      description: 'Verifique sua caixa de entrada e spam.',
-    });
-
-    resetForm.reset();
-    setMode('login');
   };
 
   return (
@@ -220,8 +232,8 @@ export default function LoginPage() {
         {mode === 'confirm_email' ? (
           <div className="space-y-4 text-center">
             <p className="text-sm text-muted-foreground">
-              Verifique sua caixa de entrada e clique no link para ativar sua conta. Se não
-              encontrar, veja o spam. Após confirmar, você poderá fazer login.
+              Por favor, verifique sua caixa de entrada e clique no link para ativar sua conta. Se não o encontrar,
+              verifique sua pasta de spam. Após confirmar, você poderá fazer o login.
             </p>
 
             <Button className="w-full" onClick={handleReconfirmation} disabled={loading}>
@@ -229,12 +241,7 @@ export default function LoginPage() {
               Reenviar confirmação
             </Button>
 
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => setMode('login')}
-              disabled={loading}
-            >
+            <Button variant="outline" className="w-full" onClick={() => setMode('login')} disabled={loading}>
               Ir para o Login
             </Button>
           </div>
@@ -266,7 +273,6 @@ export default function LoginPage() {
                       </FormItem>
                     )}
                   />
-
                   <FormField
                     control={loginForm.control}
                     name="password"
@@ -287,11 +293,7 @@ export default function LoginPage() {
                               className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
                               onClick={() => setShowPassword(!showPassword)}
                             >
-                              {showPassword ? (
-                                <EyeOff className="h-4 w-4" />
-                              ) : (
-                                <Eye className="h-4 w-4" />
-                              )}
+                              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                             </Button>
                           </div>
                         </FormControl>
@@ -299,7 +301,6 @@ export default function LoginPage() {
                       </FormItem>
                     )}
                   />
-
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Entrar
@@ -324,7 +325,6 @@ export default function LoginPage() {
                       </FormItem>
                     )}
                   />
-
                   <FormField
                     control={signupForm.control}
                     name="password"
@@ -338,11 +338,9 @@ export default function LoginPage() {
                       </FormItem>
                     )}
                   />
-
                   <p className="text-xs text-center text-muted-foreground">
                     Ao criar, você concorda com nossos Termos de Serviço.
                   </p>
-
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Criar conta
