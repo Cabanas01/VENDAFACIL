@@ -334,8 +334,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return null;
         }
         
-        setStore(newStore as Store);
-        setStoreStatus('has');
         await fetchStoreData(user.id);
         
         return newStore as Store;
@@ -386,9 +384,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!supabase || !store || !user) return;
       const { items, ...saleData } = newSale;
       
+      const saleId = `sale_${Date.now()}`;
+
       const { data: saleResult, error: saleError } = await supabase
         .from('sales')
-        .insert([{ ...saleData, store_id: store.id }])
+        .insert([{ ...saleData, id: saleId, store_id: store.id }])
         .select()
         .single();
         
@@ -397,12 +397,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const saleItemsData = items.map((item) => ({ ...item, sale_id: saleResult.id }));
+      const saleItemsData = items.map((item) => {
+        const { stock_qty, ...dbItem } = item as any;
+        return { 
+          ...dbItem, 
+          sale_id: saleResult.id 
+        };
+      });
+
       const { error: itemsError } = await supabase.from('sale_items').insert(saleItemsData);
 
       if (itemsError) {
         console.error('[SALE] Error creating sale items', itemsError);
-        // Optional: Attempt to delete the sale record if items fail to insert
         await supabase.from('sales').delete().eq('id', saleResult.id);
         return;
       }
@@ -419,44 +425,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // --- Product Management ---
   const addProduct = useCallback(async (productData: Omit<Product, 'id' | 'created_at' | 'store_id'>) => {
-      if (!supabase || !store) throw new Error("Store not available");
+      if (!supabase || !store || !user) throw new Error("Store not available");
       const { error } = await supabase.from('products').insert({ ...productData, store_id: store.id });
       if (error) {
           console.error('[PRODUCT] insert error', error);
           throw error;
       }
-      await fetchStoreData(store.user_id);
-  }, [supabase, store, fetchStoreData]);
+      await fetchStoreData(user.id);
+  }, [supabase, store, user, fetchStoreData]);
 
   const updateProduct = useCallback(async (productId: string, productData: Partial<Product>) => {
-      if (!supabase) throw new Error("Supabase not available");
+      if (!supabase || !store || !user) throw new Error("Supabase not available");
       const { error } = await supabase.from('products').update(productData).eq('id', productId);
       if (error) {
           console.error('[PRODUCT] update error', error);
           throw error;
       }
-      await fetchStoreData(store!.user_id);
-  }, [supabase, store, fetchStoreData]);
+      await fetchStoreData(user.id);
+  }, [supabase, store, user, fetchStoreData]);
   
   const updateProductStock = useCallback(async (productId: string, newStock: number) => {
-      if (!supabase) throw new Error("Supabase not available");
+      if (!supabase || !store || !user) throw new Error("Supabase not available");
       const { error } = await supabase.from('products').update({ stock_qty: newStock }).eq('id', productId);
       if (error) {
           console.error('[PRODUCT] stock update error', error);
           throw error;
       }
-      await fetchStoreData(store!.user_id);
-  }, [supabase, store, fetchStoreData]);
+      await fetchStoreData(user.id);
+  }, [supabase, store, user, fetchStoreData]);
 
   const removeProduct = useCallback(async (productId: string) => {
-      if (!supabase) throw new Error("Supabase not available");
+      if (!supabase || !store || !user) throw new Error("Supabase not available");
       const { error } = await supabase.from('products').delete().eq('id', productId);
       if (error) {
           console.error('[PRODUCT] delete error', error);
           throw error;
       }
-      await fetchStoreData(store!.user_id);
-  }, [supabase, store, fetchStoreData]);
+      await fetchStoreData(user.id);
+  }, [supabase, store, user, fetchStoreData]);
 
 
   const setSales = useCallback(async () => {
