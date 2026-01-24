@@ -1,10 +1,9 @@
-// src/app/(app)/layout.tsx
 'use client';
 
 import type { ReactNode } from 'react';
 import { useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
+import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { MainNav } from '@/components/main-nav';
 import { useAuth } from '@/components/auth-provider';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -53,7 +52,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     );
   }
 
-  // Enquanto redireciona, não renderiza nada
+  // Enquanto redireciona, n찾o renderiza nada
   if (!isAuthenticated) return null;
   if (!store && pathname !== '/onboarding') return null;
 
