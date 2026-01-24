@@ -1,259 +1,266 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import type { DateRange } from 'react-day-picker';
-import { addDays, startOfToday, format, endOfDay } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
-import { DollarSign, ShoppingCart, TrendingUp, Search, Download, CircleAlert } from 'lucide-react';
+import { Search, ShoppingCart, PlusCircle, MinusCircle, Trash2, X, CreditCard, Coins, PiggyBank } from 'lucide-react';
 
 import { PageHeader } from '@/components/page-header';
-import { DateRangePicker } from '@/components/date-range-picker';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { useToast } from '@/hooks/use-toast';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { useAuth } from '@/components/auth-provider';
-import type { Sale } from '@/lib/types';
+import type { Product, Sale, SaleItem } from '@/lib/types';
+
+type CartItem = Omit<SaleItem, 'id' | 'saleId'> & { stock_qty: number };
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value / 100);
 
-export default function SalesPage() {
-  const { sales } = useAuth();
-  const [dateRange, setDateRange] = useState<DateRange | undefined>({
-    from: startOfToday(),
-    to: startOfToday(),
-  });
-  const [paymentFilter, setPaymentFilter] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
+export default function NewSalePage() {
   const router = useRouter();
+  const { toast } = useToast();
+  const { products, addSale } = useAuth();
 
-  const filteredSales = sales
-    .filter(sale => {
-      if (!dateRange?.from) {
-          return false;
-      }
-      const saleDate = new Date(sale.created_at);
-      const toDate = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
-      return saleDate >= dateRange.from && saleDate <= toDate;
-    })
-    .filter(sale => paymentFilter === 'all' || sale.payment_method === paymentFilter)
-    .filter(sale => sale.id.toLowerCase().includes(searchQuery.toLowerCase()) || sale.items.some(item => item.product_name_snapshot.toLowerCase().includes(searchQuery.toLowerCase())));
+  const [searchQuery, setSearchQuery] = useState('');
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [isConfirming, setIsConfirming] = useState(false);
 
-  const totalRevenue = filteredSales.reduce((sum, sale) => sum + sale.total_cents, 0);
-  const totalSalesCount = filteredSales.length;
-  const averageTicket = totalSalesCount > 0 ? totalRevenue / totalSalesCount : 0;
-  
-  const paymentDistribution = filteredSales.reduce((acc, sale) => {
-    acc[sale.payment_method] = (acc[sale.payment_method] || 0) + sale.total_cents;
-    return acc;
-  }, { cash: 0, pix: 0, card: 0 });
+  const filteredProducts = useMemo(() => {
+    return products.filter(
+      p => p.active && p.name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [products, searchQuery]);
 
-  const exportCSV = (data: Sale[], type: 'sales' | 'items') => {
-    let csvContent = "data:text/csv;charset=utf-8,";
-    if (type === 'sales') {
-        csvContent += "id,created_at,payment_method,total_cents\n";
-        data.forEach(sale => {
-            const row = [sale.id, sale.created_at, sale.payment_method, sale.total_cents].join(",");
-            csvContent += row + "\n";
-        });
-    } else {
-        csvContent += "sale_id,product_id,product_name_snapshot,quantity,unit_price_cents,subtotal_cents\n";
-        data.forEach(sale => {
-            sale.items.forEach(item => {
-                const row = [item.sale_id, item.product_id, `"${item.product_name_snapshot}"`, item.quantity, item.unit_price_cents, item.subtotal_cents].join(",");
-                csvContent += row + "\n";
-            });
-        });
+  const cartTotal = useMemo(() => {
+    return cart.reduce((sum, item) => sum + item.subtotal_cents, 0);
+  }, [cart]);
+
+  const addToCart = (product: Product) => {
+    const existingItem = cart.find(item => item.productId === product.id);
+    const stockAvailable = product.stock_qty > (existingItem?.quantity ?? 0);
+    
+    if (!stockAvailable) {
+      toast({ variant: 'destructive', title: 'Estoque insuficiente', description: `Não há mais unidades de ${product.name} em estoque.` });
+      return;
     }
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `${type}_export.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  }
 
-  const checkSaleIntegrity = (sale: Sale | null) => {
-      if (!sale) return { consistent: false, difference: 0 };
-      const itemsTotal = sale.items.reduce((sum, item) => sum + item.subtotal_cents, 0);
-      return {
-          consistent: itemsTotal === sale.total_cents,
-          difference: sale.total_cents - itemsTotal
-      };
-  }
+    if (existingItem) {
+      updateQuantity(product.id, existingItem.quantity + 1);
+    } else {
+      setCart([...cart, {
+        productId: product.id,
+        product_name_snapshot: product.name,
+        quantity: 1,
+        unit_price_cents: product.price_cents,
+        subtotal_cents: product.price_cents,
+        stock_qty: product.stock_qty,
+      }]);
+    }
+  };
+
+  const updateQuantity = (productId: string, newQuantity: number) => {
+    if (newQuantity <= 0) {
+      setCart(cart.filter(item => item.productId !== productId));
+      return;
+    }
+
+    const item = cart.find(item => item.productId === productId);
+    const product = products.find(p => p.id === productId);
+    if (!item || !product) return;
+
+    if (newQuantity > product.stock_qty) {
+      toast({ variant: 'destructive', title: 'Estoque insuficiente' });
+      return;
+    }
+
+    setCart(cart.map(item => 
+      item.productId === productId 
+      ? { ...item, quantity: newQuantity, subtotal_cents: item.unit_price_cents * newQuantity }
+      : item
+    ));
+  };
+  
+  const handleFinalizeSale = async (paymentMethod: 'cash' | 'pix' | 'card') => {
+    if (cart.length === 0) {
+      toast({ variant: 'destructive', title: 'Carrinho vazio' });
+      return;
+    }
+
+    const payload = {
+      created_at: new Date().toISOString(),
+      payment_method: paymentMethod,
+      total_cents: cartTotal,
+      items: cart.map((item) => ({
+        productId: item.productId,
+        product_name_snapshot: item.product_name_snapshot,
+        quantity: item.quantity,
+        unit_price_cents: item.unit_price_cents,
+        subtotal_cents: item.subtotal_cents,
+      })),
+    };
+
+    const { ok, error } = await addSale(payload);
+
+    if (!ok) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao finalizar venda',
+        description: error || 'Não foi possível concluir a venda.',
+      });
+      return;
+    }
+
+    toast({
+      title: 'Venda realizada com sucesso!',
+      description: `Total: ${formatCurrency(cartTotal)}`,
+    });
+
+    setCart([]);
+    setIsConfirming(false);
+    router.push('/sales');
+  };
 
   return (
     <>
-      <PageHeader title="Vendas" subtitle="Histórico e detalhes das transações">
-        <Button onClick={() => router.push('/sales/new')} className="bg-primary hover:bg-primary/90">
-            Nova venda
-        </Button>
-      </PageHeader>
+      <PageHeader title="Nova Venda / PDV" subtitle="Selecione os produtos e finalize a venda." />
 
-      <div className="space-y-6">
-        {/* KPIs */}
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            <Card>
-                <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium flex items-center justify-between">
-                        Faturamento do período <DollarSign className="h-4 w-4 text-muted-foreground" />
-                    </CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <p className="text-2xl font-bold">{formatCurrency(totalRevenue)}</p>
-                </CardContent>
-            </Card>
-            <Card>
-                <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium flex items-center justify-between">
-                        Vendas no período <ShoppingCart className="h-4 w-4 text-muted-foreground" />
-                    </CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <p className="text-2xl font-bold">{totalSalesCount}</p>
-                </CardContent>
-            </Card>
-            <Card>
-                <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium flex items-center justify-between">
-                        Ticket Médio <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                    </CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <p className="text-2xl font-bold">{formatCurrency(averageTicket)}</p>
-                </CardContent>
-            </Card>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+        {/* Product Selection */}
+        <div className="lg:col-span-2">
+          <Card>
+            <CardHeader>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input 
+                  placeholder="Buscar produto por nome..." 
+                  className="pl-10" 
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <ScrollArea className="h-[60vh]">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {filteredProducts.map(product => (
+                    <Card key={product.id} className="flex flex-col">
+                      <CardContent className="p-3 flex-1 flex flex-col justify-between">
+                         <div>
+                            <p className="font-semibold text-sm leading-tight">{product.name}</p>
+                            <p className="text-xs text-muted-foreground">{formatCurrency(product.price_cents)}</p>
+                         </div>
+                         <Badge variant={product.stock_qty > 0 ? 'outline' : 'destructive'} className="mt-2 text-xs w-fit">
+                            Estoque: {product.stock_qty}
+                        </Badge>
+                      </CardContent>
+                      <CardFooter className="p-0">
+                        <Button 
+                          className="w-full rounded-t-none" 
+                          size="sm"
+                          onClick={() => addToCart(product)}
+                          disabled={product.stock_qty <= (cart.find(i => i.productId === product.id)?.quantity ?? 0)}
+                        >
+                          Adicionar
+                        </Button>
+                      </CardFooter>
+                    </Card>
+                  ))}
+                </div>
+              </ScrollArea>
+            </CardContent>
+          </Card>
         </div>
 
-        {/* Filters and Actions */}
-        <Card>
-            <CardContent className="pt-6 flex flex-wrap items-center gap-4">
-                <DateRangePicker date={dateRange} onDateChange={setDateRange} />
-                <Select value={paymentFilter} onValueChange={setPaymentFilter}>
-                    <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder="Forma de pagamento" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">Todos</SelectItem>
-                        <SelectItem value="cash">Dinheiro</SelectItem>
-                        <SelectItem value="pix">Pix</SelectItem>
-                        <SelectItem value="card">Cartão</SelectItem>
-                    </SelectContent>
-                </Select>
-                <div className="relative flex-1 min-w-[200px]">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input placeholder="Buscar por ID ou produto..." className="pl-10" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+        {/* Cart */}
+        <div className="sticky top-6">
+          <Card>
+            <CardHeader className="flex-row items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-lg"><ShoppingCart /> Carrinho</CardTitle>
+              {cart.length > 0 && (
+                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setCart([])}>
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                 </Button>
+              )}
+            </CardHeader>
+            <CardContent>
+              {cart.length > 0 ? (
+                <ScrollArea className="h-64 pr-4">
+                    <div className="space-y-4">
+                    {cart.map(item => (
+                        <div key={item.productId} className="flex justify-between items-center">
+                            <div>
+                                <p className="font-medium text-sm">{item.product_name_snapshot}</p>
+                                <p className="text-muted-foreground text-sm">{formatCurrency(item.unit_price_cents)}</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => updateQuantity(item.productId, item.quantity - 1)}><MinusCircle className="h-4 w-4" /></Button>
+                                <span>{item.quantity}</span>
+                                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => updateQuantity(item.productId, item.quantity + 1)}><PlusCircle className="h-4 w-4" /></Button>
+                            </div>
+                            <p className="font-medium w-16 text-right">{formatCurrency(item.subtotal_cents)}</p>
+                        </div>
+                    ))}
+                    </div>
+                </ScrollArea>
+              ) : (
+                <div className="h-64 flex items-center justify-center">
+                  <p className="text-muted-foreground text-center">Seu carrinho está vazio.</p>
                 </div>
-                <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => exportCSV(filteredSales, 'sales')}><Download className="mr-2 h-4 w-4" />Exportar Vendas</Button>
-                    <Button variant="outline" onClick={() => exportCSV(filteredSales, 'items')}><Download className="mr-2 h-4 w-4" />Exportar Itens</Button>
+              )}
+            </CardContent>
+            <Separator />
+            <CardFooter className="flex flex-col gap-4 pt-4">
+                <div className="w-full flex justify-between items-center text-lg font-bold">
+                    <span>Total</span>
+                    <span>{formatCurrency(cartTotal)}</span>
                 </div>
-            </CardContent>
-        </Card>
-        
-        {/* Sales Table */}
-        <Card>
-            <CardContent className="pt-6">
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>Data/Hora</TableHead>
-                            <TableHead className="text-right">Total</TableHead>
-                            <TableHead>Pagamento</TableHead>
-                            <TableHead className="text-center">Itens</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead className="text-right">Ações</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {filteredSales.length > 0 ? filteredSales.map(sale => (
-                            <TableRow key={sale.id}>
-                                <TableCell>{format(new Date(sale.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}</TableCell>
-                                <TableCell className="text-right font-medium">{formatCurrency(sale.total_cents)}</TableCell>
-                                <TableCell>
-                                    <Badge variant={sale.payment_method === 'cash' ? 'secondary' : sale.payment_method === 'pix' ? 'default' : 'outline'}>
-                                        {sale.payment_method === 'cash' ? 'Dinheiro' : sale.payment_method === 'pix' ? 'Pix' : 'Cartão'}
-                                    </Badge>
-                                </TableCell>
-                                <TableCell className="text-center">{sale.items.reduce((sum, item) => sum + item.quantity, 0)}</TableCell>
-                                <TableCell><Badge variant="outline" className="text-green-600 border-green-600">OK</Badge></TableCell>
-                                <TableCell className="text-right">
-                                    <Button variant="ghost" size="sm" onClick={() => setSelectedSale(sale)}>Ver detalhes</Button>
-                                </TableCell>
-                            </TableRow>
-                        )) : (
-                            <TableRow>
-                                <TableCell colSpan={6} className="h-24 text-center">
-                                    Sem vendas no período.
-                                </TableCell>
-                            </TableRow>
-                        )}
-                    </TableBody>
-                </Table>
-            </CardContent>
-        </Card>
+                <Button className="w-full" size="lg" onClick={() => setIsConfirming(true)} disabled={cart.length === 0}>
+                    Finalizar Venda
+                </Button>
+            </CardFooter>
+          </Card>
+        </div>
       </div>
 
-      {/* Sale Details Sheet */}
-      <Sheet open={!!selectedSale} onOpenChange={(open) => !open && setSelectedSale(null)}>
-        <SheetContent className="sm:max-w-lg">
-          <SheetHeader>
-            <SheetTitle>Detalhes da Venda</SheetTitle>
-            <SheetDescription>ID: {selectedSale?.id}</SheetDescription>
-          </SheetHeader>
-          {selectedSale && (
-            <div className="py-4 space-y-4">
-                <div className="space-y-1 text-sm">
-                    <p><strong>Data:</strong> {format(new Date(selectedSale.created_at), "dd/MM/yyyy 'às' HH:mm:ss", { locale: ptBR })}</p>
-                    <p><strong>Forma de Pagamento:</strong> <Badge variant={selectedSale.payment_method === 'cash' ? 'secondary' : selectedSale.payment_method === 'pix' ? 'default' : 'outline'}>{selectedSale.payment_method}</Badge></p>
-                    <p className="text-lg"><strong>Total:</strong> {formatCurrency(selectedSale.total_cents)}</p>
-                </div>
-                <Separator />
-                <div>
-                    <h4 className="font-semibold mb-2">Itens Vendidos</h4>
-                    <div className="space-y-2">
-                        {selectedSale.items.map(item => (
-                            <div key={item.id} className="flex justify-between items-center text-sm">
-                                <div>
-                                    <p className="font-medium">{item.product_name_snapshot}</p>
-                                    <p className="text-muted-foreground">{item.quantity} x {formatCurrency(item.unit_price_cents)}</p>
-                                </div>
-                                <p>{formatCurrency(item.subtotal_cents)}</p>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-                <Separator />
-                <div>
-                    <h4 className="font-semibold mb-2">Auditoria</h4>
-                    {checkSaleIntegrity(selectedSale).consistent ? (
-                        <Badge variant="outline" className="border-green-500 text-green-600">
-                           Consistente
-                        </Badge>
-                    ) : (
-                        <Badge variant="destructive">
-                            <CircleAlert className="mr-1 h-3 w-3" /> Divergente (Diferença: {formatCurrency(checkSaleIntegrity(selectedSale).difference)})
-                        </Badge>
-                    )}
-                    <p className="text-xs text-muted-foreground mt-2">Verifica se o total da venda corresponde à soma dos itens.</p>
-                </div>
-                <Separator />
-                 <div className="flex flex-col gap-2 pt-4">
-                    <Button>Imprimir Recibo</Button>
-                    <Button variant="outline">Repetir Itens no Carrinho</Button>
-                </div>
-            </div>
-          )}
-        </SheetContent>
-      </Sheet>
+      {/* Confirmation Dialog */}
+      <AlertDialog open={isConfirming} onOpenChange={setIsConfirming}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Finalizar a venda?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O total da compra é de <span className="font-bold">{formatCurrency(cartTotal)}</span>. Selecione a forma de pagamento para concluir.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="grid grid-cols-3 gap-4 py-4">
+              <Button variant="outline" size="lg" onClick={() => handleFinalizeSale('cash')}>
+                  <Coins className="mr-2" /> Dinheiro
+              </Button>
+               <Button variant="outline" size="lg" onClick={() => handleFinalizeSale('pix')}>
+                  <PiggyBank className="mr-2" /> Pix
+              </Button>
+               <Button variant="outline" size="lg" onClick={() => handleFinalizeSale('card')}>
+                  <CreditCard className="mr-2" /> Cartão
+              </Button>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Voltar</AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
