@@ -130,63 +130,93 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [supabase]
   );
 
-  useEffect(() => {
-    if (!supabase) {
-      setLoading(false);
-      return;
-    }
+ useEffect(() => {
+  if (!supabase) {
+    setLoading(false);
+    return;
+  }
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      try {
-        setLoading(true);
-        const supabaseUser = session?.user;
+  let mounted = true;
 
-        if (supabaseUser) {
-          let { data: profile } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', supabaseUser.id)
-            .single();
+  const handleSession = async (session: any) => {
+    try {
+      if (!mounted) return;
+      setLoading(true);
 
-          if (!profile) {
-            const { error: insertError } = await supabase
-              .from('users')
-              .insert({ id: supabaseUser.id, email: supabaseUser.email });
+      const supabaseUser = session?.user;
 
-            if (insertError) {
-              console.error('Error creating user profile:', insertError);
-              await supabase.auth.signOut();
-              profile = null;
-            } else {
-              profile = {
-                id: supabaseUser.id,
-                email: supabaseUser.email!,
-                name: undefined,
-                avatar_url: undefined,
-              };
-            }
-          }
+      if (supabaseUser) {
+        let { data: profile, error: profileError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', supabaseUser.id)
+          .single();
 
-          setUser(profile);
-          if (profile) {
-            await fetchStoreData(supabaseUser.id);
-          }
-        } else {
-          setUser(null);
-          setStore(null);
-          setProducts([]);
-          setSales([]);
-          setCashRegisters([]);
+        // Log útil caso RLS/policy esteja bloqueando
+        if (profileError && profileError.code !== 'PGRST116') {
+          console.error('Profile fetch error:', profileError);
         }
-      } catch (e) {
-        console.error('Error in onAuthStateChange', e);
-      } finally {
-        setLoading(false);
-      }
-    });
 
-    return () => subscription.unsubscribe();
-  }, [supabase, fetchStoreData]);
+        if (!profile) {
+          const { error: insertError } = await supabase
+            .from('users')
+            .insert({ id: supabaseUser.id, email: supabaseUser.email });
+
+          if (insertError) {
+            console.error('Error creating user profile:', insertError);
+            await supabase.auth.signOut();
+            profile = null;
+          } else {
+            profile = {
+              id: supabaseUser.id,
+              email: supabaseUser.email!,
+              name: undefined,
+              avatar_url: undefined,
+            };
+          }
+        }
+
+        if (!mounted) return;
+        setUser(profile);
+
+        if (profile) {
+          await fetchStoreData(supabaseUser.id);
+        }
+      } else {
+        if (!mounted) return;
+        setUser(null);
+        setStore(null);
+        setProducts([]);
+        setSales([]);
+        setCashRegisters([]);
+      }
+    } catch (e) {
+      console.error('Error handling session', e);
+    } finally {
+      if (mounted) setLoading(false);
+    }
+  };
+
+  // ✅ BOOTSTRAP INICIAL (isso faltava)
+  (async () => {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) console.error('getSession error:', error);
+    await handleSession(data?.session);
+  })();
+
+  // ✅ LISTENER
+  const { data: { subscription } } = supabase.auth.onAuthStateChange(
+    async (_event, session) => {
+      await handleSession(session);
+    }
+  );
+
+  return () => {
+    mounted = false;
+    subscription.unsubscribe();
+  };
+}, [supabase, fetchStoreData]);
+
 
   const login = useCallback(
     async (email: string, password: string) => {
