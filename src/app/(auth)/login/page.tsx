@@ -1,6 +1,7 @@
+
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -27,7 +28,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { getSupabaseClient } from '@/lib/supabase/client';
 
 const loginSchema = z.object({
   email: z.string().email({ message: 'Email inválido.' }),
@@ -49,10 +51,16 @@ type AuthModeWithConfirm = AuthMode | 'confirm_email';
 export default function LoginPage() {
   const { login, signup, isAuthenticated } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
+
+  const supabase = useMemo(() => getSupabaseClient(), []);
+  const redirectPath = searchParams.get('redirect') || '/dashboard';
+
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [mode, setMode] = useState<AuthModeWithConfirm>('login');
+  const [lastSignupEmail, setLastSignupEmail] = useState<string>('');
 
   const loginForm = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
@@ -68,31 +76,27 @@ export default function LoginPage() {
     resolver: zodResolver(resetSchema),
     defaultValues: { email: '' },
   });
-  
- useEffect(() => {
-  if (isAuthenticated) {
-    router.replace('/dashboard');
-  }
-}, [isAuthenticated, router]);
+
+  useEffect(() => {
+    if (isAuthenticated) router.replace(redirectPath);
+  }, [isAuthenticated, router, redirectPath]);
 
   const handleLogin = async (values: z.infer<typeof loginSchema>) => {
     setLoading(true);
     const { error } = await login(values.email, values.password);
+
     if (error) {
       toast({
         variant: 'destructive',
         title: 'Erro no login',
         description: error.message || 'Email ou senha inválidos.',
       });
-    } else {
-  toast({
-    title: 'Login realizado!',
-    description: 'Redirecionando...',
-  });
+      setLoading(false);
+      return;
+    }
 
-  // ✅ entra no grupo (app); o layout decide onboarding vs dashboard
-  router.replace('/dashboard');
-  }
+    toast({ title: 'Login realizado!', description: 'Redirecionando...' });
+    router.replace(redirectPath);
     setLoading(false);
   };
 
@@ -102,46 +106,101 @@ export default function LoginPage() {
     setLoading(false);
 
     if (error) {
-       signupForm.setError('email', {
+      signupForm.setError('email', {
         type: 'manual',
         message: error.message || 'Ocorreu um erro ao criar a conta.',
       });
-    } else {
-      signupForm.reset();
-      setMode('confirm_email');
+      return;
     }
+
+    setLastSignupEmail(values.email);
+    signupForm.reset();
+    setMode('confirm_email');
   };
-  
+
   const handleReconfirmation = async () => {
+    if (!supabase) {
+      toast({
+        variant: 'destructive',
+        title: 'Supabase não configurado',
+        description: 'Faltam variáveis NEXT_PUBLIC_SUPABASE_URL/ANON_KEY.',
+      });
+      return;
+    }
+
+    const email = lastSignupEmail || signupForm.getValues('email') || resetForm.getValues('email');
+    if (!email) {
+      toast({
+        variant: 'destructive',
+        title: 'Informe um email',
+        description: 'Crie a conta novamente para reenviar a confirmação.',
+      });
+      return;
+    }
+
     setLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    toast({
-        title: "Funcionalidade não implementada",
-        description: "Esta é uma ação simulada.",
-    });
+    const { error } = await supabase.auth.resend({ type: 'signup', email });
     setLoading(false);
-  }
+
+    if (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Não foi possível reenviar',
+        description: error.message,
+      });
+      return;
+    }
+
+    toast({
+      title: 'Confirmação reenviada',
+      description: 'Verifique sua caixa de entrada e spam.',
+    });
+  };
 
   const handleReset = async (values: z.infer<typeof resetSchema>) => {
+    if (!supabase) {
+      toast({
+        variant: 'destructive',
+        title: 'Supabase não configurado',
+        description: 'Faltam variáveis NEXT_PUBLIC_SUPABASE_URL/ANON_KEY.',
+      });
+      return;
+    }
+
     setLoading(true);
-    // In a real app, you'd call Supabase's reset password function
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    toast({
-      title: 'Link enviado (simulado)',
-      description: 'Enviamos um link para seu email se ele existir em nossa base.',
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+    const { error } = await supabase.auth.resetPasswordForEmail(values.email, {
+      redirectTo: siteUrl ? `${siteUrl}/auth/update-password` : undefined,
     });
     setLoading(false);
+
+    // Por segurança, não revelamos se o email existe ou não
+    if (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao enviar link',
+        description: error.message,
+      });
+      return;
+    }
+
+    toast({
+      title: 'Se esse email existir, enviamos um link',
+      description: 'Verifique sua caixa de entrada e spam.',
+    });
+
     resetForm.reset();
+    setMode('login');
   };
 
   return (
     <Card className="w-full max-w-md shadow-2xl">
       <CardHeader className="text-center">
         <div className="mx-auto mb-4">
-            <Avatar className="h-16 w-16 rounded-lg">
-              <AvatarImage src="/logo.png" alt="VendaFacil Logo" />
-              <AvatarFallback>VF</AvatarFallback>
-            </Avatar>
+          <Avatar className="h-16 w-16 rounded-lg">
+            <AvatarImage src="/logo.png" alt="VendaFacil Logo" />
+            <AvatarFallback>VF</AvatarFallback>
+          </Avatar>
         </div>
         <CardTitle className="text-3xl font-headline">VendaFácil</CardTitle>
         <CardDescription>
@@ -150,28 +209,47 @@ export default function LoginPage() {
               login: 'Acesse sua conta para gerenciar suas vendas.',
               signup: 'Crie sua conta para começar a vender.',
               reset: 'Recupere seu acesso com um novo link.',
-              confirm_email: 'Quase lá! Se a confirmação estiver ativa, enviamos um e-mail para você.'
+              confirm_email:
+                'Quase lá! Se a confirmação estiver ativa, enviamos um e-mail para você.',
             }[mode]
           }
         </CardDescription>
       </CardHeader>
+
       <CardContent>
         {mode === 'confirm_email' ? (
           <div className="space-y-4 text-center">
             <p className="text-sm text-muted-foreground">
-              Por favor, verifique sua caixa de entrada e clique no link para ativar sua conta. Se não o encontrar, verifique sua pasta de spam. Após confirmar, você poderá fazer o login.
+              Verifique sua caixa de entrada e clique no link para ativar sua conta. Se não
+              encontrar, veja o spam. Após confirmar, você poderá fazer login.
             </p>
-            <Button variant="outline" className="w-full" onClick={() => setMode('login')}>
-                Ir para o Login
+
+            <Button className="w-full" onClick={handleReconfirmation} disabled={loading}>
+              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Reenviar confirmação
+            </Button>
+
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => setMode('login')}
+              disabled={loading}
+            >
+              Ir para o Login
             </Button>
           </div>
         ) : (
-          <Tabs defaultValue="login" className="w-full" value={mode} onValueChange={(val) => setMode(val as AuthMode)}>
+          <Tabs
+            defaultValue="login"
+            className="w-full"
+            value={mode}
+            onValueChange={(val) => setMode(val as AuthMode)}
+          >
             <TabsList className="grid w-full grid-cols-2 mb-4">
               <TabsTrigger value="login">Entrar</TabsTrigger>
               <TabsTrigger value="signup">Criar conta</TabsTrigger>
             </TabsList>
-            
+
             <TabsContent value="login">
               <Form {...loginForm}>
                 <form onSubmit={loginForm.handleSubmit(handleLogin)} className="space-y-4">
@@ -188,6 +266,7 @@ export default function LoginPage() {
                       </FormItem>
                     )}
                   />
+
                   <FormField
                     control={loginForm.control}
                     name="password"
@@ -208,7 +287,11 @@ export default function LoginPage() {
                               className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
                               onClick={() => setShowPassword(!showPassword)}
                             >
-                              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                              {showPassword ? (
+                                <EyeOff className="h-4 w-4" />
+                              ) : (
+                                <Eye className="h-4 w-4" />
+                              )}
                             </Button>
                           </div>
                         </FormControl>
@@ -216,6 +299,7 @@ export default function LoginPage() {
                       </FormItem>
                     )}
                   />
+
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Entrar
@@ -240,6 +324,7 @@ export default function LoginPage() {
                       </FormItem>
                     )}
                   />
+
                   <FormField
                     control={signupForm.control}
                     name="password"
@@ -253,9 +338,11 @@ export default function LoginPage() {
                       </FormItem>
                     )}
                   />
+
                   <p className="text-xs text-center text-muted-foreground">
-                      Ao criar, você concorda com nossos Termos de Serviço.
+                    Ao criar, você concorda com nossos Termos de Serviço.
                   </p>
+
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Criar conta
@@ -290,6 +377,7 @@ export default function LoginPage() {
           </Tabs>
         )}
       </CardContent>
+
       <CardFooter className="flex flex-col items-center justify-center text-sm">
         {mode === 'login' && (
           <Button variant="link" size="sm" onClick={() => setMode('reset')}>
@@ -297,7 +385,7 @@ export default function LoginPage() {
           </Button>
         )}
         {mode === 'reset' && (
-           <Button variant="link" size="sm" onClick={() => setMode('login')}>
+          <Button variant="link" size="sm" onClick={() => setMode('login')}>
             Voltar para o login
           </Button>
         )}
