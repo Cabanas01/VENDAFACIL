@@ -196,21 +196,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [supabase]
   );
 
-  const signup = useCallback(
-    async (email: string, password: string) => {
-      if (!supabase) return { error: new Error('Supabase not configured') as any };
+ const signup = useCallback(async (email: string, password: string) => {
+  if (!supabase) return { error: new Error('Supabase not configured') as any };
 
-      const { error } = await supabase.auth.signUp({ email, password });
-      if (error) {
-        if (error.message.includes('User already registered')) {
-          return { error: { ...error, message: 'E-mail já cadastrado.' } };
-        }
-        return { error };
-      }
-      return { error: null };
+  const { error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      emailRedirectTo:
+        process.env.NEXT_PUBLIC_SITE_URL
+          ? `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`
+          : undefined,
     },
-    [supabase]
-  );
+  });
+
+  if (error) {
+    if (error.message.includes('User already registered')) {
+      return { error: { ...error, message: 'E-mail já cadastrado.' } };
+    }
+    return { error };
+  }
+
+  return { error: null };
+}, [supabase]);
 
   const logout = useCallback(async () => {
     if (!supabase) return;
