@@ -13,15 +13,21 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => {
-    if (!loading) {
-      if (!isAuthenticated) {
-        router.replace('/login');
-      } else if (store && pathname === '/onboarding') {
-        router.replace('/dashboard');
-      } else if (!store && pathname !== '/onboarding') {
-        router.replace('/onboarding');
-      }
-    }
+  if (loading) return;
+
+if (!isAuthenticated) {
+  router.replace('/login');
+  return;
+}
+
+if (store && pathname === '/onboarding') {
+  router.replace('/dashboard');
+  return;
+}
+
+if (!store && pathname !== '/onboarding') {
+  router.replace('/onboarding');
+}
   }, [isAuthenticated, store, loading, router, pathname]);
 
   const showSkeleton = loading || !isAuthenticated || (!store && pathname !== '/onboarding');
