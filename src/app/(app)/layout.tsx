@@ -9,12 +9,12 @@ import { useAuth } from '@/components/auth-provider';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export default function AppLayout({ children }: { children: ReactNode }) {
-  const { isAuthenticated, store, loading, storeStatus, storeError } = useAuth();
+  const { isAuthenticated, store, loading, storeStatus, storeError, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
-    if (loading) return;
+    if (loading || storeStatus === 'loading') return;
 
     if (!isAuthenticated) {
       const redirect = encodeURIComponent(pathname || '/dashboard');
@@ -32,10 +32,10 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     }
   }, [loading, isAuthenticated, storeStatus, store, pathname, router]);
 
-  if (loading || (isAuthenticated && storeStatus === 'unknown')) {
+  if (loading || (isAuthenticated && (storeStatus === 'loading' || storeStatus === 'unknown'))) {
     return (
       <div className="flex min-h-screen w-full">
-        <div className="w-64 border-r p-4">
+        <div className="w-64 border-r p-4 bg-background">
           <Skeleton className="h-12 w-full mb-8" />
           <div className="space-y-2">
             <Skeleton className="h-10 w-full" />
@@ -55,19 +55,21 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   if (storeStatus === 'error') {
     return (
       <div className="mx-auto flex min-h-screen w-full max-w-xl flex-col items-center justify-center gap-4 p-6 text-center">
-        <h1 className="text-2xl font-semibold">Permissão do Supabase bloqueando acesso</h1>
+        <h1 className="text-2xl font-semibold">Ocorreu um erro na aplicação</h1>
         <p className="text-sm text-muted-foreground">
-          Sua sessão está ativa, mas o app não conseguiu ler/criar a loja (tabelas{' '}
-          <code>stores</code>/<code>store_members</code>). Isso geralmente é RLS/policies no Supabase.
+          Sua sessão está ativa, mas o app não conseguiu carregar os dados da loja. Isso pode ser um problema com as permissões no Supabase (RLS/policies) ou de conexão.
         </p>
         {storeError ? (
-          <pre className="w-full overflow-auto rounded-md border p-3 text-left text-xs">{storeError}</pre>
+          <pre className="w-full overflow-auto rounded-md border bg-muted p-3 text-left text-xs">{storeError}</pre>
         ) : null}
         <div className="flex flex-col gap-2 sm:flex-row">
           <a className="underline" href="/onboarding">
-            Ir para Onboarding
+            Tentar ir para Onboarding
           </a>
-          <a className="underline" href="/login">
+          <a className="underline" href="/login" onClick={(e) => {
+            e.preventDefault();
+            logout();
+          }}>
             Voltar ao Login
           </a>
         </div>
@@ -75,8 +77,10 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!isAuthenticated) return null;
-  if (storeStatus === 'none' && pathname !== '/onboarding') return null;
+  // While redirecting, don't render children
+  if (!isAuthenticated || (storeStatus === 'none' && pathname !== '/onboarding')) {
+    return null;
+  }
 
   return (
     <SidebarProvider>
