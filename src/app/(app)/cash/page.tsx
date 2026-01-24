@@ -33,7 +33,7 @@ import type { DateRange } from 'react-day-picker';
 const formatCurrency = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value / 100);
 
 export default function CashPage() {
-  const { cashRegisters, setCashRegisters, sales, products } = useAuth();
+  const { cashRegisters, setCashRegisters, sales, products, store } = useAuth();
   const [openingAmount, setOpeningAmount] = useState('');
   const { toast } = useToast();
   const [dateRange, setDateRange] = useState<DateRange | undefined>({ from: new Date(), to: new Date() });
@@ -56,7 +56,7 @@ export default function CashPage() {
     }, { totalCents: 0, count: 0, cash: 0, pix: 0, card: 0 });
 
     const cost = salesInPeriod.flatMap(s => s.items).reduce((acc, item) => {
-        const product = products.find(p => p.id === item.productId);
+        const product = products.find(p => p.id === item.product_id);
         return acc + (product?.cost_cents ?? 0) * item.quantity;
     }, 0);
     
@@ -74,6 +74,7 @@ export default function CashPage() {
   const reportData = dateRange?.from ? calculateSalesForPeriod(dateRange.from.toISOString(), dateRange.to ? dateRange.to.toISOString() : dateRange.from.toISOString()) : null;
 
   const handleOpenCashRegister = () => {
+    if (!store) return;
     const amountCents = Math.round(parseFloat(openingAmount.replace(',', '.')) * 100);
     if (isNaN(amountCents) || amountCents < 0) {
       toast({ variant: 'destructive', title: 'Valor inválido', description: 'Por favor, insira um valor de abertura válido.' });
@@ -81,7 +82,7 @@ export default function CashPage() {
     }
     const newRegister: CashRegister = {
       id: `cash_${Date.now()}`,
-      storeId: 'store_1',
+      store_id: store.id,
       opened_at: new Date().toISOString(),
       closed_at: null,
       opening_amount_cents: amountCents,

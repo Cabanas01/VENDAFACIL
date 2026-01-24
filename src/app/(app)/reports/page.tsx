@@ -60,7 +60,7 @@ export default function ReportsPage() {
     }, { totalCents: 0, count: 0, cash: 0, pix: 0, card: 0 });
 
     const cost = filteredSales.flatMap(s => s.items).reduce((acc, item) => {
-        const product = products.find(p => p.id === item.productId);
+        const product = products.find(p => p.id === item.product_id);
         return acc + (product?.cost_cents ?? 0) * item.quantity;
     }, 0);
     
@@ -95,7 +95,7 @@ export default function ReportsPage() {
   const salesByCategory = filteredSales
     .flatMap(sale => sale.items)
     .map(item => {
-        const product = products.find(p => p.id === item.productId);
+        const product = products.find(p => p.id === item.product_id);
         return { ...item, category: product?.category || 'Sem categoria' };
     })
     .reduce((acc, item) => {
@@ -111,7 +111,7 @@ export default function ReportsPage() {
   }, {} as Record<string, number>);
   const stockByCategoryData = Object.entries(stockByCategory).map(([name, total]) => ({ name, total }));
 
-  const productsWithoutSale = products.filter(p => p.stock_qty > 0 && !filteredSales.some(s => s.items.some(i => i.productId === p.id)));
+  const productsWithoutSale = products.filter(p => p.stock_qty > 0 && !filteredSales.some(s => s.items.some(i => i.product_id === p.id)));
 
   const handleGenerateReportText = () => {
     if (!dateRange?.from || !reportData) {

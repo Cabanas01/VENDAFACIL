@@ -67,7 +67,7 @@ export default function SalesPage() {
         csvContent += "sale_id,product_id,product_name_snapshot,quantity,unit_price_cents,subtotal_cents\n";
         data.forEach(sale => {
             sale.items.forEach(item => {
-                const row = [item.saleId, item.productId, item.product_name_snapshot, item.quantity, item.unit_price_cents, item.subtotal_cents].join(",");
+                const row = [item.sale_id, item.product_id, `"${item.product_name_snapshot}"`, item.quantity, item.unit_price_cents, item.subtotal_cents].join(",");
                 csvContent += row + "\n";
             });
         });

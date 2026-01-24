@@ -62,7 +62,7 @@ export default function DashboardPage() {
   const salesByCategory = filteredSales
     .flatMap(sale => sale.items)
     .map(item => {
-        const product = products.find(p => p.id === item.productId);
+        const product = products.find(p => p.id === item.product_id);
         return { ...item, category: product?.category || 'Sem categoria' };
     })
     .reduce((acc, item) => {
@@ -80,7 +80,7 @@ export default function DashboardPage() {
   const stockByCategoryData = Object.entries(stockByCategory).map(([name, total]) => ({ name, total }));
 
   const criticalStockProducts = products.filter(p => p.active && p.stock_qty > 0 && p.min_stock_qty && p.stock_qty <= p.min_stock_qty);
-  const productsWithoutSale = products.filter(p => p.stock_qty > 0 && !filteredSales.some(s => s.items.some(i => i.productId === p.id)));
+  const productsWithoutSale = products.filter(p => p.stock_qty > 0 && !filteredSales.some(s => s.items.some(i => i.product_id === p.id)));
 
   const openCashRegister = cashRegisters.find(cr => cr.closed_at === null);
   const salesInOpenRegister = openCashRegister ? sales.filter(s => new Date(s.created_at) >= new Date(openCashRegister.opened_at)) : [];
