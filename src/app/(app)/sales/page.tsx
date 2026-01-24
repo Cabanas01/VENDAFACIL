@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, addDays, startOfToday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Search, PlusCircle, DollarSign, ShoppingCart, TrendingUp, MoreHorizontal, CreditCard, Coins, PiggyBank } from 'lucide-react';
 import type { DateRange } from 'react-day-picker';
@@ -38,7 +38,7 @@ const paymentMethodLabels = {
 export default function SalesPage() {
   const router = useRouter();
   const { sales } = useAuth();
-  const [dateRange, setDateRange] = useState<DateRange | undefined>({ from: new Date(new Date().setDate(new Date().getDate() - 29)), to: new Date() });
+  const [dateRange, setDateRange] = useState<DateRange | undefined>({ from: addDays(startOfToday(), -29), to: new Date() });
   const [searchQuery, setSearchQuery] = useState('');
   const [paymentFilter, setPaymentFilter] = useState('all');
 

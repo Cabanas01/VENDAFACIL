@@ -32,7 +32,7 @@ export default function ReportsPage() {
   const router = useRouter();
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: addDays(startOfToday(), -29),
-    to: startOfToday(),
+    to: new Date(),
   });
   const [financialReportData, setFinancialReportData] = useState('');
   const [summary, setSummary] = useState<SummarizeFinancialReportsOutput | null>(null);

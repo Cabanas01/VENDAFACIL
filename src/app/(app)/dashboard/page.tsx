@@ -28,7 +28,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: addDays(startOfToday(), -6),
-    to: startOfToday(),
+    to: new Date(),
   });
 
   // Filtered data based on dateRange (simulation)
@@ -38,7 +38,7 @@ export default function DashboardPage() {
           return false;
       }
       const toDate = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
-      return saleDate >= dateRange.from && saleDate <= toDate;
+      return saleDate >= startOfToday() && saleDate <= toDate;
   });
 
   const totalRevenue = filteredSales.reduce((sum, sale) => sum + sale.total_cents, 0);
