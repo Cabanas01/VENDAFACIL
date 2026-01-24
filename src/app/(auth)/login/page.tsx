@@ -48,13 +48,14 @@ type AuthMode = 'login' | 'signup' | 'reset';
 type AuthModeWithConfirm = AuthMode | 'confirm_email';
 
 export default function LoginPage() {
-  const { login, signup, isAuthenticated } = useAuth();
+  const { login, signup, logout, isAuthenticated } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
 
   const supabase = useMemo(() => getSupabaseClient(), []);
-  const redirectPath = searchParams.get('redirect') || '/dashboard';
+  const redirectRaw = searchParams.get('redirect');
+  const redirectPath = redirectRaw || '/dashboard';
 
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -77,10 +78,11 @@ export default function LoginPage() {
   });
 
   useEffect(() => {
-    if (isAuthenticated) {
+    if (!isAuthenticated) return;
+    if (redirectRaw) {
       router.replace(redirectPath);
     }
-  }, [isAuthenticated, router, redirectPath]);
+  }, [isAuthenticated, router, redirectPath, redirectRaw]);
 
   const handleLogin = async (values: z.infer<typeof loginSchema>) => {
     setLoading(true);
@@ -205,7 +207,42 @@ export default function LoginPage() {
     }
   };
 
-  return (
+    const handleGoDashboard = () => router.replace('/dashboard');
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } finally {
+      router.replace('/login');
+    }
+  };
+
+  if (isAuthenticated && !redirectRaw) {
+    return (
+      <Card className="w-full max-w-md shadow-2xl">
+        <CardHeader className="text-center">
+          <div className="mx-auto mb-4">
+            <Avatar className="h-16 w-16 rounded-lg">
+              <AvatarImage src="/logo.png" alt="VendaFacil Logo" />
+              <AvatarFallback>VF</AvatarFallback>
+            </Avatar>
+          </div>
+          <CardTitle className="text-3xl font-headline">VendaFácil</CardTitle>
+          <CardDescription>Você já está logado. Escolha para onde ir.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Button className="w-full" onClick={handleGoDashboard}>
+            Ir para o Dashboard
+          </Button>
+          <Button variant="outline" className="w-full" onClick={handleLogout}>
+            Trocar conta (sair)
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+return (
     <Card className="w-full max-w-md shadow-2xl">
       <CardHeader className="text-center">
         <div className="mx-auto mb-4">
