@@ -30,9 +30,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     if (storeStatus === 'has' && store && pathname === '/onboarding') {
       router.replace('/dashboard');
     }
-  }, [loading, isAuthenticated, store, pathname, router]);
+  }, [loading, isAuthenticated, storeStatus, store, pathname, router]);
 
-  if (loading) {
+  if (loading || (isAuthenticated && storeStatus === 'unknown')) {
     return (
       <div className="flex min-h-screen w-full">
         <div className="w-64 border-r p-4">
@@ -52,26 +52,29 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     );
   }
 
-    if (storeStatus === 'error') {
+  if (storeStatus === 'error') {
     return (
       <div className="mx-auto flex min-h-screen w-full max-w-xl flex-col items-center justify-center gap-4 p-6 text-center">
         <h1 className="text-2xl font-semibold">Permissão do Supabase bloqueando acesso</h1>
         <p className="text-sm text-muted-foreground">
-          Sua sessão está ativa, mas o app não conseguiu ler a loja (tabelas <code>stores</code>/<code>store_members</code>).
-          Isso geralmente é RLS/policies no Supabase.
+          Sua sessão está ativa, mas o app não conseguiu ler/criar a loja (tabelas{' '}
+          <code>stores</code>/<code>store_members</code>). Isso geralmente é RLS/policies no Supabase.
         </p>
         {storeError ? (
           <pre className="w-full overflow-auto rounded-md border p-3 text-left text-xs">{storeError}</pre>
         ) : null}
         <div className="flex flex-col gap-2 sm:flex-row">
-          <a className="underline" href="/onboarding">Ir para Onboarding</a>
-          <a className="underline" href="/login">Voltar ao Login</a>
+          <a className="underline" href="/onboarding">
+            Ir para Onboarding
+          </a>
+          <a className="underline" href="/login">
+            Voltar ao Login
+          </a>
         </div>
       </div>
     );
   }
 
-// Enquanto redireciona, n찾o renderiza nada
   if (!isAuthenticated) return null;
   if (storeStatus === 'none' && pathname !== '/onboarding') return null;
 
