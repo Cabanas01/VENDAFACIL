@@ -387,48 +387,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const total_cents = cart.reduce((sum, item) => sum + item.subtotal_cents, 0);
         const saleId = `sale_${Date.now()}`;
         
-        const saleData: Omit<Sale, 'items'> = {
+        // 1. Insert the main sale record
+        const { error: saleError } = await supabase.from('sales').insert({
           id: saleId,
           store_id: store.id,
           created_at: new Date().toISOString(),
           payment_method: paymentMethod,
           total_cents: total_cents,
-        };
+        });
 
-        const { error: saleError } = await supabase.from('sales').insert(saleData);
-        if (saleError) throw saleError;
+        if (saleError) {
+            console.error('[SALE] Error creating sale record', saleError);
+            throw saleError;
+        }
+        
+        // 2. Prepare the sale items records robustly
+        const saleItemsData = [];
+        for (const cartItem of cart) {
+            if (!cartItem.product_id) {
+                throw new Error(`Critical error: Cart item "${cartItem.product_name_snapshot}" is missing a product_id.`);
+            }
+            saleItemsData.push({
+                id: `item_${saleId}_${cartItem.product_id}`,
+                sale_id: saleId,
+                product_id: cartItem.product_id,
+                product_name_snapshot: cartItem.product_name_snapshot,
+                quantity: cartItem.quantity,
+                unit_price_cents: cartItem.unit_price_cents,
+                subtotal_cents: cartItem.subtotal_cents,
+            });
+        }
 
-        const saleItemsData = cart.map((cartItem) => ({
-          id: `item_${saleId}_${cartItem.product_id}`,
-          sale_id: saleId,
-          product_id: cartItem.product_id,
-          product_name_snapshot: cartItem.product_name_snapshot,
-          quantity: cartItem.quantity,
-          unit_price_cents: cartItem.unit_price_cents,
-          subtotal_cents: cartItem.subtotal_cents,
-        }));
-
+        // 3. Insert the sale items
         const { error: itemsError } = await supabase.from('sale_items').insert(saleItemsData);
+        
         if (itemsError) {
-          // Attempt to roll back the sale insertion
+          // Attempt to roll back the sale insertion for consistency
+          console.error('[SALE] Error creating sale items, rolling back sale.', itemsError);
           await supabase.from('sales').delete().eq('id', saleId);
           throw itemsError;
         }
 
-        // All DB writes succeeded, now update stock and refetch data
+        // 4. Update stock for each product
         const stockUpdates = cart.map((cartItem) => 
           supabase.rpc('decrement_stock', { p_product_id: cartItem.product_id, p_quantity: cartItem.quantity })
         );
         
         await Promise.all(stockUpdates);
+        
+        // 5. Refresh all data in the app
         await fetchStoreData(user.id);
       } catch (error: any) {
-         // Log the specific error to help with debugging
-         if (error.message.includes('sale_items')) {
-            console.error('[SALE] Error creating sale items', error);
-         } else {
-            console.error('[SALE] Error creating sale', error);
-         }
+         console.error('[SALE] Full sale creation process failed', error);
       }
     },
     [supabase, store, user, fetchStoreData]
