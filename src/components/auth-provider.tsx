@@ -394,7 +394,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           id: saleId,
           store_id: store.id,
           total_cents,
-          payment_method,
+          payment_method: paymentMethod,
         });
   
         if (saleError) {
