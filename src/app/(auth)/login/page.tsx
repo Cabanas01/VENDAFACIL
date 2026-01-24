@@ -47,15 +47,23 @@ const resetSchema = z.object({
 type AuthMode = 'login' | 'signup' | 'reset';
 type AuthModeWithConfirm = AuthMode | 'confirm_email';
 
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timeoutId: any;
+  const timeout = new Promise<T>((_resolve, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('TIMEOUT')), ms);
+  });
+
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId));
+}
+
 export default function LoginPage() {
-  const { login, signup, logout, isAuthenticated } = useAuth();
+  const { login, signup, isAuthenticated } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
 
   const supabase = useMemo(() => getSupabaseClient(), []);
-  const redirectRaw = searchParams.get('redirect');
-  const redirectPath = redirectRaw || '/dashboard';
+  const redirectPath = searchParams.get('redirect') || '/dashboard';
 
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -78,16 +86,19 @@ export default function LoginPage() {
   });
 
   useEffect(() => {
-    if (!isAuthenticated) return;
-    if (redirectRaw) {
+    if (isAuthenticated) {
       router.replace(redirectPath);
     }
-  }, [isAuthenticated, router, redirectPath, redirectRaw]);
+  }, [isAuthenticated, router, redirectPath]);
 
   const handleLogin = async (values: z.infer<typeof loginSchema>) => {
     setLoading(true);
+
     try {
-      const { error } = await login(values.email, values.password);
+      // Se o request travar (rede/CORS/env), evita spinner infinito
+      const result = await withTimeout(login(values.email, values.password), 15000);
+      const { error } = result as any;
+
       if (error) {
         toast({
           variant: 'destructive',
@@ -100,11 +111,15 @@ export default function LoginPage() {
       toast({ title: 'Login realizado!', description: 'Redirecionando...' });
       router.replace(redirectPath);
     } catch (e: any) {
+      const isTimeout = e?.message === 'TIMEOUT';
       toast({
         variant: 'destructive',
-        title: 'Erro inesperado',
-        description: e?.message || 'Falha ao autenticar.',
+        title: isTimeout ? 'Tempo esgotado' : 'Erro inesperado',
+        description: isTimeout
+          ? 'A autenticação demorou demais. Verifique sua internet e as variáveis NEXT_PUBLIC_SUPABASE_URL/ANON_KEY na Vercel.'
+          : e?.message || 'Falha ao autenticar.',
       });
+      console.error('[LOGIN] error', e);
     } finally {
       setLoading(false);
     }
@@ -112,20 +127,30 @@ export default function LoginPage() {
 
   const handleSignup = async (values: z.infer<typeof signupSchema>) => {
     setLoading(true);
-    const { error } = await signup(values.email, values.password);
-    setLoading(false);
+    try {
+      const { error } = await withTimeout(signup(values.email, values.password), 15000);
 
-    if (error) {
-      signupForm.setError('email', {
-        type: 'manual',
-        message: error.message || 'Ocorreu um erro ao criar a conta.',
+      if (error) {
+        signupForm.setError('email', {
+          type: 'manual',
+          message: error.message || 'Ocorreu um erro ao criar a conta.',
+        });
+        return;
+      }
+
+      setLastSignupEmail(values.email);
+      signupForm.reset();
+      setMode('confirm_email');
+    } catch (e: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro inesperado',
+        description: e?.message || 'Falha ao criar conta.',
       });
-      return;
+      console.error('[SIGNUP] error', e);
+    } finally {
+      setLoading(false);
     }
-
-    setLastSignupEmail(values.email);
-    signupForm.reset();
-    setMode('confirm_email');
   };
 
   const handleReconfirmation = async () => {
@@ -150,7 +175,8 @@ export default function LoginPage() {
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.resend({ type: 'signup', email });
+      const { error } = await withTimeout(supabase.auth.resend({ type: 'signup', email }), 15000);
+
       if (error) {
         toast({
           variant: 'destructive',
@@ -164,6 +190,13 @@ export default function LoginPage() {
         title: 'Confirmação reenviada',
         description: 'Verifique sua caixa de entrada e spam.',
       });
+    } catch (e: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro inesperado',
+        description: e?.message || 'Falha ao reenviar confirmação.',
+      });
+      console.error('[CONFIRM] error', e);
     } finally {
       setLoading(false);
     }
@@ -182,9 +215,12 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
-      const { error } = await supabase.auth.resetPasswordForEmail(values.email, {
-        redirectTo: siteUrl ? `${siteUrl}/auth/update-password` : undefined,
-      });
+      const { error } = await withTimeout(
+        supabase.auth.resetPasswordForEmail(values.email, {
+          redirectTo: siteUrl ? `${siteUrl}/auth/update-password` : undefined,
+        }),
+        15000
+      );
 
       if (error) {
         toast({
@@ -202,47 +238,19 @@ export default function LoginPage() {
 
       resetForm.reset();
       setMode('login');
+    } catch (e: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro inesperado',
+        description: e?.message || 'Falha ao enviar link.',
+      });
+      console.error('[RESET] error', e);
     } finally {
       setLoading(false);
     }
   };
 
-    const handleGoDashboard = () => router.replace('/dashboard');
-
-  const handleLogout = async () => {
-    try {
-      await logout();
-    } finally {
-      router.replace('/login');
-    }
-  };
-
-  if (isAuthenticated && !redirectRaw) {
-    return (
-      <Card className="w-full max-w-md shadow-2xl">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4">
-            <Avatar className="h-16 w-16 rounded-lg">
-              <AvatarImage src="/logo.png" alt="VendaFacil Logo" />
-              <AvatarFallback>VF</AvatarFallback>
-            </Avatar>
-          </div>
-          <CardTitle className="text-3xl font-headline">VendaFácil</CardTitle>
-          <CardDescription>Você já está logado. Escolha para onde ir.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <Button className="w-full" onClick={handleGoDashboard}>
-            Ir para o Dashboard
-          </Button>
-          <Button variant="outline" className="w-full" onClick={handleLogout}>
-            Trocar conta (sair)
-          </Button>
-        </CardContent>
-      </Card>
-    );
-  }
-
-return (
+  return (
     <Card className="w-full max-w-md shadow-2xl">
       <CardHeader className="text-center">
         <div className="mx-auto mb-4">
@@ -269,8 +277,8 @@ return (
         {mode === 'confirm_email' ? (
           <div className="space-y-4 text-center">
             <p className="text-sm text-muted-foreground">
-              Por favor, verifique sua caixa de entrada e clique no link para ativar sua conta. Se não o encontrar,
-              verifique sua pasta de spam. Após confirmar, você poderá fazer o login.
+              Verifique sua caixa de entrada e clique no link para ativar sua conta. Se não encontrar,
+              veja o spam. Após confirmar, você poderá fazer o login.
             </p>
 
             <Button className="w-full" onClick={handleReconfirmation} disabled={loading}>
@@ -278,7 +286,12 @@ return (
               Reenviar confirmação
             </Button>
 
-            <Button variant="outline" className="w-full" onClick={() => setMode('login')} disabled={loading}>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => setMode('login')}
+              disabled={loading}
+            >
               Ir para o Login
             </Button>
           </div>
@@ -304,12 +317,13 @@ return (
                       <FormItem>
                         <FormLabel>Email</FormLabel>
                         <FormControl>
-                          <Input placeholder="seu@email.com" {...field} />
+                          <Input placeholder="seu@email.com" autoComplete="email" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
+
                   <FormField
                     control={loginForm.control}
                     name="password"
@@ -321,6 +335,7 @@ return (
                             <Input
                               type={showPassword ? 'text' : 'password'}
                               placeholder="Sua senha"
+                              autoComplete="current-password"
                               {...field}
                             />
                             <Button
@@ -330,7 +345,11 @@ return (
                               className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
                               onClick={() => setShowPassword(!showPassword)}
                             >
-                              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                              {showPassword ? (
+                                <EyeOff className="h-4 w-4" />
+                              ) : (
+                                <Eye className="h-4 w-4" />
+                              )}
                             </Button>
                           </div>
                         </FormControl>
@@ -338,6 +357,7 @@ return (
                       </FormItem>
                     )}
                   />
+
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Entrar
@@ -356,12 +376,13 @@ return (
                       <FormItem>
                         <FormLabel>Email</FormLabel>
                         <FormControl>
-                          <Input placeholder="seu@email.com" {...field} />
+                          <Input placeholder="seu@email.com" autoComplete="email" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
+
                   <FormField
                     control={signupForm.control}
                     name="password"
@@ -369,15 +390,22 @@ return (
                       <FormItem>
                         <FormLabel>Senha</FormLabel>
                         <FormControl>
-                          <Input type="password" placeholder="Mínimo 6 caracteres" {...field} />
+                          <Input
+                            type="password"
+                            placeholder="Mínimo 6 caracteres"
+                            autoComplete="new-password"
+                            {...field}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
+
                   <p className="text-xs text-center text-muted-foreground">
                     Ao criar, você concorda com nossos Termos de Serviço.
                   </p>
+
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Criar conta
@@ -396,12 +424,13 @@ return (
                       <FormItem>
                         <FormLabel>Email</FormLabel>
                         <FormControl>
-                          <Input placeholder="seu@email.com" {...field} />
+                          <Input placeholder="seu@email.com" autoComplete="email" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
+
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Enviar link de recuperação
@@ -415,12 +444,12 @@ return (
 
       <CardFooter className="flex flex-col items-center justify-center text-sm">
         {mode === 'login' && (
-          <Button variant="link" size="sm" onClick={() => setMode('reset')}>
+          <Button variant="link" size="sm" onClick={() => setMode('reset')} disabled={loading}>
             Esqueceu sua senha?
           </Button>
         )}
         {mode === 'reset' && (
-          <Button variant="link" size="sm" onClick={() => setMode('login')}>
+          <Button variant="link" size="sm" onClick={() => setMode('login')} disabled={loading}>
             Voltar para o login
           </Button>
         )}
