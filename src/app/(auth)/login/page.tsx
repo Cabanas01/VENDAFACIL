@@ -69,11 +69,11 @@ export default function LoginPage() {
     defaultValues: { email: '' },
   });
   
-  useEffect(() => {
-    if (isAuthenticated) {
-      router.replace('/');
-    }
-  }, [isAuthenticated, router]);
+ useEffect(() => {
+  if (isAuthenticated) {
+    router.replace('/dashboard');
+  }
+}, [isAuthenticated, router]);
 
   const handleLogin = async (values: z.infer<typeof loginSchema>) => {
     setLoading(true);
