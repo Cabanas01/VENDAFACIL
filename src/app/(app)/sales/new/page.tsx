@@ -92,18 +92,21 @@ export default function NewSalePage() {
     ));
   };
   
-  const handleFinalizeSale = (paymentMethod: 'cash' | 'pix' | 'card') => {
+  const handleFinalizeSale = async (paymentMethod: 'cash' | 'pix' | 'card') => {
     if (cart.length === 0) {
       toast({ variant: 'destructive', title: 'Carrinho vazio' });
       return;
     }
 
-    addSale(cart, paymentMethod);
-
-    toast({ title: 'Venda realizada com sucesso!', description: `Total: ${formatCurrency(cartTotal)}` });
-    setCart([]);
-    setIsConfirming(false);
-    router.push('/sales');
+    try {
+        await addSale(cart, paymentMethod);
+        toast({ title: 'Venda realizada com sucesso!', description: `Total: ${formatCurrency(cartTotal)}` });
+        setCart([]);
+        setIsConfirming(false);
+        router.push('/sales');
+    } catch (error: any) {
+        toast({ variant: 'destructive', title: 'Erro ao finalizar venda', description: error.message });
+    }
   };
 
   return (
