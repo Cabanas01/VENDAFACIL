@@ -58,10 +58,10 @@ const steps = [
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const { createStore } = useAuth();
+  const { createStore, storeError } = useAuth();
   const { toast } = useToast();
   const [currentStep, setCurrentStep] = useState(0);
-  const [loading, setLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<OnboardingValues>({
     resolver: zodResolver(onboardingSchema),
@@ -131,8 +131,7 @@ export default function OnboardingPage() {
   }
 
   const onSubmit = async (values: OnboardingValues) => {
-    setLoading(true);
-
+    setIsSubmitting(true);
     try {
       toast({
         title: 'Criando sua loja...',
@@ -162,18 +161,15 @@ export default function OnboardingPage() {
         toast({
           variant: 'destructive',
           title: 'Erro ao criar loja',
-          description:
-            'Não foi possível criar sua loja. Verifique no Supabase se as funções/policies foram aplicadas (create_new_store, stores, store_members).',
+          description: storeError || 'Não foi possível criar sua loja. Verifique no Supabase se as funções/policies foram aplicadas.',
         });
-        return;
+      } else {
+        toast({
+          title: 'Loja criada com sucesso!',
+          description: 'Redirecionando para o painel...',
+        });
+        // Navigation is now handled by the layout component reactively
       }
-
-      toast({
-        title: 'Loja criada com sucesso!',
-        description: 'Redirecionando para o painel...',
-      });
-
-      router.replace('/dashboard');
     } catch (e: any) {
       console.error('[ONBOARDING] create store exception', e);
       toast({
@@ -182,7 +178,7 @@ export default function OnboardingPage() {
         description: e?.message || 'Falha ao criar loja.',
       });
     } finally {
-      setLoading(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -359,8 +355,8 @@ export default function OnboardingPage() {
                 </Button>
               )}
               {currentStep === steps.length - 1 && (
-                <Button type="submit" disabled={loading} className="ml-auto">
-                  {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                <Button type="submit" disabled={isSubmitting} className="ml-auto">
+                  {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Criar minha loja
                 </Button>
               )}

@@ -7,6 +7,7 @@ import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { MainNav } from '@/components/main-nav';
 import { useAuth } from '@/components/auth-provider';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   const { isAuthenticated, store, loading, storeStatus, storeError, logout } = useAuth();
@@ -14,7 +15,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => {
-    if (loading || storeStatus === 'loading') return;
+    if (loading || storeStatus === 'loading' || storeStatus === 'unknown') return;
 
     if (!isAuthenticated) {
       const redirect = encodeURIComponent(pathname || '/dashboard');
@@ -35,7 +36,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   if (loading || (isAuthenticated && (storeStatus === 'loading' || storeStatus === 'unknown'))) {
     return (
       <div className="flex min-h-screen w-full">
-        <div className="w-64 border-r p-4 bg-background">
+        <div className="hidden w-64 border-r bg-background p-4 md:block">
           <Skeleton className="h-12 w-full mb-8" />
           <div className="space-y-2">
             <Skeleton className="h-10 w-full" />
@@ -44,7 +45,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             <Skeleton className="h-10 w-full" />
           </div>
         </div>
-        <div className="flex-1 p-8">
+        <div className="flex-1 p-4 sm:p-6 lg:p-8">
           <Skeleton className="h-12 w-1/3 mb-8" />
           <Skeleton className="h-64 w-full" />
         </div>
@@ -63,23 +64,24 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           <pre className="w-full overflow-auto rounded-md border bg-muted p-3 text-left text-xs">{storeError}</pre>
         ) : null}
         <div className="flex flex-col gap-2 sm:flex-row">
-          <a className="underline" href="/onboarding">
+          <Button onClick={() => router.push('/onboarding')}>
             Tentar ir para Onboarding
-          </a>
-          <a className="underline" href="/login" onClick={(e) => {
-            e.preventDefault();
-            logout();
-          }}>
+          </Button>
+          <Button variant="outline" onClick={() => logout()}>
             Voltar ao Login
-          </a>
+          </Button>
         </div>
       </div>
     );
   }
 
-  // While redirecting, don't render children
+  // While redirecting, don't render children to avoid flashes of wrong content
   if (!isAuthenticated || (storeStatus === 'none' && pathname !== '/onboarding')) {
     return null;
+  }
+  
+  if (!store && pathname !== '/onboarding') {
+      return null;
   }
 
   return (

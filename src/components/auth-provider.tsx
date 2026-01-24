@@ -11,8 +11,8 @@ import {
 } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabase/client';
-import type { AuthError } from '@supabase/supabase-js';
-import type { User, Store, Product, Sale, CashRegister } from '@/lib/types';
+import type { AuthError, Session } from '@supabase/supabase-js';
+import type { User, Store, Product, Sale, CashRegister, StoreMember } from '@/lib/types';
 
 type StoreStatus = 'unknown' | 'loading' | 'has' | 'none' | 'error';
 
@@ -57,7 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [cashRegisters, setCashRegistersState] = useState<CashRegister[]>([]);
   
   const [loading, setLoading] = useState(true);
-  const [storeStatus, setStoreStatus] = useState<StoreStatus>('loading');
+  const [storeStatus, setStoreStatus] = useState<StoreStatus>('unknown');
   const [storeError, setStoreError] = useState<string | null>(null);
 
   const fetchStoreData = useCallback(
@@ -163,31 +163,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
   
   const handleSession = useCallback(
-    async (session: any) => {
-      setStoreStatus('loading');
+    async (session: Session | null) => {
       if (!supabase) return;
 
       const supabaseUser = session?.user;
 
-      if (!supabaseUser) {
-        setUser(null);
-        setStore(null);
-        setStoreStatus('none');
-        setProductsState([]);
-        setSalesState([]);
-        setCashRegistersState([]);
-        return;
-      }
-
-      let profile: any = null;
       try {
+        if (!supabaseUser) {
+          setUser(null);
+          setStore(null);
+          setStoreStatus('none');
+          return;
+        }
+
+        let profile: any = null;
         const { data, error } = await supabase.from('users').select('*').eq('id', supabaseUser.id).single();
         if (error && error.code !== 'PGRST116') throw error;
         
         if (!data) {
-          const { data: newProfile, error: insertError } = await supabase.from('users').insert({ id: supabaseUser.id, email: supabaseUser.email }).select().single();
-          if (insertError) throw insertError;
-          profile = newProfile;
+           const { error: insertError } = await supabase.from('users').insert({ id: supabaseUser.id, email: supabaseUser.email });
+           if (insertError) throw insertError;
+           
+           profile = { id: supabaseUser.id, email: supabaseUser.email };
         } else {
           profile = data;
         }
@@ -196,7 +193,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await fetchStoreData(supabaseUser.id);
       } catch (e: any) {
         console.error('[AUTH] Profile/Store flow error:', e);
-        setUser({ id: supabaseUser.id, email: supabaseUser.email! } as User);
+        // Fallback user object
+        if (supabaseUser) {
+          setUser({ id: supabaseUser.id, email: supabaseUser.email! } as User);
+        }
         setStoreStatus('error');
         setStoreError(e.message || 'Falha ao carregar perfil ou loja.');
       }
@@ -283,6 +283,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setStore(null);
     setStoreStatus('none');
+    setLoading(false);
     router.push('/login');
   }, [supabase, router]);
 
@@ -311,14 +312,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const newStore = Array.isArray(data) ? data[0] : data;
         if (!newStore) {
-          const msg = 'create_new_store retornou vazio';
+          const msg = 'A criação da loja não retornou os dados esperados.';
           console.error(`[STORE] ${msg}`);
           setStoreStatus('error');
           setStoreError(msg);
           return null;
         }
         
+        // This is the critical step to avoid race conditions.
+        // Update the state immediately with the data we just received.
+        const storeWithEmptyRelations: Store = { 
+          ...newStore, 
+          members: [], 
+          products: [],
+          sales: [],
+          cashRegisters: [],
+        };
+        setStore(storeWithEmptyRelations);
+        setStoreStatus('has');
+
+        // Fetch full data in the background to populate relations
         await fetchStoreData(user.id);
+        
         return newStore as Store;
       } catch (e: any) {
         console.error('[STORE] createStore exception:', e);
