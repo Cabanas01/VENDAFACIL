@@ -1,73 +1,64 @@
 'use client';
 
-import { useEffect, type ReactNode } from 'react';
+import { useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
+import { AppSidebar } from '@/components/app-sidebar';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
-import { MainNav } from '@/components/main-nav';
-import { useAuth } from '@/components/auth-provider';
 import { Skeleton } from '@/components/ui/skeleton';
 
-export default function AppLayout({ children }: { children: ReactNode }) {
-  const { isAuthenticated, store, loading } = useAuth();
-  const router = useRouter();
+export default function AppLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const { loading, isAuthenticated, store } = useAuth();
   const pathname = usePathname();
+  const router = useRouter();
 
-useEffect(() => {
-  if (loading) return;
+  useEffect(() => {
+    if (loading) return;
 
-  if (!isAuthenticated) {
-    router.replace('/login');
-    return;
-  }
+    // não autenticado → login
+    if (!isAuthenticated) {
+      router.replace('/login');
+      return;
+    }
 
-  if (!store && pathname !== '/onboarding') {
-    router.replace('/onboarding');
-    return;
-  }
+    // autenticado mas sem loja → onboarding
+    if (!store && pathname !== '/onboarding') {
+      router.replace('/onboarding');
+    }
+  }, [loading, isAuthenticated, store, pathname, router]);
 
-  if (store && pathname === '/onboarding') {
-    router.replace('/dashboard');
-  }
-}, [loading, isAuthenticated, store, pathname, router]);
-
-if (loading) return <Skeleton... />;
-
-// enquanto redireciona, não renderiza nada
-if (!isAuthenticated) return null;
-if (!store && pathname !== '/onboarding') return null;
-
-  const showSkeleton = loading;
-
-  if (showSkeleton) {
+  // enquanto carrega auth
+  if (loading) {
     return (
-      <div className="flex min-h-screen w-full">
-        <div className="w-64 border-r p-4">
-          <Skeleton className="h-12 w-full mb-8" />
-          <div className="space-y-2">
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
-          </div>
+      <div className="flex h-screen w-screen">
+        <div className="w-64 border-r p-4 space-y-4">
+          <Skeleton className="h-6 w-40" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-full" />
         </div>
-        <div className="flex-1 p-8">
-          <Skeleton className="h-12 w-1/3 mb-8" />
-          <Skeleton className="h-64 w-full" />
+
+        <div className="flex-1 p-6 space-y-4">
+          <Skeleton className="h-8 w-64" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-3/4" />
         </div>
       </div>
     );
   }
 
+  // enquanto redireciona
+  if (!isAuthenticated) return null;
+
   return (
     <SidebarProvider>
-      <div className="flex min-h-screen">
-        <MainNav />
-        <SidebarInset>
-          <div className="flex-1 p-4 sm:p-6 lg:p-8">
-            {children}
-          </div>
-        </SidebarInset>
-      </div>
+      <AppSidebar />
+      <SidebarInset>{children}</SidebarInset>
     </SidebarProvider>
   );
 }
