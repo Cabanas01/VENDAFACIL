@@ -85,12 +85,14 @@ export default function LoginPage() {
         description: error.message || 'Email ou senha inválidos.',
       });
     } else {
-      toast({
-        title: 'Login realizado!',
-        description: 'Redirecionando...',
-      });
-      // The onAuthStateChange listener in AuthProvider and the useEffect will handle the redirect
-    }
+  toast({
+    title: 'Login realizado!',
+    description: 'Redirecionando...',
+  });
+
+  // ✅ entra no grupo (app); o layout decide onboarding vs dashboard
+  router.replace('/dashboard');
+  }
     setLoading(false);
   };
 
