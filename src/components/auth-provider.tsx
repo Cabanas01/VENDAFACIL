@@ -138,7 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const [productsRes, salesRes, cashRes] = await Promise.all([
           supabase.from('products').select('*').eq('store_id', storeDataResult.id),
-          supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeDataResult.id),
+          supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeDataResult.id).order('created_at', { ascending: false }),
           supabase
             .from('cash_registers')
             .select('*')
@@ -382,70 +382,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const addSale = useCallback(
     async (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => {
       if (!supabase || !store || !user) {
-        console.error('[SALE] Pre-conditions not met: Supabase, Store, or User is missing.');
-        return;
+        throw new Error("Usuário ou loja não autenticados.");
       }
+      
       const saleId = `sale_${Date.now()}`;
       const total_cents = cart.reduce((sum, item) => sum + item.subtotal_cents, 0);
 
       try {
-        // 1. Insert the main sale record
         const { error: saleError } = await supabase.from('sales').insert({
           id: saleId,
           store_id: store.id,
-          created_at: new Date().toISOString(),
-          payment_method: paymentMethod,
           total_cents: total_cents,
+          payment_method: paymentMethod,
         });
 
         if (saleError) {
-          console.error('[SALE] Error creating sale record', saleError);
+          console.error('[SALE] Error creating sale', saleError);
           throw saleError;
         }
 
-        // 2. Prepare and insert sale items
-        const saleItemsData = [];
-        for (const cartItem of cart) {
-            if (!cartItem.product_id) {
-                console.error('Critical error: Cart item is missing a product_id.', cartItem);
-                throw new Error(`Critical error: Cart item "${cartItem.product_name_snapshot}" is missing a product_id.`);
-            }
-            saleItemsData.push({
-                id: `item_${saleId}_${cartItem.product_id}`,
-                sale_id: saleId,
-                product_id: cartItem.product_id,
-                product_name_snapshot: cartItem.product_name_snapshot,
-                quantity: cartItem.quantity,
-                unit_price_cents: cartItem.unit_price_cents,
-                subtotal_cents: cartItem.subtotal_cents,
-            });
-        }
+        const itemsToInsert = cart.map(cartItem => ({
+          id: `item_${saleId}_${cartItem.product_id}`,
+          sale_id: saleId,
+          product_id: cartItem.product_id,
+          product_name_snapshot: cartItem.product_name_snapshot,
+          quantity: cartItem.quantity,
+          unit_price_cents: cartItem.unit_price_cents,
+          subtotal_cents: cartItem.subtotal_cents,
+        }));
         
-        if (saleItemsData.length > 0) {
-            const { error: itemsError } = await supabase.from('sale_items').insert(saleItemsData);
+        const { error: itemsError } = await supabase.from('sale_items').insert(itemsToInsert);
 
-            if (itemsError) {
-                console.error('[SALE] Error creating sale items, rolling back sale.', itemsError);
-                await supabase.from('sales').delete().eq('id', saleId); // Attempt to roll back
-                throw itemsError;
-            }
+        if (itemsError) {
+          console.error('[SALE] Error creating sale items, rolling back...', itemsError);
+          await supabase.from('sales').delete().eq('id', saleId);
+          throw itemsError;
         }
-        
-        // 3. Update stock for each product in parallel
-        const stockUpdatePromises = cart.map(cartItem =>
+
+        const stockUpdatePromises = cart.map(item =>
           supabase.rpc('decrement_stock', {
-            p_product_id: cartItem.product_id,
-            p_quantity: cartItem.quantity,
+            p_product_id: item.product_id,
+            p_quantity: item.quantity,
           })
         );
         
         await Promise.all(stockUpdatePromises);
 
-        // 4. Refresh all data in the app to reflect changes
         await fetchStoreData(user.id);
-      } catch (error: any) {
+      } catch (error) {
         console.error('[SALE] Full sale creation process failed:', error);
-        // Optionally re-throw or show a toast message to the user
+        throw error;
       }
     },
     [supabase, store, user, fetchStoreData]

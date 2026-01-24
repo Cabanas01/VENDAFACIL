@@ -64,8 +64,8 @@ const productSchema = z.object({
 
 type ProductFormValues = z.infer<typeof productSchema>;
 
-const formatCurrency = (value: number | undefined) =>
-  value === undefined ? 'N/A' : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value / 100);
+const formatCurrency = (value: number | undefined | null) =>
+  value == null ? 'N/A' : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value / 100);
 
 const parseCurrency = (value: string) => {
     if (!value) return 0;
@@ -96,7 +96,7 @@ export default function ProductsPage() {
   const cost = watch('cost_cents');
   const price = watch('price_cents');
   const profitMargin = useMemo(() => {
-      if(cost && price && cost > 0) {
+      if(cost != null && price != null && cost > 0) {
           return ((price - cost) / cost) * 100;
       }
       return 0;
@@ -120,7 +120,7 @@ export default function ProductsPage() {
     if (product) {
       form.reset({
         name: product.name,
-        category: product.category,
+        category: product.category || '',
         stock_qty: product.stock_qty,
         min_stock_qty: product.min_stock_qty,
         active: product.active,
@@ -128,7 +128,7 @@ export default function ProductsPage() {
         cost_cents: product.cost_cents,
       });
     } else {
-      form.reset({ active: true, stock_qty: 0, price_cents: 0 });
+      form.reset({ active: true, stock_qty: 0, price_cents: 0, cost_cents: 0, category: '', min_stock_qty: 0 });
     }
     setIsModalOpen(true);
   };
@@ -347,7 +347,7 @@ export default function ProductsPage() {
                         <FormLabel>% Lucro Desejada</FormLabel>
                         <Input type="number" placeholder="30" value={profitMargin > 0 ? profitMargin.toFixed(0) : ''} onChange={e => {
                             const percent = Number(e.target.value);
-                            if (cost) {
+                            if (cost != null) {
                                 setValue('price_cents', Math.round(cost * (1 + percent / 100)));
                             }
                         }}/>
@@ -361,7 +361,7 @@ export default function ProductsPage() {
                     )} />
                 </div>
                 <div className="text-sm text-muted-foreground mt-2">
-                    Lucro estimado por unidade: {formatCurrency(price && cost ? price - cost : undefined)}
+                    Lucro estimado por unidade: {formatCurrency(price != null && cost != null ? price - cost : undefined)}
                 </div>
                </Card>
               

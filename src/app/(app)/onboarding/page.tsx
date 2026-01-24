@@ -365,6 +365,9 @@ export default function OnboardingPage() {
                                 <SelectItem value="farmacia_drogaria">Farmácia/Drogaria</SelectItem>
                                 <SelectItem value="pet_shop">Pet Shop</SelectItem>
                                 <SelectItem value="oficina_mecanica">Oficina Mecânica</SelectItem>
+                                <SelectItem value="construcao_reforma">Material de Construção</SelectItem>
+                                <SelectItem value="informatica_eletronicos">Informática e Eletrônicos</SelectItem>
+                                <SelectItem value="papelaria_livraria">Papelaria e Livraria</SelectItem>
                                 <SelectItem value="servicos_gerais">Prestação de Serviços</SelectItem>
                                 <SelectItem value="outros">Outros</SelectItem>
                             </SelectContent>

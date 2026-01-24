@@ -103,13 +103,13 @@ export default function SettingsPage() {
     useEffect(() => {
         if (store) {
             setCompanyData({
-                name: store.name,
-                legal_name: store.legal_name,
-                cep: store.address.cep,
-                street: store.address.street,
-                number: store.address.number,
-                neighborhood: store.address.neighborhood,
-                city: store.address.city,
+                name: store.name || '',
+                legal_name: store.legal_name || '',
+                cep: store.address?.cep || '',
+                street: store.address?.street || '',
+                number: store.address?.number || '',
+                neighborhood: store.address?.neighborhood || '',
+                city: store.address?.city || '',
             });
             setSettings(store.settings || {});
         }
