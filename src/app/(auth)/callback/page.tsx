@@ -7,6 +7,8 @@ import { getSupabaseClient } from '@/lib/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 
+type CallbackType = 'signup' | 'recovery' | 'email_change' | 'magiclink' | 'invite' | string | null;
+
 export default function AuthCallbackPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -17,7 +19,14 @@ export default function AuthCallbackPage() {
 
   useEffect(() => {
     const run = async () => {
-      const next = searchParams.get('next') || '/dashboard';
+      const type: CallbackType = searchParams.get('type');
+      const nextParam = searchParams.get('next');
+
+      // ✅ Por padrão: fluxo de confirmação deve terminar no /login (nunca /dashboard)
+      const next =
+        (nextParam && nextParam.startsWith('/') ? nextParam : null) ??
+        (type === 'recovery' ? '/auth/update-password' : '/login');
+
       const code = searchParams.get('code');
       const accessToken = searchParams.get('access_token');
       const refreshToken = searchParams.get('refresh_token');
@@ -42,6 +51,13 @@ export default function AuthCallbackPage() {
             refresh_token: refreshToken,
           });
           if (error) throw error;
+        }
+
+        // ✅ Requisito do fluxo: signup confirm -> login (não pode cair no app logado)
+        if (type === 'signup') {
+          await supabase.auth.signOut();
+          router.replace('/login');
+          return;
         }
 
         router.replace(next);
