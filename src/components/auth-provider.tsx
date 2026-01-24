@@ -385,18 +385,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (newSale: Omit<Sale, 'id' | 'store_id'>) => {
       if (!supabase || !store || !user) return;
       const { items, ...saleData } = newSale;
-      const { data: saleResult, error: saleError } = await supabase.from('sales').insert([{ ...saleData, store_id: store.id }]).select().single();
+      
+      const { data: saleResult, error: saleError } = await supabase
+        .from('sales')
+        .insert([{ ...saleData, store_id: store.id }])
+        .select()
+        .single();
+        
       if (saleError || !saleResult) {
         console.error('[SALE] Error creating sale', saleError);
         return;
       }
-      const saleItemsData = items.map((item: any) => ({ ...item, sale_id: saleResult.id, productId: item.productId }));
-      const { error: itemsError } = await supabase.from('sale_items').insert(saleItemsData).select();
+
+      const saleItemsData = items.map((item) => ({ ...item, sale_id: saleResult.id }));
+      const { error: itemsError } = await supabase.from('sale_items').insert(saleItemsData);
+
       if (itemsError) {
         console.error('[SALE] Error creating sale items', itemsError);
+        // Optional: Attempt to delete the sale record if items fail to insert
+        await supabase.from('sales').delete().eq('id', saleResult.id);
         return;
       }
-      const stockUpdates = items.map((item: any) => supabase.rpc('decrement_stock', { p_product_id: item.productId, p_quantity: item.quantity }));
+      
+      const stockUpdates = items.map((item) => 
+        supabase.rpc('decrement_stock', { p_product_id: item.product_id, p_quantity: item.quantity })
+      );
+      
       await Promise.all(stockUpdates);
       await fetchStoreData(user.id);
     },

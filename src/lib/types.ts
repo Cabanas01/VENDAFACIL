@@ -70,7 +70,7 @@ export type Sale = {
 export type SaleItem = {
   id: string;
   sale_id: string;
-  productId: string;
+  product_id: string;
   product_name_snapshot: string;
   quantity: number;
   unit_price_cents: number;

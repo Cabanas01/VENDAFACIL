@@ -446,11 +446,11 @@ export default function SettingsPage() {
                 </div>
                 <div className="space-y-2 p-4 border rounded-lg">
                     <Label htmlFor="default-profit">% lucro padrão para novos produtos</Label>
-                    <Input id="default-profit" type="number" value={settings.defaultProfitMargin || ''} onChange={(e) => setSettings({...settings, defaultProfitMargin: Number(e.target.value)})} className="w-24" />
+                    <Input id="default-profit" type="number" value={settings.defaultProfitMargin ?? ''} onChange={(e) => setSettings({...settings, defaultProfitMargin: Number(e.target.value)})} className="w-24" />
                 </div>
                  <div className="space-y-2 p-4 border rounded-lg">
                     <Label htmlFor="min-stock">Estoque mínimo padrão</Label>
-                    <Input id="min-stock" type="number" value={settings.defaultMinStock || ''} onChange={(e) => setSettings({...settings, defaultMinStock: Number(e.target.value)})} className="w-24" />
+                    <Input id="min-stock" type="number" value={settings.defaultMinStock ?? ''} onChange={(e) => setSettings({...settings, defaultMinStock: Number(e.target.value)})} className="w-24" />
                 </div>
               </CardContent>
                <CardFooter><Button onClick={handleSettingsSave}>Salvar Alterações</Button></CardFooter>

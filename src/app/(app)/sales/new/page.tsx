@@ -25,7 +25,7 @@ import {
 import { useAuth } from '@/components/auth-provider';
 import type { Product, Sale, SaleItem } from '@/lib/types';
 
-type CartItem = Omit<SaleItem, 'id' | 'saleId'> & { stock_qty: number };
+type CartItem = Omit<SaleItem, 'id' | 'sale_id'> & { stock_qty: number };
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value / 100);
@@ -50,7 +50,7 @@ export default function NewSalePage() {
   }, [cart]);
 
   const addToCart = (product: Product) => {
-    const existingItem = cart.find(item => item.productId === product.id);
+    const existingItem = cart.find(item => item.product_id === product.id);
     const stockAvailable = product.stock_qty > (existingItem?.quantity ?? 0);
     
     if (!stockAvailable) {
@@ -62,7 +62,7 @@ export default function NewSalePage() {
       updateQuantity(product.id, existingItem.quantity + 1);
     } else {
       setCart([...cart, {
-        productId: product.id,
+        product_id: product.id,
         product_name_snapshot: product.name,
         quantity: 1,
         unit_price_cents: product.price_cents,
@@ -74,11 +74,11 @@ export default function NewSalePage() {
 
   const updateQuantity = (productId: string, newQuantity: number) => {
     if (newQuantity <= 0) {
-      setCart(cart.filter(item => item.productId !== productId));
+      setCart(cart.filter(item => item.product_id !== productId));
       return;
     }
 
-    const item = cart.find(item => item.productId === productId);
+    const item = cart.find(item => item.product_id === productId);
     const product = products.find(p => p.id === productId);
     if (!item || !product) return;
 
@@ -88,7 +88,7 @@ export default function NewSalePage() {
     }
 
     setCart(cart.map(item => 
-      item.productId === productId 
+      item.product_id === productId 
       ? { ...item, quantity: newQuantity, subtotal_cents: item.unit_price_cents * newQuantity }
       : item
     ));
@@ -101,16 +101,14 @@ export default function NewSalePage() {
     }
 
     const saleId = `sale_${Date.now()}`;
-    const newSale: Sale = {
-      id: saleId,
-      storeId: 'store_1',
+    const newSalePayload: Omit<Sale, 'id' | 'store_id'> = {
       created_at: new Date().toISOString(),
       payment_method: paymentMethod,
-      items: cart.map(item => ({ ...item, id: `item_${saleId}_${item.productId}`, saleId })),
+      items: cart.map(item => ({ ...item, id: `item_${saleId}_${item.product_id}`, sale_id: saleId })),
       total_cents: cartTotal,
     };
     
-    addSale(newSale);
+    addSale(newSalePayload);
 
     toast({ title: 'Venda realizada com sucesso!', description: `Total: ${formatCurrency(cartTotal)}` });
     setCart([]);
@@ -156,7 +154,7 @@ export default function NewSalePage() {
                           className="w-full rounded-t-none" 
                           size="sm"
                           onClick={() => addToCart(product)}
-                          disabled={product.stock_qty <= (cart.find(i => i.productId === product.id)?.quantity ?? 0)}
+                          disabled={product.stock_qty <= (cart.find(i => i.product_id === product.id)?.quantity ?? 0)}
                         >
                           Adicionar
                         </Button>
@@ -185,15 +183,15 @@ export default function NewSalePage() {
                 <ScrollArea className="h-64 pr-4">
                     <div className="space-y-4">
                     {cart.map(item => (
-                        <div key={item.productId} className="flex justify-between items-center">
+                        <div key={item.product_id} className="flex justify-between items-center">
                             <div>
                                 <p className="font-medium text-sm">{item.product_name_snapshot}</p>
                                 <p className="text-muted-foreground text-sm">{formatCurrency(item.unit_price_cents)}</p>
                             </div>
                             <div className="flex items-center gap-2">
-                                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => updateQuantity(item.productId, item.quantity - 1)}><MinusCircle className="h-4 w-4" /></Button>
+                                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => updateQuantity(item.product_id, item.quantity - 1)}><MinusCircle className="h-4 w-4" /></Button>
                                 <span>{item.quantity}</span>
-                                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => updateQuantity(item.productId, item.quantity + 1)}><PlusCircle className="h-4 w-4" /></Button>
+                                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => updateQuantity(item.product_id, item.quantity + 1)}><PlusCircle className="h-4 w-4" /></Button>
                             </div>
                             <p className="font-medium w-16 text-right">{formatCurrency(item.subtotal_cents)}</p>
                         </div>
