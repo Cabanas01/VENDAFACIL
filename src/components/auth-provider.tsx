@@ -19,19 +19,24 @@ type AuthContextType = {
   isAuthenticated: boolean;
   store: Store | null;
   loading: boolean;
+
   login: (email: string, password: string) => Promise<{ error: AuthError | null }>;
   signup: (email: string, password: string) => Promise<{ error: AuthError | null }>;
   logout: () => Promise<void>;
+
   createStore: (storeData: any) => Promise<Store | null>;
-  updateStore: (storeData: Partial<Omit<Store, 'id' | 'user_id'>>) => Promise<void>;
+  updateStore: (storeData: Partial<Omit<Store, 'id' | 'user_id' | 'members'>>) => Promise<void>;
   updateUser: (userData: Partial<Omit<User, 'id' | 'email'>>) => Promise<void>;
   removeStoreMember: (userId: string) => Promise<{ error: AuthError | Error | null }>;
+
   products: Product[];
   sales: Sale[];
   cashRegisters: CashRegister[];
+
   setProducts: (action: React.SetStateAction<Product[]>) => Promise<void>;
   setSales: (action: React.SetStateAction<Sale[]>) => Promise<void>;
   setCashRegisters: (action: React.SetStateAction<CashRegister[]>) => Promise<void>;
+
   addSale: (sale: Omit<Sale, 'id' | 'store_id'>) => Promise<void>;
 };
 
@@ -40,184 +45,249 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
 
-  // ✅ pega o client uma vez (pode ser null se faltar env)
+  // Supabase client (pode ser null se faltar env vars)
   const supabase = useMemo(() => getSupabaseClient(), []);
 
   const [user, setUser] = useState<User | null>(null);
   const [store, setStore] = useState<Store | null>(null);
 
-  const [products, setProducts] = useState<Product[]>([]);
-  const [sales, setSales] = useState<Sale[]>([]);
-  const [cashRegisters, setCashRegisters] = useState<CashRegister[]>([]);
+  const [products, setProductsState] = useState<Product[]>([]);
+  const [sales, setSalesState] = useState<Sale[]>([]);
+  const [cashRegisters, setCashRegistersState] = useState<CashRegister[]>([]);
 
   const [loading, setLoading] = useState(true);
 
+  /**
+   * Busca store do usuário:
+   * 1) se é dono (stores.user_id = userId)
+   * 2) senão, vê store_members (store_members.user_id = userId) e carrega a store
+   * 3) carrega membros via rpc('get_store_members') se existir
+   * 4) carrega products/sales/cash_registers
+   */
   const fetchStoreData = useCallback(
     async (userId: string) => {
       if (!supabase) return;
 
-      // Try to find a store where the user is the owner
-      let { data: storeDataResult, error: storeError } = await supabase
+      console.log('[STORE] fetchStoreData', { userId });
+
+      let storeDataResult: any = null;
+
+      // 1) owner store
+      const { data: ownedStore, error: storeError } = await supabase
         .from('stores')
         .select('*')
         .eq('user_id', userId)
         .single();
 
-      // If not an owner, check if they are a member of another store
-      if (!storeDataResult && storeError?.code !== 'PGRST116') {
-        console.error('Error fetching owned store:', storeError);
-      }
+      console.log('[STORE] owned store result', { ownedStore, storeError });
 
-      if (!storeDataResult) {
+      if (ownedStore) {
+        storeDataResult = ownedStore;
+      } else {
+        // Se não achou e não é "no rows", loga
+        if (storeError && storeError.code !== 'PGRST116') {
+          console.error('[STORE] Error fetching owned store:', storeError);
+        }
+
+        // 2) member store
         const { data: memberData, error: memberError } = await supabase
           .from('store_members')
           .select('store_id')
           .eq('user_id', userId)
           .single();
 
+        console.log('[STORE] member store result', { memberData, memberError });
+
         if (memberError && memberError.code !== 'PGRST116') {
-          console.error('Error fetching member store:', memberError);
+          console.error('[STORE] Error fetching member store:', memberError);
         }
 
-        if (memberData) {
+        if (memberData?.store_id) {
           const { data: memberStoreData, error: memberStoreDataError } = await supabase
             .from('stores')
             .select('*')
             .eq('id', memberData.store_id)
             .single();
 
+          console.log('[STORE] store by member id result', { memberStoreData, memberStoreDataError });
+
           if (memberStoreDataError) {
-            console.error('Error fetching store by member id:', memberStoreDataError);
+            console.error('[STORE] Error fetching store by member id:', memberStoreDataError);
+          } else {
+            storeDataResult = memberStoreData;
           }
-
-          storeDataResult = memberStoreData;
         }
       }
 
-      if (storeDataResult) {
-        const { data: membersData, error: membersError } = await supabase.rpc(
-          'get_store_members',
-          { p_store_id: storeDataResult.id }
-        );
-
-        if (membersError) {
-          console.error('Error fetching store members:', membersError);
-        }
-
-        const storeWithMembers = { ...storeDataResult, members: membersData || [] };
-        setStore(storeWithMembers as Store);
-
-        const [productsRes, salesRes, cashRes] = await Promise.all([
-          supabase.from('products').select('*').eq('store_id', storeDataResult.id),
-          supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeDataResult.id),
-          supabase
-            .from('cash_registers')
-            .select('*')
-            .eq('store_id', storeDataResult.id)
-            .order('opened_at', { ascending: false }),
-        ]);
-
-        setProducts(productsRes.data || []);
-        setSales(salesRes.data || []);
-        setCashRegisters(cashRes.data || []);
-      } else {
+      if (!storeDataResult) {
         setStore(null);
-        setProducts([]);
-        setSales([]);
-        setCashRegisters([]);
+        setProductsState([]);
+        setSalesState([]);
+        setCashRegistersState([]);
+        return;
       }
+
+      // 3) members via RPC (se não existir, só ignora)
+      let membersData: any[] = [];
+      try {
+        const { data, error } = await supabase.rpc('get_store_members', {
+          p_store_id: storeDataResult.id,
+        });
+        if (error) {
+          console.error('[STORE] Error fetching store members (rpc get_store_members):', error);
+        } else {
+          membersData = data || [];
+        }
+      } catch (e) {
+        console.warn('[STORE] get_store_members rpc not available or failed:', e);
+      }
+
+      const storeWithMembers = { ...storeDataResult, members: membersData };
+      setStore(storeWithMembers as Store);
+
+      // 4) fetch related data
+      const [productsRes, salesRes, cashRes] = await Promise.all([
+        supabase.from('products').select('*').eq('store_id', storeDataResult.id),
+        supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeDataResult.id),
+        supabase
+          .from('cash_registers')
+          .select('*')
+          .eq('store_id', storeDataResult.id)
+          .order('opened_at', { ascending: false }),
+      ]);
+
+      if (productsRes.error) console.error('[STORE] products fetch error', productsRes.error);
+      if (salesRes.error) console.error('[STORE] sales fetch error', salesRes.error);
+      if (cashRes.error) console.error('[STORE] cash_registers fetch error', cashRes.error);
+
+      setProductsState(productsRes.data || []);
+      setSalesState(salesRes.data || []);
+      setCashRegistersState(cashRes.data || []);
     },
     [supabase]
   );
 
- useEffect(() => {
-  if (!supabase) {
-    setLoading(false);
-    return;
-  }
+  /**
+   * Handler único para:
+   * - sessão inicial (getSession)
+   * - mudanças de auth (onAuthStateChange)
+   */
+  const handleSession = useCallback(
+    async (session: any) => {
+      if (!supabase) return;
 
-  let mounted = true;
-
-  const handleSession = async (session: any) => {
-    try {
-      if (!mounted) return;
-      setLoading(true);
+      console.log('[AUTH] handleSession start', {
+        hasSession: !!session,
+        userId: session?.user?.id,
+      });
 
       const supabaseUser = session?.user;
 
-      if (supabaseUser) {
-        let { data: profile, error: profileError } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', supabaseUser.id)
-          .single();
-
-        // Log útil caso RLS/policy esteja bloqueando
-        if (profileError && profileError.code !== 'PGRST116') {
-          console.error('Profile fetch error:', profileError);
-        }
-
-        if (!profile) {
-          const { error: insertError } = await supabase
-            .from('users')
-            .insert({ id: supabaseUser.id, email: supabaseUser.email });
-
-          if (insertError) {
-            console.error('Error creating user profile:', insertError);
-            await supabase.auth.signOut();
-            profile = null;
-          } else {
-            profile = {
-              id: supabaseUser.id,
-              email: supabaseUser.email!,
-              name: undefined,
-              avatar_url: undefined,
-            };
-          }
-        }
-
-        if (!mounted) return;
-        setUser(profile);
-
-        if (profile) {
-          await fetchStoreData(supabaseUser.id);
-        }
-      } else {
-        if (!mounted) return;
+      if (!supabaseUser) {
         setUser(null);
         setStore(null);
-        setProducts([]);
-        setSales([]);
-        setCashRegisters([]);
+        setProductsState([]);
+        setSalesState([]);
+        setCashRegistersState([]);
+        return;
       }
-    } catch (e) {
-      console.error('Error handling session', e);
-    } finally {
-      if (mounted) setLoading(false);
-    }
-  };
 
-  // ✅ BOOTSTRAP INICIAL (isso faltava)
-  (async () => {
-    const { data, error } = await supabase.auth.getSession();
-    if (error) console.error('getSession error:', error);
-    await handleSession(data?.session);
-  })();
+      // Carrega/cria profile em public.users
+      let { data: profile, error: profileError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', supabaseUser.id)
+        .single();
 
-  // ✅ LISTENER
-  const { data: { subscription } } = supabase.auth.onAuthStateChange(
-    async (_event, session) => {
-      await handleSession(session);
-    }
+      console.log('[AUTH] profile result', { profile, profileError });
+
+      if (profileError && profileError.code !== 'PGRST116') {
+        console.error('[AUTH] Profile fetch error:', profileError);
+      }
+
+      if (!profile) {
+        const { error: insertError } = await supabase
+          .from('users')
+          .insert({ id: supabaseUser.id, email: supabaseUser.email });
+
+        console.log('[AUTH] profile insert result', { insertError });
+
+        if (insertError) {
+          console.error('[AUTH] Error creating user profile:', insertError);
+          // Se der erro de permissão aqui, você precisa criar policy na tabela users
+          await supabase.auth.signOut();
+          setUser(null);
+          setStore(null);
+          setProductsState([]);
+          setSalesState([]);
+          setCashRegistersState([]);
+          return;
+        }
+
+        profile = {
+          id: supabaseUser.id,
+          email: supabaseUser.email!,
+          name: undefined,
+          avatar_url: undefined,
+        };
+      }
+
+      setUser(profile as User);
+      await fetchStoreData(supabaseUser.id);
+    },
+    [supabase, fetchStoreData]
   );
 
-  return () => {
-    mounted = false;
-    subscription.unsubscribe();
-  };
-}, [supabase, fetchStoreData]);
+  // ✅ Bootstrap + Listener
+  useEffect(() => {
+    if (!supabase) {
+      setLoading(false);
+      return;
+    }
 
+    let mounted = true;
 
+    const run = async () => {
+      try {
+        setLoading(true);
+
+        // 1) bootstrap inicial
+        const { data, error } = await supabase.auth.getSession();
+        if (error) console.error('[AUTH] getSession error', error);
+
+        if (!mounted) return;
+        await handleSession(data?.session);
+      } catch (e) {
+        console.error('[AUTH] bootstrap error', e);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    run();
+
+    // 2) listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (_event, session) => {
+        try {
+          if (!mounted) return;
+          setLoading(true);
+          await handleSession(session);
+        } catch (e) {
+          console.error('[AUTH] onAuthStateChange error', e);
+        } finally {
+          if (mounted) setLoading(false);
+        }
+      }
+    );
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, [supabase, handleSession]);
+
+  // Actions
   const login = useCallback(
     async (email: string, password: string) => {
       if (!supabase) return { error: new Error('Supabase not configured') as any };
@@ -226,29 +296,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [supabase]
   );
 
- const signup = useCallback(async (email: string, password: string) => {
-  if (!supabase) return { error: new Error('Supabase not configured') as any };
+  const signup = useCallback(
+    async (email: string, password: string) => {
+      if (!supabase) return { error: new Error('Supabase not configured') as any };
 
-  const { error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      emailRedirectTo:
-        process.env.NEXT_PUBLIC_SITE_URL
-          ? `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`
-          : undefined,
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: process.env.NEXT_PUBLIC_SITE_URL
+            ? `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`
+            : undefined,
+        },
+      });
+
+      if (error) {
+        if (error.message.includes('User already registered')) {
+          return { error: { ...error, message: 'E-mail já cadastrado.' } };
+        }
+        return { error };
+      }
+
+      return { error: null };
     },
-  });
-
-  if (error) {
-    if (error.message.includes('User already registered')) {
-      return { error: { ...error, message: 'E-mail já cadastrado.' } };
-    }
-    return { error };
-  }
-
-  return { error: null };
-}, [supabase]);
+    [supabase]
+  );
 
   const logout = useCallback(async () => {
     if (!supabase) return;
@@ -277,7 +349,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .single();
 
       if (error) {
-        console.error('Error creating store:', error);
+        console.error('[STORE] Error creating store:', error);
         return null;
       }
 
@@ -291,9 +363,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (storeData: Partial<Omit<Store, 'id' | 'user_id' | 'members'>>) => {
       if (!supabase || !store || !user) return;
 
-      const { error } = await supabase.from('stores').update(storeData).eq('id', store.id);
+      const { error } = await supabase
+        .from('stores')
+        .update(storeData)
+        .eq('id', store.id);
+
       if (!error) {
         await fetchStoreData(user.id);
+      } else {
+        console.error('[STORE] updateStore error', error);
       }
     },
     [supabase, store, user, fetchStoreData]
@@ -303,21 +381,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (userData: Partial<Omit<User, 'id' | 'email'>>) => {
       if (!supabase || !user) return;
 
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('users')
         .update(userData)
         .eq('id', user.id)
         .select()
         .single();
 
-      if (data) setUser(data);
+      if (error) console.error('[AUTH] updateUser error', error);
+      if (data) setUser(data as User);
     },
     [supabase, user]
   );
 
   const removeStoreMember = useCallback(
     async (userId: string) => {
-      if (!supabase || !store || !user) return { error: new Error('Usuário ou loja não disponíveis') };
+      if (!supabase || !store || !user) {
+        return { error: new Error('Usuário ou loja não disponíveis') };
+      }
 
       if (userId === store.user_id) {
         return { error: new Error('O proprietário da loja não pode ser removido.') };
@@ -331,7 +412,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (!error) {
         await fetchStoreData(user.id);
+      } else {
+        console.error('[STORE] removeStoreMember error', error);
       }
+
       return { error };
     },
     [supabase, store, user, fetchStoreData]
@@ -350,24 +434,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .single();
 
       if (saleError || !saleResult) {
-        console.error('Error creating sale', saleError);
+        console.error('[SALE] Error creating sale', saleError);
         return;
       }
 
-      const saleItemsData = items.map((item) => ({
+      const saleItemsData = items.map((item: any) => ({
         ...item,
         sale_id: saleResult.id,
         productId: item.productId,
       }));
 
-      const { error: itemsError } = await supabase.from('sale_items').insert(saleItemsData).select();
+      const { error: itemsError } = await supabase
+        .from('sale_items')
+        .insert(saleItemsData)
+        .select();
 
       if (itemsError) {
-        console.error('Error creating sale items', itemsError);
+        console.error('[SALE] Error creating sale items', itemsError);
         return;
       }
 
-      const stockUpdates = items.map((item) =>
+      const stockUpdates = items.map((item: any) =>
         supabase.rpc('decrement_stock', {
           p_product_id: item.productId,
           p_quantity: item.quantity,
@@ -378,6 +465,73 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await fetchStoreData(store.user_id);
     },
     [supabase, store, fetchStoreData]
+  );
+
+  // Setters sync
+  const setProducts = useCallback(
+    async (action: React.SetStateAction<Product[]>) => {
+      if (!supabase || !store || !user) return;
+
+      const newProducts = typeof action === 'function' ? action(products) : action;
+
+      for (const p of newProducts as any[]) {
+        if (products.some((op) => op.id === p.id)) {
+          const { id, ...updateData } = p;
+          const finalUpdateData = { ...updateData, store_id: store.id };
+          const { error } = await supabase
+            .from('products')
+            .update(finalUpdateData)
+            .eq('id', id);
+
+          if (error) console.error('[PRODUCT] update error', error);
+        } else {
+          const { error } = await supabase
+            .from('products')
+            .insert({ ...p, store_id: store.id });
+
+          if (error) console.error('[PRODUCT] insert error', error);
+        }
+      }
+
+      await fetchStoreData(user.id);
+    },
+    [supabase, store, user, products, fetchStoreData]
+  );
+
+  const setSales = useCallback(async () => {
+    console.log('setSales is not implemented for Supabase backend.');
+  }, []);
+
+  const setCashRegisters = useCallback(
+    async (action: React.SetStateAction<CashRegister[]>) => {
+      if (!supabase || !user) return;
+
+      const newCashRegisters =
+        typeof action === 'function' ? action(cashRegisters) : action;
+
+      const oldRegisterIds = new Set(cashRegisters.map((cr) => cr.id));
+
+      for (const cr of newCashRegisters as any[]) {
+        if (oldRegisterIds.has(cr.id)) {
+          const { id, ...updateData } = cr;
+          const { error } = await supabase
+            .from('cash_registers')
+            .update(updateData)
+            .eq('id', id);
+
+          if (error) console.error('[CASH] update error', error);
+        } else {
+          const { error } = await supabase
+            .from('cash_registers')
+            .insert(cr);
+
+          if (error) console.error('[CASH] insert error', error);
+        }
+      }
+
+      await fetchStoreData(user.id);
+    },
+    [supabase, user, cashRegisters, fetchStoreData]
   );
 
   const value: AuthContextType = {
@@ -395,54 +549,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     products,
     sales,
     cashRegisters,
-    setProducts: async (action) => {
-      if (!supabase || !store || !user) return;
-
-      const newProducts = typeof action === 'function' ? action(products) : action;
-
-      for (const p of newProducts) {
-        if (products.some((op) => op.id === p.id)) {
-          const { id, ...updateData } = p;
-          const finalUpdateData = { ...updateData, store_id: store.id };
-          await supabase.from('products').update(finalUpdateData).eq('id', id);
-        } else {
-          await supabase.from('products').insert({ ...p, store_id: store.id });
-        }
-      }
-
-      await fetchStoreData(user.id);
-    },
-    setSales: async () => {
-      console.log('setSales is not implemented for Supabase backend.');
-    },
-    setCashRegisters: async (action) => {
-      if (!supabase || !user) return;
-
-      const newCashRegisters = typeof action === 'function' ? action(cashRegisters) : action;
-      const oldRegisterIds = new Set(cashRegisters.map((cr) => cr.id));
-
-      for (const cr of newCashRegisters) {
-        if (oldRegisterIds.has(cr.id)) {
-          const { id, ...updateData } = cr;
-          await supabase.from('cash_registers').update(updateData).eq('id', id);
-        } else {
-          await supabase.from('cash_registers').insert(cr);
-        }
-      }
-
-      await fetchStoreData(user.id);
-    },
+    setProducts,
+    setSales,
+    setCashRegisters,
     addSale,
   };
 
-  // ✅ Se faltar env vars na Vercel, não quebra o app — mostra mensagem
+  // Se faltar env vars na Vercel, não quebra o app — exibe mensagem
   if (!supabase) {
     return (
       <div style={{ padding: 16, fontFamily: 'sans-serif' }}>
         <b>Configuração do Supabase ausente.</b>
         <div>
-          Defina <code>NEXT_PUBLIC_SUPABASE_URL</code> e <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> na Vercel
-          (Project → Settings → Environment Variables) e faça Redeploy.
+          Defina <code>NEXT_PUBLIC_SUPABASE_URL</code> e{' '}
+          <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> na Vercel e faça Redeploy.
         </div>
       </div>
     );
