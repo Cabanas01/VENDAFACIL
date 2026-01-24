@@ -21,6 +21,17 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import {
   Form,
   FormControl,
   FormField,
@@ -64,8 +75,10 @@ const parseCurrency = (value: string) => {
 };
 
 export default function ProductsPage() {
-  const { products, setProducts } = useAuth();
+  const { products, addProduct, updateProduct, removeProduct, updateProductStock } = useAuth();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -120,35 +133,50 @@ export default function ProductsPage() {
     setIsModalOpen(true);
   };
 
-  const onSubmit = (values: ProductFormValues) => {
-    if (editingProduct) {
-      setProducts(prev => prev.map(p => p.id === editingProduct.id ? { ...p, ...values, id: p.id, storeId: p.storeId, created_at: p.created_at } : p));
-      toast({ title: "Produto atualizado com sucesso!" });
-    } else {
-      const newProduct: Product = {
-        id: `prod_${Date.now()}`,
-        storeId: 'store_1',
-        created_at: new Date().toISOString(),
-        ...values,
-      };
-      setProducts(prev => [newProduct, ...prev]);
-      toast({ title: "Produto criado com sucesso!" });
+  const onSubmit = async (values: ProductFormValues) => {
+    try {
+      if (editingProduct) {
+        await updateProduct(editingProduct.id, values);
+        toast({ title: "Produto atualizado com sucesso!" });
+      } else {
+        await addProduct(values);
+        toast({ title: "Produto criado com sucesso!" });
+      }
+      setIsModalOpen(false);
+    } catch (error: any) {
+        toast({ variant: 'destructive', title: "Erro ao salvar produto", description: error.message });
     }
-    setIsModalOpen(false);
+  };
+  
+  const handleDeleteProduct = async () => {
+    if (!productToDelete) return;
+    try {
+        await removeProduct(productToDelete.id);
+        toast({ title: "Produto excluído com sucesso!" });
+    } catch (error: any) {
+        toast({ variant: 'destructive', title: "Erro ao excluir produto", description: error.message });
+    } finally {
+        setIsDeleteConfirmOpen(false);
+        setProductToDelete(null);
+    }
   };
 
-  const adjustStock = (productId: string, amount: number) => {
-      setProducts(prev => prev.map(p => {
-          if (p.id === productId) {
-              const newStock = p.stock_qty + amount;
-              if (newStock < 0) {
-                  toast({ variant: 'destructive', title: 'Ajuste inválido', description: 'Estoque não pode ser negativo.' });
-                  return p;
-              }
-              return { ...p, stock_qty: newStock };
-          }
-          return p;
-      }));
+  const openDeleteConfirmation = (product: Product) => {
+      setProductToDelete(product);
+      setIsDeleteConfirmOpen(true);
+  }
+
+  const adjustStock = async (productId: string, currentStock: number, amount: number) => {
+      const newStock = currentStock + amount;
+      if (newStock < 0) {
+          toast({ variant: 'destructive', title: 'Ajuste inválido', description: 'Estoque não pode ser negativo.' });
+          return;
+      }
+      try {
+          await updateProductStock(productId, newStock);
+      } catch (error: any) {
+          toast({ variant: 'destructive', title: 'Erro ao ajustar estoque', description: error.message });
+      }
   }
 
   const kpiData = useMemo(() => ({
@@ -257,8 +285,8 @@ export default function ProductsPage() {
                     </TableCell>
                     <TableCell>
                         <div className="flex items-center gap-1">
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => adjustStock(p.id, -1)}><ChevronsLeft className="h-4 w-4" /></Button>
-                             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => adjustStock(p.id, 1)}><ChevronsRight className="h-4 w-4" /></Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => adjustStock(p.id, p.stock_qty, -1)}><ChevronsLeft className="h-4 w-4" /></Button>
+                             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => adjustStock(p.id, p.stock_qty, 1)}><ChevronsRight className="h-4 w-4" /></Button>
                         </div>
                     </TableCell>
                     <TableCell className="text-right">
@@ -268,7 +296,7 @@ export default function ProductsPage() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => handleOpenModal(p)}><Edit className="mr-2 h-4 w-4" /> Editar</DropdownMenuItem>
-                          <DropdownMenuItem className="text-red-500"><Trash2 className="mr-2 h-4 w-4" /> Excluir</DropdownMenuItem>
+                          <DropdownMenuItem className="text-red-500" onClick={() => openDeleteConfirmation(p)}><Trash2 className="mr-2 h-4 w-4" /> Excluir</DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -280,6 +308,7 @@ export default function ProductsPage() {
         </Card>
       </div>
 
+      {/* Product Form Modal */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
@@ -350,6 +379,24 @@ export default function ProductsPage() {
           </Form>
         </DialogContent>
       </Dialog>
+      
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar exclusão?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação não pode ser desfeita. O produto "{productToDelete?.name}" será permanentemente excluído.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteProduct} className="bg-destructive hover:bg-destructive/90">
+              Confirmar Exclusão
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

@@ -16,13 +16,14 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 import { PageHeader } from '@/components/page-header';
+import { isValidCnpj } from '@/lib/utils';
 
 const states = [
   'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'
 ];
 
 const companySchema = z.object({
-  cnpj: z.string().length(18, { message: 'CNPJ deve ter 14 dígitos.' }),
+  cnpj: z.string().refine(isValidCnpj, { message: 'CNPJ inválido.' }),
   legal_name: z.string().min(1, { message: 'Razão Social é obrigatória.' }),
   name: z.string().min(1, { message: 'Nome Fantasia é obrigatório.' }),
   isMei: z.boolean().default(false),
@@ -121,13 +122,39 @@ export default function OnboardingPage() {
     }
   }
 
-  const handleCnpjChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCnpjChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value.replace(/\D/g, '');
-    value = value.replace(/^(\d{2})(\d)/, '$1.$2');
-    value = value.replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3');
-    value = value.replace(/\.(\d{3})(\d)/, '.$1/$2');
-    value = value.replace(/(\d{4})(\d)/, '$1-$2');
-    form.setValue('cnpj', value.slice(0, 18));
+    value = value.slice(0, 14);
+    
+    // Apply mask
+    let maskedValue = value;
+    maskedValue = maskedValue.replace(/^(\d{2})(\d)/, '$1.$2');
+    maskedValue = maskedValue.replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3');
+    maskedValue = maskedValue.replace(/\.(\d{3})(\d)/, '.$1/$2');
+    maskedValue = maskedValue.replace(/(\d{4})(\d)/, '$1-$2');
+    form.setValue('cnpj', maskedValue);
+
+    // Fetch data if CNPJ is complete
+    if (value.length === 14 && isValidCnpj(maskedValue)) {
+      try {
+        const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${value}`);
+        if(response.ok) {
+            const data = await response.json();
+            form.setValue('legal_name', data.razao_social, { shouldValidate: true });
+            form.setValue('name', data.nome_fantasia || data.razao_social, { shouldValidate: true });
+            form.setValue('cep', data.cep, { shouldValidate: true });
+            form.setValue('street', data.logradouro, { shouldValidate: true });
+            form.setValue('number', data.numero, { shouldValidate: true });
+            form.setValue('neighborhood', data.bairro, { shouldValidate: true });
+            form.setValue('city', data.municipio, { shouldValidate: true });
+            form.setValue('state', data.uf, { shouldValidate: true });
+            form.setValue('phone', data.ddd_telefone_1, { shouldValidate: true });
+            toast({ title: 'Dados do CNPJ preenchidos automaticamente!' });
+        }
+      } catch (error) {
+        console.error("Failed to fetch CNPJ data:", error);
+      }
+    }
   }
 
   const onSubmit = async (values: OnboardingValues) => {
@@ -330,10 +357,16 @@ export default function OnboardingPage() {
                             </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                                <SelectItem value="geral">Geral</SelectItem>
-                                <SelectItem value="mercearia">Mercearia</SelectItem>
-                                <SelectItem value="padaria">Padaria</SelectItem>
-                                <SelectItem value="restaurante">Restaurante</SelectItem>
+                                <SelectItem value="restaurante_lanchonete">Restaurante/Lanchonete</SelectItem>
+                                <SelectItem value="mercearia_mercado">Mercearia/Mercado</SelectItem>
+                                <SelectItem value="padaria_confeitaria">Padaria/Confeitaria</SelectItem>
+                                <SelectItem value="roupas_acessorios">Loja de Roupas e Acessórios</SelectItem>
+                                <SelectItem value="salao_beleza_barbearia">Salão de Beleza/Barbearia</SelectItem>
+                                <SelectItem value="farmacia_drogaria">Farmácia/Drogaria</SelectItem>
+                                <SelectItem value="pet_shop">Pet Shop</SelectItem>
+                                <SelectItem value="oficina_mecanica">Oficina Mecânica</SelectItem>
+                                <SelectItem value="servicos_gerais">Prestação de Serviços</SelectItem>
+                                <SelectItem value="outros">Outros</SelectItem>
                             </SelectContent>
                         </Select>
                         <FormMessage />

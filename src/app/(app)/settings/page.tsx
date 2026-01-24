@@ -25,6 +25,17 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import {
   Form,
   FormControl,
   FormField,
@@ -58,7 +69,7 @@ const inviteUserSchema = z.object({
 type InviteUserFormValues = z.infer<typeof inviteUserSchema>;
 
 export default function SettingsPage() {
-    const { user, store, updateStore, updateUser, removeStoreMember } = useAuth();
+    const { user, store, updateStore, updateUser, removeStoreMember, deleteAccount } = useAuth();
     const { toast } = useToast();
 
     // Company Tab State
@@ -188,6 +199,17 @@ export default function SettingsPage() {
                 toast({ title: 'Usuário removido com sucesso!' });
             }
        }
+    }
+    
+    const handleDeleteAccount = async () => {
+        toast({ title: "Excluindo sua conta...", description: "Aguarde um momento." });
+        const { error } = await deleteAccount();
+        if (error) {
+            toast({ variant: "destructive", title: "Erro ao excluir conta", description: error.message });
+        } else {
+            toast({ title: "Conta excluída", description: "Sua conta e todos os dados foram removidos."});
+            // O provedor de autenticação irá redirecionar automaticamente.
+        }
     }
 
   return (
@@ -496,8 +518,29 @@ export default function SettingsPage() {
                 <CardTitle className="text-destructive">Área de Risco</CardTitle>
                 <CardDescription>Ações nesta seção são permanentes e não podem ser desfeitas.</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <Button variant="destructive" className="w-full">Excluir Conta e Loja</Button>
+              <CardContent>
+                <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                        <Button variant="destructive" className="w-full">Excluir Conta e Loja</Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Você tem certeza absoluta?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                Esta ação é irreversível. Todos os dados da sua conta e da sua loja, incluindo produtos, vendas e históricos, serão permanentemente excluídos.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                                onClick={handleDeleteAccount}
+                                className="bg-destructive hover:bg-destructive/90"
+                            >
+                                Sim, excluir tudo
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
               </CardContent>
             </Card>
           </TabsContent>
