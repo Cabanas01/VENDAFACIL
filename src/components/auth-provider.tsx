@@ -384,11 +384,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!supabase || !store || !user) {
         throw new Error("Usuário ou loja não autenticados.");
       }
-      
-      const saleId = `sale_${Date.now()}`;
+
+      // Use a more robust unique ID for the sale
+      const saleId = `sale_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
       const total_cents = cart.reduce((sum, item) => sum + item.subtotal_cents, 0);
 
       try {
+        // Step 1: Insert the main sale record
         const { error: saleError } = await supabase.from('sales').insert({
           id: saleId,
           store_id: store.id,
@@ -401,8 +403,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           throw saleError;
         }
 
+        // Step 2: Prepare and insert sale items.
+        // We will not provide an 'id' for the items, letting the database generate it.
+        // This is a more robust approach that avoids client-side ID generation conflicts.
         const itemsToInsert = cart.map(cartItem => ({
-          id: `item_${saleId}_${cartItem.product_id}`,
           sale_id: saleId,
           product_id: cartItem.product_id,
           product_name_snapshot: cartItem.product_name_snapshot,
@@ -415,10 +419,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (itemsError) {
           console.error('[SALE] Error creating sale items, rolling back...', itemsError);
+          // If inserting items fails, we must delete the sale record to maintain consistency.
           await supabase.from('sales').delete().eq('id', saleId);
           throw itemsError;
         }
 
+        // Step 3: Decrement stock for each product sold using an RPC call
         const stockUpdatePromises = cart.map(item =>
           supabase.rpc('decrement_stock', {
             p_product_id: item.product_id,
@@ -428,6 +434,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         await Promise.all(stockUpdatePromises);
 
+        // Step 4: Refresh all local data to reflect the new sale and updated stock
         await fetchStoreData(user.id);
       } catch (error) {
         console.error('[SALE] Full sale creation process failed:', error);
