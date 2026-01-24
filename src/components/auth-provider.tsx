@@ -316,7 +316,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         password,
         options: {
           emailRedirectTo: process.env.NEXT_PUBLIC_SITE_URL
-            ? `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`
+            ? `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback?type=signup&next=${encodeURIComponent('/login')}`
             : undefined,
         },
       });
