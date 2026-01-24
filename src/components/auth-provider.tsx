@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase/client';
+import { getSupabaseClient } from "@/lib/supabase/client";
 import type { User as SupabaseUser, AuthError } from '@supabase/supabase-js';
 import type { User, Store, Product, Sale, CashRegister, StoreMember } from '@/lib/types';
 
