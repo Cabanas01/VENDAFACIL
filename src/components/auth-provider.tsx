@@ -12,7 +12,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import type { AuthError, Session } from '@supabase/supabase-js';
-import type { User, Store, Product, Sale, CashRegister, StoreMember, CartItem } from '@/lib/types';
+import type { User, Store, Product, Sale, CashRegister, StoreMember, CartItem, SaleItem } from '@/lib/types';
 
 type StoreStatus = 'unknown' | 'loading' | 'has' | 'none' | 'error';
 
@@ -384,8 +384,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!supabase || !store || !user) {
         throw new Error("Usuário ou loja não autenticados.");
       }
+      if (!cart || cart.length === 0) {
+        throw new Error("O carrinho não pode estar vazio.");
+      }
 
-      // Use a more robust unique ID for the sale
       const saleId = `sale_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
       const total_cents = cart.reduce((sum, item) => sum + item.subtotal_cents, 0);
 
@@ -404,20 +406,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         // Step 2: Prepare and insert sale items.
-        // We will not provide an 'id' for the items, letting the database generate it.
-        // This is a more robust approach that avoids client-side ID generation conflicts.
-        const itemsToInsert = cart.map(cartItem => ({
-          sale_id: saleId,
-          product_id: cartItem.product_id,
-          product_name_snapshot: cartItem.product_name_snapshot,
-          quantity: cartItem.quantity,
-          unit_price_cents: cartItem.unit_price_cents,
-          subtotal_cents: cartItem.subtotal_cents,
-        }));
+        // This robust loop ensures we only pass clean data to the database,
+        // preventing errors from extra properties in the cart state.
+        const itemsToInsert: Omit<SaleItem, 'id'>[] = [];
+        for (const item of cart) {
+            itemsToInsert.push({
+                sale_id: saleId,
+                product_id: item.product_id,
+                product_name_snapshot: item.product_name_snapshot,
+                quantity: item.quantity,
+                unit_price_cents: item.unit_price_cents,
+                subtotal_cents: item.subtotal_cents
+            });
+        }
         
         const { error: itemsError } = await supabase.from('sale_items').insert(itemsToInsert);
 
         if (itemsError) {
+          // This log indicates a problem inserting the items, even after the sale record was created.
           console.error('[SALE] Error creating sale items, rolling back...', itemsError);
           // If inserting items fails, we must delete the sale record to maintain consistency.
           await supabase.from('sales').delete().eq('id', saleId);
