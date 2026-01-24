@@ -1,4 +1,3 @@
-// src/app/auth/callback/page.tsx
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
@@ -12,6 +11,7 @@ export default function AuthCallbackPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
+
   const supabase = useMemo(() => getSupabaseClient(), []);
   const [busy, setBusy] = useState(true);
 
@@ -26,7 +26,7 @@ export default function AuthCallbackPage() {
         toast({
           variant: 'destructive',
           title: 'Supabase não configurado',
-          description: 'Faltam variáveis NEXT_PUBLIC_SUPABASE_URL/ANON_KEY.',
+          description: 'Defina NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY.',
         });
         router.replace('/login');
         return;
