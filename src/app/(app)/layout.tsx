@@ -20,17 +20,23 @@ useEffect(() => {
     return;
   }
 
-  if (store && pathname === '/onboarding') {
-    router.replace('/dashboard');
+  if (!store && pathname !== '/onboarding') {
+    router.replace('/onboarding');
     return;
   }
 
-  if (!store && pathname !== '/onboarding') {
-    router.replace('/onboarding');
+  if (store && pathname === '/onboarding') {
+    router.replace('/dashboard');
   }
-}, [isAuthenticated, store, loading, router, pathname]);
+}, [loading, isAuthenticated, store, pathname, router]);
 
-const showSkeleton = loading;
+if (loading) return <Skeleton... />;
+
+// enquanto redireciona, não renderiza nada
+if (!isAuthenticated) return null;
+if (!store && pathname !== '/onboarding') return null;
+
+  const showSkeleton = loading;
 
   if (showSkeleton) {
     return (
