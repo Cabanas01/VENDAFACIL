@@ -53,14 +53,14 @@ const safeCashRegisters = Array.isArray(cashRegisters) ? cashRegisters : [];
   }, [user, storeStatus, fetchStoreData]);
 
   // Filtered data based on dateRange (simulation)
-  const safeSales = Array.isArray(sales) ? sales : [];
-
 const filteredSales = safeSales.filter(sale => {
   const saleDate = new Date(sale.created_at);
   if (!dateRange?.from) return false;
 
+  const fromDate = startOfToday(); // se quiser usar dateRange.from, veja abaixo
   const toDate = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
-  return saleDate >= startOfToday() && saleDate <= toDate;
+
+  return saleDate >= fromDate && saleDate <= toDate;
 });
 
   const totalRevenue = filteredSales.reduce((sum, sale) => sum + sale.total_cents, 0);
@@ -103,7 +103,7 @@ const filteredSales = safeSales.filter(sale => {
 
   const safeProducts = Array.isArray(products) ? products : [];
   const criticalStockProducts = safeProducts.filter(p => p.active && p.stock_qty > 0 && p.min_stock_qty && p.stock_qty <= p.min_stock_qty);
-  const productsWithoutSale = safeProducts.filter(p => p.stock_qty > 0 && !filteredSales.some(s => s.items.some(i => i.product_id === p.id)));
+  const productsWithoutSale = safeProducts.filter(p =>p.stock_qty > 0 &&!filteredSales.some(s =>(Array.isArray(s.items) ? s.items : []).some(i => i.product_id === p.id)));
   const openCashRegister = safeCashRegisters.find(cr => cr.closed_at === null);
   const openCashRegister = safeCashRegisters.find(cr => cr.closed_at === null);
   const salesInOpenRegister = openCashRegister? safeSales.filter(s => new Date(s.created_at) >= new Date(openCashRegister.opened_at)): [];
