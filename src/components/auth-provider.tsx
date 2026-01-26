@@ -204,14 +204,9 @@ const handleSession = useCallback(
   [fetchStoreData]
 );
   
-useEffect(() => 
+useEffect(() => {
   if (!supabase) return;
 
-  if (user && storeStatus !== 'has') {
-    fetchStoreData(user.id);
-  }
-}, [user, storeStatus, supabase, fetchStoreData]);
-  
   const init = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     handleSession(session);
@@ -229,6 +224,7 @@ useEffect(() =>
     subscription.unsubscribe();
   };
 }, [supabase, handleSession]);
+
 
 
   const login = useCallback(
