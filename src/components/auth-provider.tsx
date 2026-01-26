@@ -415,10 +415,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error('Session/store not initialized.');
     }
 
+    if (cart.some(item => !item.product_id)) {
+      const error = new Error('Cannot add sale: one or more cart items are missing a product_id.');
+      console.error(error.message);
+      throw error;
+    }
+
     const saleId = crypto.randomUUID();
     const totalCents = cart.reduce((sum, item) => sum + item.subtotal_cents, 0);
 
-    // Step 1: Create the main sale record.
     const { data: saleData, error: saleError } = await supabase
       .from('sales')
       .insert({
@@ -436,26 +441,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      // Step 2: Prepare and insert all sale items.
-      for (const item of cart) {
-        const saleItemData = {
-          sale_id: saleData.id,
-          product_id: item.product_id,
-          product_name_snapshot: item.product_name_snapshot,
-          product_barcode_snapshot: item.product_barcode_snapshot ?? null,
-          quantity: item.quantity,
-          unit_price_cents: item.unit_price_cents,
-          subtotal_cents: item.subtotal_cents,
-        };
-        const { error: itemError } = await supabase.from('sale_items').insert(saleItemData);
+      const saleItemsData = cart.map(item => ({
+        sale_id: saleData.id,
+        product_id: item.product_id,
+        product_name_snapshot: item.product_name_snapshot,
+        product_barcode_snapshot: item.product_barcode_snapshot ?? null,
+        quantity: item.quantity,
+        unit_price_cents: item.unit_price_cents,
+        subtotal_cents: item.subtotal_cents,
+      }));
 
-        if (itemError) {
-          console.error('[SALE] Error creating sale item, rolling back...', itemError);
-          throw itemError;
-        }
+      const { error: itemsError } = await supabase.from('sale_items').insert(saleItemsData);
+
+      if (itemsError) {
+        console.error('[SALE] Error creating sale items, rolling back...', itemsError);
+        throw itemsError;
       }
 
-      // Step 3: Sequentially decrement stock for each product.
       for (const item of cart) {
         const { error: stockError } = await supabase.rpc('decrement_stock', {
           p_product_id: item.product_id,
@@ -467,8 +469,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           throw stockError;
         }
       }
-
-      // If all steps succeed, fetch the latest data.
+      
       await fetchStoreData(user.id);
     } catch (error) {
       console.error('[SALE] Full sale creation process failed, rolling back sale:', error);
