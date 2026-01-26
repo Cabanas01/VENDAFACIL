@@ -226,6 +226,8 @@ useEffect(() => {
 }, [supabase, handleSession]);
 
 
+
+
   const login = useCallback(
     async (email: string, password: string) => {
       if (!supabase) return { error: new Error('Supabase not configured') as any };
