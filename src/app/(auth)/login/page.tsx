@@ -92,39 +92,34 @@ export default function LoginPage() {
     }
   }, [isAuthenticated, router, redirectPath, searchParams]);
 
-  const handleLogin = async (values: z.infer<typeof loginSchema>) => {
-    setLoading(true);
+ const handleLogin = async (values: z.infer<typeof loginSchema>) => {
+  setLoading(true);
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: values.email,
+      password: values.password,
+    });
 
-    try {
-      // Se o request travar (rede/CORS/env), evita spinner infinito
-      const result = await withTimeout(login(values.email, values.password), 15000);
-      const { error } = result as any;
+    console.log("LOGIN RESULT", data, error);
 
-      if (error) {
-        toast({
-          variant: 'destructive',
-          title: 'Erro no login',
-          description: error.message || 'Email ou senha inválidos.',
-        });
-        return;
-      }
-
-      toast({ title: 'Login realizado!', description: 'Redirecionando...' });
-      router.replace(redirectPath);
-    } catch (e: any) {
-      const isTimeout = e?.message === 'TIMEOUT';
+    if (error) {
       toast({
-        variant: 'destructive',
-        title: isTimeout ? 'Tempo esgotado' : 'Erro inesperado',
-        description: isTimeout
-          ? 'A autenticação demorou demais. Verifique sua internet e as variáveis NEXT_PUBLIC_SUPABASE_URL/ANON_KEY na Vercel.'
-          : e?.message || 'Falha ao autenticar.',
+        variant: "destructive",
+        title: "Erro no login",
+        description: error.message,
       });
-      console.error('[LOGIN] error', e);
-    } finally {
-      setLoading(false);
+      return;
     }
-  };
+
+    toast({ title: "Login realizado!" });
+    router.replace("/dashboard");
+  } catch (e) {
+    console.error(e);
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   const handleSignup = async (values: z.infer<typeof signupSchema>) => {
     setLoading(true);
