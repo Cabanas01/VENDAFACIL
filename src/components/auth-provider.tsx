@@ -113,7 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         salesResult,
         cashRegistersResult
       ] = await Promise.all([
-        supabase.from('stores').select('*').eq('id', storeId).single(),
+        supabase.from('stores').select('*, members:store_members(*)').eq('id', storeId).single(),
         supabase.from('products').select('*').eq('store_id', storeId).order('name', { ascending: true }),
         supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeId).order('created_at', { ascending: false }),
         supabase.from('cash_registers').select('*').eq('store_id', storeId).order('opened_at', { ascending: false })
@@ -125,13 +125,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data: cashRegisters, error: cashRegistersError } = cashRegistersResult;
 
       let formattedMembers: StoreMember[] = [];
-      const { data: memberEntries, error: membersError } = await supabase
-        .from('store_members')
-        .select('*')
-        .eq('store_id', storeId);
-
+      const memberEntries = storeDetails?.members || [];
+      
       if (memberEntries && memberEntries.length > 0) {
-        const userIds = memberEntries.map(m => m.user_id);
+        const userIds = memberEntries.map((m: any) => m.user_id);
         const { data: userProfiles, error: usersError } = await supabase
           .from('users')
           .select('*')
@@ -155,8 +152,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      if (storeError || membersError || productsError || salesError || cashRegistersError) {
-        throw storeError || membersError || productsError || salesError || cashRegistersError;
+      if (storeError || productsError || salesError || cashRegistersError) {
+        throw storeError || productsError || salesError || cashRegistersError;
       }
 
       setStore({ ...storeDetails, members: formattedMembers });
@@ -386,62 +383,66 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!supabase || !store || !user) {
         throw new Error('Session/store not initialized.');
       }
-
+  
       const saleId = crypto.randomUUID();
-
+      const totalCents = cart.reduce((sum, item) => sum + item.subtotal_cents, 0);
+  
       try {
-        const totalCents = cart.reduce((sum, item) => sum + item.subtotal_cents, 0);
-        
+        // Step 1: Insert the main sale record.
         const { error: saleError } = await supabase.from('sales').insert({
           id: saleId,
           store_id: store.id,
           payment_method: paymentMethod,
           total_cents: totalCents,
         });
-
+  
         if (saleError) {
           console.error('[SALE] Error creating sale record:', saleError);
           throw saleError;
         }
-
-        const saleItemsToInsert = cart.map(item => ({
-          sale_id: saleId,
-          product_id: item.product_id,
-          product_name_snapshot: item.product_name_snapshot,
-          quantity: item.quantity,
-          unit_price_cents: item.unit_price_cents,
-          subtotal_cents: item.subtotal_cents,
-        }));
-        
-        const { error: itemsError } = await supabase.from('sale_items').insert(saleItemsToInsert);
-        
-        if (itemsError) {
-          console.error('[SALE] Error creating sale items, rolling back...', itemsError);
-          await supabase.from('sales').delete().eq('id', saleId);
-          throw itemsError;
+  
+        // Step 2: Insert each sale item individually.
+        for (const item of cart) {
+          const { error: itemError } = await supabase.from('sale_items').insert({
+            sale_id: saleId,
+            product_id: item.product_id,
+            product_name_snapshot: item.product_name_snapshot,
+            quantity: item.quantity,
+            unit_price_cents: item.unit_price_cents,
+            subtotal_cents: item.subtotal_cents,
+          });
+  
+          if (itemError) {
+            console.error('[SALE] Error creating sale item, rolling back...', itemError);
+            throw itemError;
+          }
         }
-
-        const stockDecrementPromises = cart.map(item =>
-          supabase.rpc('decrement_stock', {
+  
+        // Step 3: Decrement stock for each product individually.
+        for (const item of cart) {
+          const { error: stockError } = await supabase.rpc('decrement_stock', {
             p_product_id: item.product_id,
             p_quantity: item.quantity,
-          })
-        );
-        
-        const stockResults = await Promise.all(stockDecrementPromises);
-        const stockErrors = stockResults.map(res => res.error).filter(Boolean);
-
-        if (stockErrors.length > 0) {
-            const errorMessage = stockErrors.map(e => e?.message).join(', ');
-            console.error('[SALE] Stock decrement failed, rolling back...', stockErrors);
-            await supabase.from('sale_items').delete().eq('sale_id', saleId);
-            await supabase.from('sales').delete().eq('id', saleId);
-            throw new Error(`Failed to update stock: ${errorMessage}`);
+          });
+  
+          if (stockError) {
+            console.error('[SALE] Stock decrement failed, rolling back...', stockError);
+            throw stockError;
+          }
         }
-
+  
+        // If all steps succeed, fetch the latest data.
         await fetchStoreData(user.id);
+  
       } catch (error) {
+        // Rollback Logic: If any step in the try block fails, this will execute.
         console.error('[SALE] Full sale creation process failed:', error);
+        
+        // Attempt to delete the sale record. If the foreign key in 'sale_items'
+        // is set to 'on delete cascade', this will also delete the associated items.
+        await supabase.from('sales').delete().eq('id', saleId);
+        
+        // Re-throw the error so the UI can handle it (e.g., show a toast).
         throw error;
       }
     },
