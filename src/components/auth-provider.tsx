@@ -181,64 +181,43 @@ const [
     }
   }, [supabase]);
 
-  const handleSession = useCallback(async (session: any) => {
-    if (!supabase) return;
-    const supabaseUser = session?.user;
+const handleSession = useCallback((session: any) => {
+  const supabaseUser = session?.user;
 
-    if (!supabaseUser) {
-      setUser(null);
-      setStore(null);
-      setStoreStatus('unknown');
-      setProductsState([]);
-      setSalesState([]);
-      setCashRegistersState([]);
-      return;
-    }
-    
-    let profile: any = null;
-    try {
-        const { data } = await supabase.from('users').select('*').eq('id', supabaseUser.id).single();
-        profile = data;
-    } catch(e) { /* ignore */ }
+  if (!supabaseUser) {
+    setUser(null);
+    setStore(null);
+    setStoreStatus('unknown');
+    return;
+  }
 
-    setUser(profile || { id: supabaseUser.id, email: supabaseUser.email, name: profile?.name, avatar_url: profile?.avatar_url });
-    await fetchStoreData(supabaseUser.id);
-  }, [supabase, fetchStoreData]);
+  setUser({
+    id: supabaseUser.id,
+    email: supabaseUser.email,
+  } as any);
+}, []);
 
-  useEffect(() => {
-    if (!supabase) {
-      setLoading(false);
-      setStoreStatus('error');
-      setStoreError('Supabase client not configured. Check environment variables.');
-      return;
-    }
+useEffect(() => {
+  if (!supabase) return;
 
-    let mounted = true;
-    const run = async () => {
-      setLoading(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      if (mounted) {
-        await handleSession(session);
-        setLoading(false);
-      }
-    };
-    run();
+  const init = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    handleSession(session);
+    setLoading(false);
+  };
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        if (mounted) {
-          setLoading(true);
-          await handleSession(session);
-          setLoading(false);
-        }
-      }
-    );
+  init();
 
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
-  }, [supabase, handleSession]);
+  const { data: { subscription } } =
+    supabase.auth.onAuthStateChange((_event, session) => {
+      handleSession(session);
+    });
+
+  return () => {
+    subscription.unsubscribe();
+  };
+}, [supabase, handleSession]);
+
 
   const login = useCallback(
     async (email: string, password: string) => {
