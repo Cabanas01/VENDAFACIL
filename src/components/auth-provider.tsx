@@ -112,32 +112,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         storeDetailsResult,
         productsResult,
         salesResult,
-        cashRegistersResult
+        cashRegistersResult,
+        memberEntriesResult,
       ] = await Promise.all([
         supabase.from('stores').select('*').eq('id', storeId).single(),
         supabase.from('products').select('*').eq('store_id', storeId).order('name', { ascending: true }),
         supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeId).order('created_at', { ascending: false }),
-        supabase.from('cash_registers').select('*').eq('store_id', storeId).order('opened_at', { ascending: false })
+        supabase.from('cash_registers').select('*').eq('store_id', storeId).order('opened_at', { ascending: false }),
+        supabase.from('store_members').select('*').eq('store_id', storeId),
       ]);
       
       const { data: storeDetails, error: storeError } = storeDetailsResult;
       const { data: products, error: productsError } = productsResult;
       const { data: sales, error: salesError } = salesResult;
       const { data: cashRegisters, error: cashRegistersError } = cashRegistersResult;
+      const { data: memberEntries, error: memberEntriesError } = memberEntriesResult;
 
-      if (storeError || productsError || salesError || cashRegistersError) {
-        throw storeError || productsError || salesError || cashRegistersError;
+      if (storeError || productsError || salesError || cashRegistersError || memberEntriesError) {
+        throw storeError || productsError || salesError || cashRegistersError || memberEntriesError;
       }
       
-      const { data: memberEntries, error: memberEntriesError } = await supabase
-        .from('store_members')
-        .select('*')
-        .eq('store_id', storeId);
-
-      if (memberEntriesError) throw memberEntriesError;
-
       let formattedMembers: StoreMember[] = [];
-      
       if (memberEntries && memberEntries.length > 0) {
         const userIds = memberEntries.map((m: any) => m.user_id);
         const { data: userProfiles, error: usersError } = await supabase
@@ -415,65 +410,80 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error('Session/store not initialized.');
     }
 
-    // --- Pre-flight check for stock on client-side state ---
+    // 1. Pre-flight check for stock
     for (const item of cart) {
         const product = products.find(p => p.id === item.product_id);
         if (!product || product.stock_qty < item.quantity) {
-            throw new Error(`Estoque insuficiente para o produto: ${item.product_name_snapshot}`);
+            throw new Error(`Estoque insuficiente para ${item.product_name_snapshot}`);
         }
     }
 
     const saleId = crypto.randomUUID();
     const totalCents = cart.reduce((sum, item) => sum + item.subtotal_cents, 0);
 
-    const saleData = {
-      id: saleId,
-      store_id: store.id,
-      total_cents: totalCents,
-      payment_method: paymentMethod,
-    };
+    // 2. Insert main sale record
+    const { error: saleInsertError } = await supabase.from('sales').insert({
+        id: saleId,
+        store_id: store.id,
+        total_cents: totalCents,
+        payment_method: paymentMethod,
+    });
 
-    const saleItemsData = cart.map(item => ({
-      sale_id: saleId,
-      product_id: item.product_id,
-      quantity: item.quantity,
-      unit_price_cents: item.unit_price_cents,
-      subtotal_cents: item.subtotal_cents,
-      product_name_snapshot: item.product_name_snapshot,
-      product_barcode_snapshot: item.product_barcode_snapshot ?? null,
-    }));
-    
-    // --- Database Transaction Simulation ---
-    const { error: saleInsertError } = await supabase.from('sales').insert(saleData);
     if (saleInsertError) {
         console.error('[SALE] Failed at Step 1: Inserting sale record', saleInsertError);
         throw saleInsertError;
     }
 
+    // If we get here, the sale record was created. We now need to be able to roll back.
     try {
-        const { error: itemsInsertError } = await supabase.from('sale_items').insert(saleItemsData);
-        if (itemsInsertError) throw itemsInsertError;
-        
+        // 3. Insert items and update stock sequentially
         for (const item of cart) {
+            // 3a. Insert sale item
+            const { error: itemInsertError } = await supabase.from('sale_items').insert({
+                sale_id: saleId,
+                product_id: item.product_id,
+                quantity: item.quantity,
+                unit_price_cents: item.unit_price_cents,
+                subtotal_cents: item.subtotal_cents,
+                product_name_snapshot: item.product_name_snapshot,
+                product_barcode_snapshot: item.product_barcode_snapshot ?? null,
+            });
+
+            if (itemInsertError) {
+                // Throw to enter the catch block for rollback
+                throw itemInsertError;
+            }
+
+            // 3b. Update product stock
             const product = products.find(p => p.id === item.product_id)!;
             const newStock = product.stock_qty - item.quantity;
-            
             const { error: stockUpdateError } = await supabase
                 .from('products')
                 .update({ stock_qty: newStock })
                 .eq('id', item.product_id);
             
             if (stockUpdateError) {
-                console.error(`CRITICAL: Sale ${saleId} recorded, but failed to update stock for product ${item.product_id}. Manual correction needed.`);
+                // Throw to enter the catch block for rollback
                 throw stockUpdateError;
             }
         }
-        
+
+        // 4. If all successful, refresh data
         await fetchStoreData(user.id);
 
     } catch (error: any) {
+        // 5. ROLLBACK!
         console.error('[SALE] Transaction failed, rolling back sale record...', error);
-        await supabase.from('sales').delete().eq('id', saleId);
+        
+        // This assumes ON DELETE CASCADE is set on the foreign key in sale_items.
+        // If not, the sale_items would be orphaned. For this context, deleting the sale is a good-enough rollback.
+        const { error: deleteError } = await supabase.from('sales').delete().eq('id', saleId);
+        if (deleteError) {
+            // This is a catastrophic failure. The DB is in an inconsistent state.
+             console.error(`[SALE] CATASTROPHIC: FAILED TO ROLLBACK SALE ${saleId}. MANUAL INTERVENTION REQUIRED.`, deleteError);
+             throw new Error(`Falha crítica ao processar a venda. Contate o suporte com o ID: ${saleId}`);
+        }
+
         throw new Error(error.message || 'Falha ao processar a venda. A transação foi revertida.');
     }
 }, [supabase, store, user, products, fetchStoreData]);
