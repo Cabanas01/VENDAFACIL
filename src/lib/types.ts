@@ -73,12 +73,21 @@ export type SaleItem = {
   sale_id: string;
   product_id: string;
   product_name_snapshot: string;
+  product_barcode_snapshot?: string | null;
   quantity: number;
   unit_price_cents: number;
   subtotal_cents: number;
 };
 
-export type CartItem = Omit<SaleItem, 'id' | 'sale_id'> & { stock_qty: number };
+export type CartItem = {
+  product_id: string;
+  product_name_snapshot: string;
+  product_barcode_snapshot?: string | null;
+  quantity: number;
+  unit_price_cents: number;
+  subtotal_cents: number;
+  stock_qty: number;
+};
 
 export type CashRegister = {
   id:string;

@@ -100,6 +100,7 @@ export default function NewSalePage() {
       setCart([...cart, {
         product_id: product.id,
         product_name_snapshot: product.name,
+        product_barcode_snapshot: product.barcode ?? null,
         quantity: 1,
         unit_price_cents: product.price_cents,
         subtotal_cents: product.price_cents,

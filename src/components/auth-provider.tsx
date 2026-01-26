@@ -114,7 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         salesResult,
         cashRegistersResult
       ] = await Promise.all([
-        supabase.from('stores').select('*, members:store_members(*)').eq('id', storeId).single(),
+        supabase.from('stores').select('*').eq('id', storeId).single(),
         supabase.from('products').select('*').eq('store_id', storeId).order('name', { ascending: true }),
         supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeId).order('created_at', { ascending: false }),
         supabase.from('cash_registers').select('*').eq('store_id', storeId).order('opened_at', { ascending: false })
@@ -125,8 +125,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data: sales, error: salesError } = salesResult;
       const { data: cashRegisters, error: cashRegistersError } = cashRegistersResult;
 
+      if (storeError || productsError || salesError || cashRegistersError) {
+        throw storeError || productsError || salesError || cashRegistersError;
+      }
+      
+      const { data: memberEntries, error: memberEntriesError } = await supabase
+        .from('store_members')
+        .select('*')
+        .eq('store_id', storeId);
+
+      if (memberEntriesError) throw memberEntriesError;
+
       let formattedMembers: StoreMember[] = [];
-      const memberEntries = storeDetails?.members || [];
       
       if (memberEntries && memberEntries.length > 0) {
         const userIds = memberEntries.map((m: any) => m.user_id);
@@ -151,10 +161,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             };
             });
         }
-      }
-
-      if (storeError || productsError || salesError || cashRegistersError) {
-        throw storeError || productsError || salesError || cashRegistersError;
       }
 
       setStore({ ...storeDetails, members: formattedMembers });
@@ -411,28 +417,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const saleId = crypto.randomUUID();
     const totalCents = cart.reduce((sum, item) => sum + item.subtotal_cents, 0);
-    const saleData = {
-      id: saleId,
-      store_id: store.id,
-      payment_method: paymentMethod,
-      total_cents: totalCents,
-    };
 
-    // Step 1: Insert the main sale record.
-    const { error: saleError } = await supabase.from('sales').insert(saleData);
+    // Step 1: Create the main sale record.
+    const { data: saleData, error: saleError } = await supabase
+      .from('sales')
+      .insert({
+        id: saleId,
+        store_id: store.id,
+        payment_method: paymentMethod,
+        total_cents: totalCents,
+      })
+      .select('id')
+      .single();
 
-    if (saleError) {
+    if (saleError || !saleData) {
       console.error('[SALE] Error creating sale record:', saleError);
-      throw saleError;
+      throw saleError || new Error('Sale ID not returned.');
     }
 
     try {
-      // Step 2: Insert each sale item individually.
+      // Step 2: Prepare and insert all sale items.
       for (const item of cart) {
         const saleItemData = {
-          sale_id: saleId,
+          sale_id: saleData.id,
           product_id: item.product_id,
           product_name_snapshot: item.product_name_snapshot,
+          product_barcode_snapshot: item.product_barcode_snapshot ?? null,
           quantity: item.quantity,
           unit_price_cents: item.unit_price_cents,
           subtotal_cents: item.subtotal_cents,
@@ -441,11 +451,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (itemError) {
           console.error('[SALE] Error creating sale item, rolling back...', itemError);
-          throw itemError; // This will be caught by the outer catch block
+          throw itemError;
         }
       }
 
-      // Step 3: Decrement stock for each product individually.
+      // Step 3: Sequentially decrement stock for each product.
       for (const item of cart) {
         const { error: stockError } = await supabase.rpc('decrement_stock', {
           p_product_id: item.product_id,
@@ -454,22 +464,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (stockError) {
           console.error('[SALE] Stock decrement failed, rolling back...', stockError);
-          throw stockError; // This will be caught by the outer catch block
+          throw stockError;
         }
       }
 
       // If all steps succeed, fetch the latest data.
       await fetchStoreData(user.id);
-
     } catch (error) {
-      // Rollback Logic: If any step after creating the sale fails, this will execute.
       console.error('[SALE] Full sale creation process failed, rolling back sale:', error);
-      
-      // Attempt to delete the sale record. If the foreign key in 'sale_items'
-      // is set to 'on delete cascade', this will also delete the associated items.
-      await supabase.from('sales').delete().eq('id', saleId);
-      
-      // Re-throw the original error so the UI can handle it.
+      await supabase.from('sales').delete().eq('id', saleData.id);
       throw error;
     }
   }, [supabase, store, user, fetchStoreData]);
