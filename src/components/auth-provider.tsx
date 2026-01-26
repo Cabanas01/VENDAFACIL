@@ -392,6 +392,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const totalCents = cart.reduce((sum, item) => sum + item.subtotal_cents, 0);
         
+        const { error: saleError } = await supabase.from('sales').insert({
+          id: saleId,
+          store_id: store.id,
+          payment_method: paymentMethod,
+          total_cents: totalCents,
+        });
+
+        if (saleError) {
+          console.error('[SALE] Error creating sale record:', saleError);
+          throw saleError;
+        }
+
         const saleItemsToInsert = cart.map(item => ({
           sale_id: saleId,
           product_id: item.product_id,
@@ -400,23 +412,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           unit_price_cents: item.unit_price_cents,
           subtotal_cents: item.subtotal_cents,
         }));
-
-        const { error: saleError } = await supabase
-          .from('sales')
-          .insert({
-            id: saleId,
-            store_id: store.id,
-            payment_method: paymentMethod,
-            total_cents: totalCents,
-          });
-
-        if (saleError) {
-          console.error('[SALE] Error creating sale record:', saleError);
-          throw saleError;
-        }
-
+        
         const { error: itemsError } = await supabase.from('sale_items').insert(saleItemsToInsert);
-
+        
         if (itemsError) {
           console.error('[SALE] Error creating sale items, rolling back...', itemsError);
           await supabase.from('sales').delete().eq('id', saleId);
