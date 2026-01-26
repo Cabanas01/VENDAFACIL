@@ -387,30 +387,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error('Session/store not initialized.');
       }
 
-      let saleId: string | null = null;
+      const saleId = crypto.randomUUID();
 
       try {
         const totalCents = cart.reduce((sum, item) => sum + item.subtotal_cents, 0);
-
-        // Step 1: Create the main sale record and get its database-generated ID.
-        const { data: saleData, error: saleError } = await supabase
-          .from('sales')
-          .insert({
-            store_id: store.id,
-            payment_method: paymentMethod,
-            total_cents: totalCents,
-          })
-          .select('id')
-          .single();
-
-        if (saleError) {
-          console.error('[SALE] Error creating sale record:', saleError);
-          throw saleError;
-        }
-
-        saleId = saleData.id;
-
-        // Step 2: Prepare sale items for bulk insert, using the new saleId.
+        
         const saleItemsToInsert = cart.map(item => ({
           sale_id: saleId,
           product_id: item.product_id,
@@ -420,44 +401,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           subtotal_cents: item.subtotal_cents,
         }));
 
-        // Step 3: Bulk insert the sale items.
+        const { error: saleError } = await supabase
+          .from('sales')
+          .insert({
+            id: saleId,
+            store_id: store.id,
+            payment_method: paymentMethod,
+            total_cents: totalCents,
+          });
+
+        if (saleError) {
+          console.error('[SALE] Error creating sale record:', saleError);
+          throw saleError;
+        }
+
         const { error: itemsError } = await supabase.from('sale_items').insert(saleItemsToInsert);
 
         if (itemsError) {
           console.error('[SALE] Error creating sale items, rolling back...', itemsError);
-          throw itemsError; // The catch block will handle rollback.
+          await supabase.from('sales').delete().eq('id', saleId);
+          throw itemsError;
         }
 
-        // Step 4: Decrement stock for each product.
         const stockDecrementPromises = cart.map(item =>
           supabase.rpc('decrement_stock', {
             p_product_id: item.product_id,
             p_quantity: item.quantity,
           })
         );
-
-        const results = await Promise.all(stockDecrementPromises);
-        const stockErrors = results.map(res => res.error).filter(Boolean);
+        
+        const stockResults = await Promise.all(stockDecrementPromises);
+        const stockErrors = stockResults.map(res => res.error).filter(Boolean);
 
         if (stockErrors.length > 0) {
-          const errorMessages = stockErrors.map(e => e?.message).join(', ');
-          console.error('[SALE] Stock decrement failed, rolling back...', stockErrors);
-          throw new Error(`Failed to update stock: ${errorMessages}`);
+            const errorMessage = stockErrors.map(e => e?.message).join(', ');
+            console.error('[SALE] Stock decrement failed, rolling back...', stockErrors);
+            await supabase.from('sale_items').delete().eq('sale_id', saleId);
+            await supabase.from('sales').delete().eq('id', saleId);
+            throw new Error(`Failed to update stock: ${errorMessage}`);
         }
 
-        // Step 5: Refresh all store data to reflect the new sale and stock levels.
         await fetchStoreData(user.id);
       } catch (error) {
         console.error('[SALE] Full sale creation process failed:', error);
-
-        // Rollback logic: If a sale was created but subsequent steps failed, delete it.
-        if (saleId) {
-          // We don't need to delete sale_items individually if we have cascading delete in the DB.
-          // But it's safer to do it here to be sure.
-          await supabase.from('sale_items').delete().eq('sale_id', saleId);
-          await supabase.from('sales').delete().eq('id', saleId);
-        }
-        
         throw error;
       }
     },
