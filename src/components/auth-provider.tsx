@@ -415,68 +415,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error('Session/store not initialized.');
     }
 
-    if (cart.some(item => !item.product_id)) {
-      const error = new Error('Cannot add sale: one or more cart items are missing a product_id.');
-      console.error(error.message);
-      throw error;
-    }
-
-    const saleId = crypto.randomUUID();
-    const totalCents = cart.reduce((sum, item) => sum + item.subtotal_cents, 0);
-
-    const { data: saleData, error: saleError } = await supabase
-      .from('sales')
-      .insert({
-        id: saleId,
-        store_id: store.id,
-        payment_method: paymentMethod,
-        total_cents: totalCents,
-      })
-      .select('id')
-      .single();
-
-    if (saleError || !saleData) {
-      console.error('[SALE] Error creating sale record:', saleError);
-      throw saleError || new Error('Sale ID not returned.');
-    }
-
     try {
-      const saleItemsData = cart.map(item => ({
-        sale_id: saleData.id,
+      const totalCents = cart.reduce((sum, item) => sum + item.subtotal_cents, 0);
+      const itemsPayload = cart.map(item => ({
         product_id: item.product_id,
-        product_name_snapshot: item.product_name_snapshot,
-        product_barcode_snapshot: item.product_barcode_snapshot ?? null,
         quantity: item.quantity,
         unit_price_cents: item.unit_price_cents,
         subtotal_cents: item.subtotal_cents,
+        product_name_snapshot: item.product_name_snapshot,
+        product_barcode_snapshot: item.product_barcode_snapshot ?? null,
       }));
 
-      const { error: itemsError } = await supabase.from('sale_items').insert(saleItemsData);
+      // A single RPC call to handle the entire transaction atomically on the database side.
+      const { error } = await supabase.rpc('process_sale', {
+        p_store_id: store.id,
+        p_payment_method: paymentMethod,
+        p_total_cents: totalCents,
+        p_sale_items: itemsPayload,
+      });
 
-      if (itemsError) {
-        console.error('[SALE] Error creating sale items, rolling back...', itemsError);
-        throw itemsError;
+      if (error) {
+        // If the RPC call fails, the database transaction is automatically rolled back.
+        throw error;
       }
 
-      for (const item of cart) {
-        const { error: stockError } = await supabase.rpc('decrement_stock', {
-          p_product_id: item.product_id,
-          p_quantity: item.quantity,
-        });
-
-        if (stockError) {
-          console.error('[SALE] Stock decrement failed, rolling back...', stockError);
-          throw stockError;
-        }
-      }
-      
+      // If successful, refetch all data to update the UI.
       await fetchStoreData(user.id);
-    } catch (error) {
-      console.error('[SALE] Full sale creation process failed, rolling back sale:', error);
-      await supabase.from('sales').delete().eq('id', saleData.id);
+
+    } catch (error: any) {
+      console.error('[SALE] Full sale creation process failed:', error);
+      // The error is re-thrown to be caught by the UI component, which will show a toast.
       throw error;
     }
   }, [supabase, store, user, fetchStoreData]);
+
 
   const value: AuthContextType = {
     user,
