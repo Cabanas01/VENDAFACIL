@@ -55,7 +55,7 @@ const safeCashRegisters = Array.isArray(cashRegisters) ? cashRegisters : [];
   // Filtered data based on dateRange (simulation)
   const safeSales = Array.isArray(sales) ? sales : [];
 
-onst filteredSales = safeSales.filter(sale => {
+const filteredSales = safeSales.filter(sale => {
   const saleDate = new Date(sale.created_at);
   if (!dateRange?.from) return false;
 
