@@ -54,7 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const [user, setUser] = useState<User | null>(null);
   const [store, setStore] = useState<Store | null>(null);
-  const [storeStatus, setStoreStatus] = useState<StoreStatus>('unknown');
+  const [storeStatus, setStoreStatus] = useState<StoreStatus>('loading');
   const [storeError, setStoreError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -72,7 +72,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStoreError(null);
 
     try {
-      // Step 1: Find the user's store, either as owner or member.
       let storeId: string | null = null;
       
       const { data: ownerStore, error: ownerError } = await supabase
@@ -99,7 +98,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      // Step 2: If no store is found, set status to 'none' and finish.
       if (!storeId) {
         setStore(null);
         setStoreStatus('none');
@@ -109,7 +107,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       
-      // Step 3: Fetch all related data in parallel using the found store ID.
       const [
         storeDetailsResult,
         productsResult,
@@ -127,7 +124,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data: sales, error: salesError } = salesResult;
       const { data: cashRegisters, error: cashRegistersError } = cashRegistersResult;
 
-      // Step 3.5: Fetch members and their user profiles in a two-step process
       let formattedMembers: StoreMember[] = [];
       const { data: memberEntries, error: membersError } = await supabase
         .from('store_members')
@@ -143,27 +139,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         if (usersError) throw usersError;
 
-        const userProfileMap = new Map((userProfiles || []).map(p => [p.id, p]));
-
-        formattedMembers = memberEntries.map((m: any) => {
-          const profile = userProfileMap.get(m.user_id);
-          return {
-            user_id: m.user_id,
-            store_id: m.store_id,
-            role: m.role,
-            name: profile?.name ?? null,
-            email: profile?.email ?? null,
-            avatar_url: profile?.avatar_url ?? null,
-          };
-        });
+        if (userProfiles) {
+            const userProfileMap = new Map(userProfiles.map(p => [p.id, p]));
+            formattedMembers = memberEntries.map((m: any) => {
+            const profile = userProfileMap.get(m.user_id);
+            return {
+                user_id: m.user_id,
+                store_id: m.store_id,
+                role: m.role,
+                name: profile?.name ?? null,
+                email: profile?.email ?? null,
+                avatar_url: profile?.avatar_url ?? null,
+            };
+            });
+        }
       }
 
-      // Step 4: Handle any errors from the parallel fetches.
       if (storeError || membersError || productsError || salesError || cashRegistersError) {
         throw storeError || membersError || productsError || salesError || cashRegistersError;
       }
 
-      // Step 5: Format the fetched data and update the application state.
       setStore({ ...storeDetails, members: formattedMembers });
       setProductsState(products || []);
       setSalesState(sales || []);
@@ -198,7 +193,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         profile = data;
     } catch(e) { /* ignore */ }
 
-    setUser(profile || { id: supabaseUser.id, email: supabaseUser.email });
+    setUser(profile || { id: supabaseUser.id, email: supabaseUser.email, name: profile?.name, avatar_url: profile?.avatar_url });
     await fetchStoreData(supabaseUser.id);
   }, [supabase, fetchStoreData]);
 
@@ -299,14 +294,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const updateStore = useCallback(async (storeData: Partial<Omit<Store, 'id' | 'user_id' | 'members'>>) => {
       if (!supabase || !store || !user) return;
       const { error } = await supabase.from('stores').update(storeData).eq('id', store.id);
-      if (error) console.error('[STORE] updateStore error', error);
-      else await fetchStoreData(user.id);
+      if (error) {
+        console.error('[STORE] updateStore error', error);
+        throw error;
+      }
+      await fetchStoreData(user.id);
   }, [supabase, store, user, fetchStoreData]);
 
   const updateUser = useCallback(async (userData: Partial<Omit<User, 'id' | 'email'>>) => {
       if (!supabase || !user) return;
       const { data, error } = await supabase.from('users').update(userData).eq('id', user.id).select().single();
-      if (error) console.error('[AUTH] updateUser error', error);
+      if (error) {
+        console.error('[AUTH] updateUser error', error);
+        throw error;
+      }
       if (data) setUser(data as User);
   }, [supabase, user]);
 
@@ -314,38 +315,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!supabase || !store || !user) return { error: new Error('User or store not available') };
       if (userId === store.user_id) return { error: new Error('Owner cannot be removed.') };
       const { error } = await supabase.from('store_members').delete().eq('user_id', userId).eq('store_id', store.id);
-      if (!error) await fetchStoreData(user.id);
-      return { error };
+      if (error) {
+        console.error('[AUTH] removeStoreMember error', error);
+        return { error };
+      }
+      await fetchStoreData(user.id);
+      return { error: null };
   }, [supabase, store, user, fetchStoreData]);
 
   const addProduct = useCallback(async (product: Omit<Product, 'id' | 'store_id' | 'created_at'>) => {
       if (!supabase || !store || !user) return;
       const { error } = await supabase.from('products').insert({ ...product, store_id: store.id });
-      if (error) console.error('[PRODUCT] insert error', error); else await fetchStoreData(user.id);
+      if (error) {
+        console.error('[PRODUCT] insert error', error);
+        throw error;
+      }
+      await fetchStoreData(user.id);
   }, [supabase, store, user, fetchStoreData]);
   
   const updateProduct = useCallback(async (productId: string, product: Partial<Omit<Product, 'id' | 'store_id'>>) => {
       if (!supabase || !store || !user) return;
       const { error } = await supabase.from('products').update(product).eq('id', productId).eq('store_id', store.id);
-      if (error) console.error('[PRODUCT] update error', error); else await fetchStoreData(user.id);
+      if (error) {
+        console.error('[PRODUCT] update error', error);
+        throw error;
+      }
+      await fetchStoreData(user.id);
   }, [supabase, store, user, fetchStoreData]);
 
   const updateProductStock = useCallback(async (productId: string, newStock: number) => {
       if (!supabase || !store || !user) return;
       const { error } = await supabase.from('products').update({ stock_qty: newStock }).eq('id', productId).eq('store_id', store.id);
-      if (error) console.error('[PRODUCT] update stock error', error); else await fetchStoreData(user.id);
+      if (error) {
+        console.error('[PRODUCT] update stock error', error);
+        throw error;
+      }
+      await fetchStoreData(user.id);
   }, [supabase, store, user, fetchStoreData]);
 
   const removeProduct = useCallback(async (productId: string) => {
       if (!supabase || !store || !user) return;
       const { error } = await supabase.from('products').delete().eq('id', productId).eq('store_id', store.id);
-      if (error) console.error('[PRODUCT] delete error', error); else await fetchStoreData(user.id);
+      if (error) {
+        console.error('[PRODUCT] delete error', error);
+        throw error;
+      }
+      await fetchStoreData(user.id);
   }, [supabase, store, user, fetchStoreData]);
   
   const setCashRegisters = useCallback(async (action: React.SetStateAction<CashRegister[]>) => {
       if (!supabase || !user || !store) return;
       const currentRegisters = cashRegisters;
       const newCashRegisters = typeof action === 'function' ? action(currentRegisters) : action;
+      
       const oldRegisterIds = new Set(currentRegisters.map((cr) => cr.id));
 
       for (const cr of newCashRegisters) {
@@ -359,81 +381,88 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await fetchStoreData(user.id);
   }, [supabase, user, store, cashRegisters, fetchStoreData]);
 
-  const addSale = useCallback(async (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => {
-    if (!supabase || !store || !user) throw new Error('Session/store not initialized.');
-    
-    const saleId = `sale_${Date.now()}`;
-    const createdAt = new Date().toISOString();
-    const totalCents = cart.reduce((sum, item) => sum + item.subtotal_cents, 0);
-
-    try {
-      // 1. Create the main sale record
-      const { error: saleError } = await supabase.from('sales').insert({
-        id: saleId,
-        store_id: store.id,
-        created_at: createdAt,
-        payment_method: paymentMethod,
-        total_cents: totalCents,
-      }).single();
-
-      if (saleError) throw saleError;
-
-      // 2. Prepare and insert sale items, one by one for robustness.
-      const insertedItemIds: number[] = [];
-      for (const item of cart) {
-        const { data: insertedItem, error: itemError } = await supabase.from('sale_items').insert({
-            sale_id: saleId,
-            product_id: item.product_id,
-            product_name_snapshot: item.product_name_snapshot,
-            quantity: item.quantity,
-            unit_price_cents: item.unit_price_cents,
-            subtotal_cents: item.subtotal_cents,
-        }).select('id').single();
-
-        if (itemError) {
-          console.error('[SALE] Error creating sale item, rolling back...', itemError);
-          // Rollback: delete already inserted items for this sale
-          if (insertedItemIds.length > 0) {
-            await supabase.from('sale_items').delete().in('id', insertedItemIds);
-          }
-          // Rollback: delete the main sale record
-          await supabase.from('sales').delete().eq('id', saleId);
-          throw itemError;
-        }
-        if (insertedItem) {
-            insertedItemIds.push(insertedItem.id);
-        }
+  const addSale = useCallback(
+    async (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => {
+      if (!supabase || !store || !user) {
+        throw new Error('Session/store not initialized.');
       }
-      
-      // 3. Decrement stock for each product
-      const stockErrors = [];
-      for (const item of cart) {
-        const { error: stockError } = await supabase.rpc('decrement_stock', {
+
+      let saleId: string | null = null;
+
+      try {
+        const totalCents = cart.reduce((sum, item) => sum + item.subtotal_cents, 0);
+
+        // Step 1: Create the main sale record and get its database-generated ID.
+        const { data: saleData, error: saleError } = await supabase
+          .from('sales')
+          .insert({
+            store_id: store.id,
+            payment_method: paymentMethod,
+            total_cents: totalCents,
+          })
+          .select('id')
+          .single();
+
+        if (saleError) {
+          console.error('[SALE] Error creating sale record:', saleError);
+          throw saleError;
+        }
+
+        saleId = saleData.id;
+
+        // Step 2: Prepare sale items for bulk insert, using the new saleId.
+        const saleItemsToInsert = cart.map(item => ({
+          sale_id: saleId,
+          product_id: item.product_id,
+          product_name_snapshot: item.product_name_snapshot,
+          quantity: item.quantity,
+          unit_price_cents: item.unit_price_cents,
+          subtotal_cents: item.subtotal_cents,
+        }));
+
+        // Step 3: Bulk insert the sale items.
+        const { error: itemsError } = await supabase.from('sale_items').insert(saleItemsToInsert);
+
+        if (itemsError) {
+          console.error('[SALE] Error creating sale items, rolling back...', itemsError);
+          throw itemsError; // The catch block will handle rollback.
+        }
+
+        // Step 4: Decrement stock for each product.
+        const stockDecrementPromises = cart.map(item =>
+          supabase.rpc('decrement_stock', {
             p_product_id: item.product_id,
             p_quantity: item.quantity,
-        });
-        if (stockError) {
-            stockErrors.push(stockError);
-            console.error('[SALE] Stock decrement failed for product', item.product_id, stockError);
-        }
-      }
-      if (stockErrors.length > 0) {
-          console.error('[SALE] Stock decrement failed for some items, rolling back sale...', stockErrors);
-          // Rollback sale if stock decrement fails
-          if (insertedItemIds.length > 0) {
-            await supabase.from('sale_items').delete().in('id', insertedItemIds);
-          }
-          await supabase.from('sales').delete().eq('id', saleId);
-          throw new Error('Failed to update stock for one or more items.');
-      }
+          })
+        );
 
-      // 4. Refresh all store data to reflect the new sale and stock levels
-      await fetchStoreData(user.id);
-    } catch (error) {
-      console.error('[SALE] Full sale creation process failed:', error);
-      throw error;
-    }
-  }, [supabase, store, user, fetchStoreData]);
+        const results = await Promise.all(stockDecrementPromises);
+        const stockErrors = results.map(res => res.error).filter(Boolean);
+
+        if (stockErrors.length > 0) {
+          const errorMessages = stockErrors.map(e => e?.message).join(', ');
+          console.error('[SALE] Stock decrement failed, rolling back...', stockErrors);
+          throw new Error(`Failed to update stock: ${errorMessages}`);
+        }
+
+        // Step 5: Refresh all store data to reflect the new sale and stock levels.
+        await fetchStoreData(user.id);
+      } catch (error) {
+        console.error('[SALE] Full sale creation process failed:', error);
+
+        // Rollback logic: If a sale was created but subsequent steps failed, delete it.
+        if (saleId) {
+          // We don't need to delete sale_items individually if we have cascading delete in the DB.
+          // But it's safer to do it here to be sure.
+          await supabase.from('sale_items').delete().eq('sale_id', saleId);
+          await supabase.from('sales').delete().eq('id', saleId);
+        }
+        
+        throw error;
+      }
+    },
+    [supabase, store, user, fetchStoreData]
+  );
 
   const value: AuthContextType = {
     user,
