@@ -94,16 +94,21 @@ const filteredSales = safeSales.filter(sale => {
 
    const topCategories = Object.entries(salesByCategory).sort((a,b) => b[1] - a[1]).map(([name, total]) => ({name, total}));
 
-  const stockByCategory = safeProducts.reduce((acc, product) => {
-    const category = product.category || 'Sem categoria';
-    acc[category] = (acc[category] || 0) + product.stock_qty;
-    return acc;
-  }, {} as Record<string, number>);
-  const stockByCategoryData = Object.entries(stockByCategory).map(([name, total]) => ({ name, total }));
+const stockByCategory = safeProducts.reduce((acc, product) => {
+  const category = product.category || 'Sem categoria';
+  acc[category] = (acc[category] || 0) + product.stock_qty;
+  return acc;
+}, {} as Record<string, number>);
+const stockByCategoryData = Object.entries(stockByCategory).map(([name, total]) => ({ name, total }));
 
-  const safeProducts = Array.isArray(products) ? products : [];
-  const criticalStockProducts = safeProducts.filter(p => p.active && p.stock_qty > 0 && p.min_stock_qty && p.stock_qty <= p.min_stock_qty);
-  const productsWithoutSale = safeProducts.filter(p =>p.stock_qty > 0 &&!filteredSales.some(s =>(Array.isArray(s.items) ? s.items : []).some(i => i.product_id === p.id)));
+const criticalStockProducts = safeProducts.filter(p => p.active && p.stock_qty > 0 && p.min_stock_qty && p.stock_qty <= p.min_stock_qty);
+const productsWithoutSale = safeProducts.filter(
+  p =>
+    p.stock_qty > 0 &&
+    !filteredSales.some(s =>
+      (Array.isArray(s.items) ? s.items : []).some(i => i.product_id === p.id)
+    )
+);
   const openCashRegister = safeCashRegisters.find(cr => cr.closed_at === null);
   const openCashRegister = safeCashRegisters.find(cr => cr.closed_at === null);
   const salesInOpenRegister = openCashRegister? safeSales.filter(s => new Date(s.created_at) >= new Date(openCashRegister.opened_at)): [];
