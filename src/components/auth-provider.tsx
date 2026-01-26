@@ -124,13 +124,11 @@ const [
   cashRegistersResult,
   memberEntriesResult,
 ] = await Promise.all([
-        supabase.from('stores').select('*').eq('id', storeId).maybeSingle(),
-        supabase.from('products').select('*').eq('store_id', storeId).order('name', { ascending: true }),
-        supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeId).order('created_at', { ascending: false }),
-        supabase.from('cash_registers').select('*').eq('store_id', storeId).order('opened_at', { ascending: false }),
-        supabase.from('store_members').select('*').eq('store_id', storeId),
-      ]);
-      
+  supabase.from('products').select('*').eq('store_id', storeId).order('name', { ascending: true }),
+  supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeId).order('created_at', { ascending: false }),
+  supabase.from('cash_registers').select('*').eq('store_id', storeId).order('opened_at', { ascending: false }),
+  supabase.from('store_members').select('*').eq('store_id', storeId),
+])  
       const { data: storeDetails, error: storeError } = storeDetailsResult;
       const { data: products, error: productsError } = productsResult;
       const { data: sales, error: salesError } = salesResult;
