@@ -37,7 +37,7 @@ const paymentMethodLabels = {
 
 export default function SalesPage() {
   const router = useRouter();
-  const { sales } = useAuth();
+  const { sales, products } = useAuth();
   const [dateRange, setDateRange] = useState<DateRange | undefined>({ from: addDays(startOfToday(), -29), to: new Date() });
   const [searchQuery, setSearchQuery] = useState('');
   const [paymentFilter, setPaymentFilter] = useState('all');
@@ -57,10 +57,17 @@ export default function SalesPage() {
         const lowerCaseQuery = searchQuery.toLowerCase();
         return (
           sale.id.toLowerCase().includes(lowerCaseQuery) ||
-          sale.items.some(item => item.product_name_snapshot.toLowerCase().includes(lowerCaseQuery))
+          sale.items.some(item => {
+            if (item.product_name_snapshot.toLowerCase().includes(lowerCaseQuery)) {
+              return true;
+            }
+            // Find the product to check its barcode
+            const product = products.find(p => p.id === item.product_id);
+            return product && product.barcode && product.barcode.toLowerCase().includes(lowerCaseQuery);
+          })
         );
       });
-  }, [sales, dateRange, searchQuery, paymentFilter]);
+  }, [sales, products, dateRange, searchQuery, paymentFilter]);
 
   const kpiData = useMemo(() => {
     const totalCents = filteredSales.reduce((sum, sale) => sum + sale.total_cents, 0);
@@ -117,7 +124,7 @@ export default function SalesPage() {
               <div className="relative flex-1 min-w-[200px]">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Buscar por ID ou produto..."
+                  placeholder="Buscar por ID, produto ou cód. de barras..."
                   className="pl-10"
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
