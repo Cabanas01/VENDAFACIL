@@ -55,7 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const [user, setUser] = useState<User | null>(null);
   const [store, setStore] = useState<Store | null>(null);
-  const [storeStatus, setStoreStatus] = useState<StoreStatus>('loading');
+  const [storeStatus, setStoreStatus] = useState<StoreStatus>('unknown');
   const [storeError, setStoreError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -478,32 +478,33 @@ useEffect(() => {
 }, [supabase, store, user, products, fetchStoreData]);
 
 
-  const value: AuthContextType = {
-    user,
-    isAuthenticated: !!user,
-    store,
-    loading,
-    storeStatus,
-    storeError,
-    login,
-    signup,
-    logout,
-    deleteAccount,
-    createStore,
-    updateStore,
-    updateUser,
-    removeStoreMember,
-    products,
-    sales,
-    cashRegisters,
-    addProduct,
-    updateProduct,
-    updateProductStock,
-    removeProduct,
-    findProductByBarcode,
-    setCashRegisters,
-    addSale,
-  };
+const value: AuthContextType = {
+  user,
+  isAuthenticated: !!user,
+  store,
+  loading,
+  storeStatus,
+  storeError,
+  fetchStoreData,
+  login,
+  signup,
+  logout,
+  deleteAccount,
+  createStore,
+  updateStore,
+  updateUser,
+  removeStoreMember,
+  products,
+  sales,
+  cashRegisters,
+  addProduct,
+  updateProduct,
+  updateProductStock,
+  removeProduct,
+  findProductByBarcode,
+  setCashRegisters,
+  addSale,
+};
 
   if (!supabase) {
     return (
