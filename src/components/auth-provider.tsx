@@ -204,12 +204,12 @@ const handleSession = useCallback(
   [fetchStoreData]
 );
   
-useEffect(() => 
+useEffect(() => {
   if (!supabase) return;
 
   const init = async () => {
     const { data: { session } } = await supabase.auth.getSession();
-    handleSession(session);
+    await handleSession(session);
     setLoading(false);
   };
 
@@ -224,6 +224,7 @@ useEffect(() =>
     subscription.unsubscribe();
   };
 }, [supabase, handleSession]);
+
 
   const login = useCallback(
     async (email: string, password: string) => {
