@@ -53,14 +53,16 @@ const safeCashRegisters = Array.isArray(cashRegisters) ? cashRegisters : [];
   }, [user, storeStatus, fetchStoreData]);
 
   // Filtered data based on dateRange (simulation)
-  const filteredSales = safeSales.filter(sale => {
-      const saleDate = new Date(sale.created_at);
-      if (!dateRange?.from) {
-          return false;
-      }
-      const toDate = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
-      return saleDate >= startOfToday() && saleDate <= toDate;
-  });
+  const safeSales = Array.isArray(sales) ? sales : [];
+
+const filteredSales = safeSales.filter(sale => {
+  const saleDate = new Date(sale.created_at);
+  if (!dateRange?.from) {
+    return false;
+  }
+  const toDate = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
+  return saleDate >= startOfToday() && saleDate <= toDate;
+});
 
   const totalRevenue = filteredSales.reduce((sum, sale) => sum + sale.total_cents, 0);
   const totalSales = filteredSales.length;
@@ -100,13 +102,13 @@ const safeCashRegisters = Array.isArray(cashRegisters) ? cashRegisters : [];
   }, {} as Record<string, number>);
   const stockByCategoryData = Object.entries(stockByCategory).map(([name, total]) => ({ name, total }));
 
+  const safeProducts = Array.isArray(products) ? products : [];
   const criticalStockProducts = safeProducts.filter(p => p.active && p.stock_qty > 0 && p.min_stock_qty && p.stock_qty <= p.min_stock_qty);
   const productsWithoutSale = safeProducts.filter(p => p.stock_qty > 0 && !filteredSales.some(s => s.items.some(i => i.product_id === p.id)));
   const openCashRegister = safeCashRegisters.find(cr => cr.closed_at === null);
-  const salesInOpenRegister = openCashRegister ? safeSales.filter(s => new Date(s.created_at) >= new Date(openCashRegister.opened_at)) : [];
+  const salesInOpenRegister = openCashRegister? safeSales.filter(s => new Date(s.created_at) >= new Date(openCashRegister.opened_at)):[];
   const revenueInOpenRegister = salesInOpenRegister.reduce((sum, sale) => sum + sale.total_cents, 0);
   const expectedClosing = openCashRegister ? openCashRegister.opening_amount_cents + revenueInOpenRegister : 0;
-
 if (!user) {
   return <div className="p-6">Usuário não autenticado</div>;
 }
