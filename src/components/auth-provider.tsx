@@ -204,7 +204,7 @@ const handleSession = useCallback(
   [fetchStoreData]
 );
   
-useEffect(() => {
+useEffect(() => 
   if (!supabase) return;
 
   if (user && storeStatus !== 'has') {
