@@ -25,16 +25,21 @@ const formatCurrency = (value: number) =>
 
 export default function DashboardPage() {
   const {
-    user,
-    store,
-    storeStatus,
-    fetchStoreData,
-    products,
-    sales,
-    cashRegisters,
-  } = useAuth();
+  user,
+  store,
+  storeStatus,
+  fetchStoreData,
+  products,
+  sales,
+  cashRegisters,
+} = useAuth();
 
-  const router = useRouter();
+const router = useRouter();
+
+// 🔒 BLINDAGEM ABSOLUTA
+const safeSales = Array.isArray(sales) ? sales : [];
+const safeProducts = Array.isArray(products) ? products : [];
+const safeCashRegisters = Array.isArray(cashRegisters) ? cashRegisters : [];
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: addDays(startOfToday(), -6),
@@ -48,7 +53,7 @@ export default function DashboardPage() {
   }, [user, storeStatus, fetchStoreData]);
 
   // Filtered data based on dateRange (simulation)
-  const filteredSales = sales.filter(sale => {
+  const filteredSales = safeSales.filter(sale => {
       const saleDate = new Date(sale.created_at);
       if (!dateRange?.from) {
           return false;
@@ -78,7 +83,7 @@ export default function DashboardPage() {
   const salesByCategory = filteredSales
     .flatMap(sale => sale.items)
     .map(item => {
-        const product = products.find(p => p.id === item.product_id);
+        const product = safeProducts.find(p => p.id === item.product_id);
         return { ...item, category: product?.category || 'Sem categoria' };
     })
     .reduce((acc, item) => {
@@ -88,18 +93,17 @@ export default function DashboardPage() {
 
    const topCategories = Object.entries(salesByCategory).sort((a,b) => b[1] - a[1]).map(([name, total]) => ({name, total}));
 
-  const stockByCategory = products.reduce((acc, product) => {
+  const stockByCategory = safeProducts.reduce((acc, product) => {
     const category = product.category || 'Sem categoria';
     acc[category] = (acc[category] || 0) + product.stock_qty;
     return acc;
   }, {} as Record<string, number>);
   const stockByCategoryData = Object.entries(stockByCategory).map(([name, total]) => ({ name, total }));
 
-  const criticalStockProducts = products.filter(p => p.active && p.stock_qty > 0 && p.min_stock_qty && p.stock_qty <= p.min_stock_qty);
-  const productsWithoutSale = products.filter(p => p.stock_qty > 0 && !filteredSales.some(s => s.items.some(i => i.product_id === p.id)));
-
-  const openCashRegister = cashRegisters.find(cr => cr.closed_at === null);
-  const salesInOpenRegister = openCashRegister ? sales.filter(s => new Date(s.created_at) >= new Date(openCashRegister.opened_at)) : [];
+  const criticalStockProducts = safeProducts.filter(p => p.active && p.stock_qty > 0 && p.min_stock_qty && p.stock_qty <= p.min_stock_qty);
+  const productsWithoutSale = safeProducts.filter(p => p.stock_qty > 0 && !filteredSales.some(s => s.items.some(i => i.product_id === p.id)));
+  const openCashRegister = safeCashRegisters.find(cr => cr.closed_at === null);
+  const salesInOpenRegister = openCashRegister ? safeSales.filter(s => new Date(s.created_at) >= new Date(openCashRegister.opened_at)) : [];
   const revenueInOpenRegister = salesInOpenRegister.reduce((sum, sale) => sum + sale.total_cents, 0);
   const expectedClosing = openCashRegister ? openCashRegister.opening_amount_cents + revenueInOpenRegister : 0;
 
