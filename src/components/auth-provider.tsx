@@ -12,7 +12,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import type { AuthError } from '@supabase/supabase-js';
-import type { User, Store, Product, Sale, CashRegister, CartItem, StoreStatus, StoreSettings } from '@/lib/types';
+import type { User, Store, Product, Sale, CashRegister, CartItem, StoreStatus, StoreMember } from '@/lib/types';
 
 type AuthContextType = {
   user: User | null;
@@ -72,30 +72,84 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStoreError(null);
 
     try {
-      const { data: storeData, error } = await supabase.rpc('get_user_store_and_data', { p_user_id: userId }).single();
+      // Step 1: Find the user's store, either as owner or member.
+      let storeId: string | null = null;
       
-      if (error) {
-        if (error.code === 'PGRST116') { // No rows found
-          setStore(null);
-          setStoreStatus('none');
-          setProductsState([]);
-          setSalesState([]);
-          setCashRegistersState([]);
-          return;
-        }
-        throw error;
-      }
-      
-      if (storeData) {
-        setStore(storeData.store_details);
-        setProductsState(storeData.products || []);
-        setSalesState([...(storeData.sales || [])]);
-        setCashRegistersState(storeData.cash_registers || []);
-        setStoreStatus('has');
+      const { data: ownerStore, error: ownerError } = await supabase
+        .from('stores')
+        .select('id')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (ownerError) throw ownerError;
+
+      if (ownerStore) {
+        storeId = ownerStore.id;
       } else {
+        const { data: memberEntry, error: memberError } = await supabase
+          .from('store_members')
+          .select('store_id')
+          .eq('user_id', userId)
+          .maybeSingle();
+        
+        if (memberError) throw memberError;
+
+        if (memberEntry) {
+          storeId = memberEntry.store_id;
+        }
+      }
+
+      // Step 2: If no store is found, set status to 'none' and finish.
+      if (!storeId) {
         setStore(null);
         setStoreStatus('none');
+        setProductsState([]);
+        setSalesState([]);
+        setCashRegistersState([]);
+        return;
       }
+      
+      // Step 3: Fetch all related data in parallel using the found store ID.
+      const [
+        storeDetailsResult,
+        membersResult,
+        productsResult,
+        salesResult,
+        cashRegistersResult
+      ] = await Promise.all([
+        supabase.from('stores').select('*').eq('id', storeId).single(),
+        supabase.from('store_members').select('*, user:users(name, email, avatar_url)').eq('store_id', storeId),
+        supabase.from('products').select('*').eq('store_id', storeId).order('name', { ascending: true }),
+        supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeId).order('created_at', { ascending: false }),
+        supabase.from('cash_registers').select('*').eq('store_id', storeId).order('opened_at', { ascending: false })
+      ]);
+      
+      const { data: storeDetails, error: storeError } = storeDetailsResult;
+      const { data: members, error: membersError } = membersResult;
+      const { data: products, error: productsError } = productsResult;
+      const { data: sales, error: salesError } = salesResult;
+      const { data: cashRegisters, error: cashRegistersError } = cashRegistersResult;
+
+      // Step 4: Handle any errors from the parallel fetches.
+      if (storeError || membersError || productsError || salesError || cashRegistersError) {
+        throw storeError || membersError || productsError || salesError || cashRegistersError;
+      }
+
+      // Step 5: Format the fetched data and update the application state.
+      const formattedMembers: StoreMember[] = (members || []).map((m: any) => ({
+        user_id: m.user_id,
+        store_id: m.store_id,
+        role: m.role,
+        name: m.user.name,
+        email: m.user.email,
+        avatar_url: m.user.avatar_url,
+      }));
+
+      setStore({ ...storeDetails, members: formattedMembers });
+      setProductsState(products || []);
+      setSalesState(sales || []);
+      setCashRegistersState(cashRegisters || []);
+      setStoreStatus('has');
 
     } catch (err: any) {
         console.error('[STORE] Fatal error fetching store data:', err);
@@ -305,8 +359,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (saleError) throw saleError;
 
-      // 2. Prepare and insert sale items one by one for robustness
-      const insertedItemIds = [];
+      // 2. Prepare and insert sale items, one by one for robustness.
+      const insertedItemIds: number[] = [];
       for (const item of cart) {
         const { data: insertedItem, error: itemError } = await supabase.from('sale_items').insert({
             sale_id: saleId,
@@ -339,12 +393,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             p_product_id: item.product_id,
             p_quantity: item.quantity,
         });
-        if (stockError) stockErrors.push(stockError);
+        if (stockError) {
+            stockErrors.push(stockError);
+            console.error('[SALE] Stock decrement failed for product', item.product_id, stockError);
+        }
       }
       if (stockErrors.length > 0) {
-          console.warn('[SALE] Stock decrement failed for some items', stockErrors);
-          // Note: We are not rolling back the sale if stock fails, to prioritize recording the sale.
-          // This could be changed based on business logic.
+          console.error('[SALE] Stock decrement failed for some items, rolling back sale...', stockErrors);
+          // Rollback sale if stock decrement fails
+          if (insertedItemIds.length > 0) {
+            await supabase.from('sale_items').delete().in('id', insertedItemIds);
+          }
+          await supabase.from('sales').delete().eq('id', saleId);
+          throw new Error('Failed to update stock for one or more items.');
       }
 
       // 4. Refresh all store data to reflect the new sale and stock levels
