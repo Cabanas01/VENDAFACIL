@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { DateRange } from 'react-day-picker';
 import { addDays, startOfToday, endOfDay } from 'date-fns';
 import { DollarSign, ShoppingCart, TrendingUp, AlertTriangle, Package, CheckCircle, Info } from 'lucide-react';
@@ -24,12 +24,28 @@ const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value / 100);
 
 export default function DashboardPage() {
-  const { products, sales, cashRegisters } = useAuth();
+  const {
+    user,
+    store,
+    storeStatus,
+    fetchStoreData,
+    products,
+    sales,
+    cashRegisters,
+  } = useAuth();
+
   const router = useRouter();
+
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: addDays(startOfToday(), -6),
     to: new Date(),
   });
+
+   useEffect(() => {
+    if (user && storeStatus === 'unknown') {
+      fetchStoreData(user.id);
+    }
+  }, [user, storeStatus, fetchStoreData]);
 
   // Filtered data based on dateRange (simulation)
   const filteredSales = sales.filter(sale => {
@@ -86,6 +102,18 @@ export default function DashboardPage() {
   const salesInOpenRegister = openCashRegister ? sales.filter(s => new Date(s.created_at) >= new Date(openCashRegister.opened_at)) : [];
   const revenueInOpenRegister = salesInOpenRegister.reduce((sum, sale) => sum + sale.total_cents, 0);
   const expectedClosing = openCashRegister ? openCashRegister.opening_amount_cents + revenueInOpenRegister : 0;
+
+if (!user) {
+  return <div className="p-6">Usuário não autenticado</div>;
+}
+
+if (storeStatus === 'loading') {
+  return <div className="p-6">Carregando loja...</div>;
+}
+
+if (storeStatus === 'none') {
+  return <div className="p-6">Você ainda não tem uma loja</div>;
+}
   
   return (
     <>
