@@ -181,23 +181,32 @@ const [
     }
   }, [supabase]);
 
-const handleSession = useCallback((session: any) => {
-  const supabaseUser = session?.user;
+const handleSession = useCallback(
+  async (session: any) => {
+    const supabaseUser = session?.user;
 
-  if (!supabaseUser) {
-    setUser(null);
-    setStore(null);
-    setStoreStatus('unknown');
-    return;
-  }
+    if (!supabaseUser) {
+      setUser(null);
+      setStore(null);
+      setStoreStatus('unknown');
+      return;
+    }
 
-  setUser({
-    id: supabaseUser.id,
-    email: supabaseUser.email,
-  } as any);
-}, []);
+    const basicUser = {
+      id: supabaseUser.id,
+      email: supabaseUser.email,
+    } as any;
 
-useEffect(() => {
+    setUser(basicUser);
+
+    await fetchStoreData(supabaseUser.id);
+  },
+  [fetchStoreData]
+);
+  
+useEffect(() => 
+  if (user && storeStatus !== 'has') {
+  fetchStoreData(user.id);
   if (!supabase) return;
 
   const init = async () => {
