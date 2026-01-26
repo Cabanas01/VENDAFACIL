@@ -23,7 +23,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useAuth } from '@/components/auth-provider';
-import type { Product, CartItem } from '@/lib/types';
+import type { Product, CartItem, Sale } from '@/lib/types';
+import { printReceipt } from '@/lib/print-receipt';
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value / 100);
@@ -31,7 +32,7 @@ const formatCurrency = (value: number) =>
 export default function NewSalePage() {
   const router = useRouter();
   const { toast } = useToast();
-  const { products, addSale, findProductByBarcode } = useAuth();
+  const { products, addSale, findProductByBarcode, store } = useAuth();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -76,8 +77,16 @@ export default function NewSalePage() {
   };
 
   const filteredProducts = useMemo(() => {
-    return products.filter(
-      p => p.active && p.name.toLowerCase().includes(searchQuery.toLowerCase())
+    const q = searchQuery.trim().toLowerCase();
+  
+    if (!q) return products.filter(p => p.active);
+  
+    return products.filter(p =>
+      p.active &&
+      (
+        p.name.toLowerCase().includes(q) ||
+        (p.barcode && p.barcode.toLowerCase().includes(q))
+      )
     );
   }, [products, searchQuery]);
 
@@ -136,10 +145,19 @@ export default function NewSalePage() {
       toast({ variant: 'destructive', title: 'Carrinho vazio' });
       return;
     }
+    if (!store) {
+      toast({ variant: 'destructive', title: 'Erro', description: 'Dados da loja não encontrados.' });
+      return;
+    }
 
     try {
-        await addSale(cart, paymentMethod);
-        toast({ title: 'Venda realizada com sucesso!', description: `Total: ${formatCurrency(cartTotal)}` });
+        const newSale = await addSale(cart, paymentMethod);
+        if (newSale) {
+            toast({ title: 'Venda realizada com sucesso!', description: `Total: ${formatCurrency(cartTotal)}` });
+            printReceipt(newSale, store);
+        } else {
+            throw new Error('A venda não foi concluída com sucesso.');
+        }
         setCart([]);
         setIsConfirming(false);
         router.push('/sales');

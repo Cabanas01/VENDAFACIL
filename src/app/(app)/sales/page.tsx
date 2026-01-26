@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { format, parseISO, addDays, startOfToday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Search, PlusCircle, DollarSign, ShoppingCart, TrendingUp, MoreHorizontal, CreditCard, Coins, PiggyBank } from 'lucide-react';
+import { Search, PlusCircle, DollarSign, ShoppingCart, TrendingUp, MoreHorizontal, CreditCard, Coins, PiggyBank, Printer } from 'lucide-react';
 import type { DateRange } from 'react-day-picker';
 
 import { PageHeader } from '@/components/page-header';
@@ -13,12 +13,13 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { DateRangePicker } from '@/components/date-range-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/components/auth-provider';
 import type { Sale } from '@/lib/types';
 import { startOfDay, endOfDay } from 'date-fns';
+import { printReceipt } from '@/lib/print-receipt';
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value / 100);
@@ -37,7 +38,7 @@ const paymentMethodLabels = {
 
 export default function SalesPage() {
   const router = useRouter();
-  const { sales } = useAuth();
+  const { sales, store } = useAuth();
   const [dateRange, setDateRange] = useState<DateRange | undefined>({ from: addDays(startOfToday(), -29), to: new Date() });
   const [searchQuery, setSearchQuery] = useState('');
   const [paymentFilter, setPaymentFilter] = useState('all');
@@ -202,6 +203,16 @@ export default function SalesPage() {
                                  </TableBody>
                                </Table>
                             </div>
+                            <DialogFooter>
+                                <Button 
+                                    variant="outline" 
+                                    onClick={() => store && printReceipt(sale, store)} 
+                                    disabled={!store}
+                                >
+                                    <Printer className="mr-2 h-4 w-4" />
+                                    Imprimir Cupom
+                                </Button>
+                            </DialogFooter>
                           </DialogContent>
                         </Dialog>
                       </TableCell>

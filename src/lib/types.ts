@@ -12,6 +12,7 @@ export type StoreSettings = {
   allowNegativeStock?: boolean;
   defaultProfitMargin?: number;
   defaultMinStock?: number;
+  receiptWidth?: '58mm' | '80mm';
 };
 
 export type StoreMember = {

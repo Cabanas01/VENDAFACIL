@@ -276,6 +276,7 @@ export default function SettingsPage() {
           <TabsTrigger value="operacao" className="w-full justify-start">Operação do PDV</TabsTrigger>
           <TabsTrigger value="caixa" className="w-full justify-start">Caixa & Financeiro</TabsTrigger>
           <TabsTrigger value="produtos" className="w-full justify-start">Produtos & Estoque</TabsTrigger>
+          <TabsTrigger value="impressao" className="w-full justify-start">Impressão</TabsTrigger>
           <TabsTrigger value="usuarios" className="w-full justify-start">Usuários & Acessos</TabsTrigger>
           <TabsTrigger value="seguranca" className="w-full justify-start text-red-500">Segurança & Conta</TabsTrigger>
         </TabsList>
@@ -451,6 +452,34 @@ export default function SettingsPage() {
                  <div className="space-y-2 p-4 border rounded-lg">
                     <Label htmlFor="min-stock">Estoque mínimo padrão</Label>
                     <Input id="min-stock" type="number" value={settings.defaultMinStock ?? ''} onChange={(e) => setSettings({...settings, defaultMinStock: Number(e.target.value)})} className="w-24" />
+                </div>
+              </CardContent>
+               <CardFooter><Button onClick={handleSettingsSave}>Salvar Alterações</Button></CardFooter>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="impressao">
+             <Card>
+              <CardHeader>
+                <CardTitle>Impressão e Recibos</CardTitle>
+                <CardDescription>Configure a aparência dos seus cupons de venda.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                 <div className="space-y-2 p-4 border rounded-lg">
+                    <Label>Largura do Cupom</Label>
+                    <Select
+                        value={settings.receiptWidth ?? '80mm'}
+                        onValueChange={(value: '58mm' | '80mm') => setSettings({...settings, receiptWidth: value})}
+                    >
+                        <SelectTrigger className="w-[180px]">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="80mm">80mm (padrão)</SelectItem>
+                            <SelectItem value="58mm">58mm</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">Escolha a largura de papel da sua impressora térmica.</p>
                 </div>
               </CardContent>
                <CardFooter><Button onClick={handleSettingsSave}>Salvar Alterações</Button></CardFooter>

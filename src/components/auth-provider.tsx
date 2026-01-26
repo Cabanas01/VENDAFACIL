@@ -12,7 +12,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import type { AuthError } from '@supabase/supabase-js';
-import type { User, Store, Product, Sale, CashRegister, CartItem, StoreStatus, StoreMember } from '@/lib/types';
+import type { User, Store, Product, Sale, CashRegister, CartItem, StoreStatus, StoreMember, SaleItem } from '@/lib/types';
 
 type AuthContextType = {
   user: User | null;
@@ -44,7 +44,7 @@ type AuthContextType = {
   
   setCashRegisters: (action: React.SetStateAction<CashRegister[]>) => Promise<void>;
 
-  addSale: (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => Promise<void>;
+  addSale: (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => Promise<Sale | null>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -405,12 +405,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await fetchStoreData(user.id);
   }, [supabase, user, store, cashRegisters, fetchStoreData]);
 
-  const addSale = useCallback(async (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => {
+  const addSale = useCallback(async (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card'): Promise<Sale | null> => {
     if (!supabase || !store || !user) {
       throw new Error('Session/store not initialized.');
     }
 
-    // 1. Pre-flight check for stock
+    // 1. Pre-flight check for stock (client-side)
     for (const item of cart) {
         const product = products.find(p => p.id === item.product_id);
         if (!product || product.stock_qty < item.quantity) {
@@ -421,67 +421,68 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const saleId = crypto.randomUUID();
     const totalCents = cart.reduce((sum, item) => sum + item.subtotal_cents, 0);
 
-    // 2. Insert main sale record
-    const { error: saleInsertError } = await supabase.from('sales').insert({
+    // 2. Create Sale Record
+    const { data: saleData, error: saleInsertError } = await supabase
+      .from('sales')
+      .insert({
         id: saleId,
         store_id: store.id,
         total_cents: totalCents,
         payment_method: paymentMethod,
-    });
+      })
+      .select()
+      .single();
 
     if (saleInsertError) {
-        console.error('[SALE] Failed at Step 1: Inserting sale record', saleInsertError);
-        throw saleInsertError;
+      console.error('[SALE] Failed at Step 1: Inserting sale record', saleInsertError);
+      throw saleInsertError;
     }
 
-    // If we get here, the sale record was created. We now need to be able to roll back.
     try {
-        // 3. Insert items and update stock sequentially
-        for (const item of cart) {
-            // 3a. Insert sale item
-            const { error: itemInsertError } = await supabase.from('sale_items').insert({
-                sale_id: saleId,
-                product_id: item.product_id,
-                quantity: item.quantity,
-                unit_price_cents: item.unit_price_cents,
-                subtotal_cents: item.subtotal_cents,
-                product_name_snapshot: item.product_name_snapshot,
-                product_barcode_snapshot: item.product_barcode_snapshot ?? null,
-            });
+      // 3. Insert Items and update stock sequentially
+      const saleItems: SaleItem[] = [];
+      for (const item of cart) {
+        // 3a. Insert sale item
+        const { data: insertedItem, error: itemInsertError } = await supabase
+          .from('sale_items')
+          .insert({
+            id: crypto.randomUUID(),
+            sale_id: saleId,
+            product_id: item.product_id,
+            quantity: item.quantity,
+            unit_price_cents: item.unit_price_cents,
+            subtotal_cents: item.subtotal_cents,
+            product_name_snapshot: item.product_name_snapshot,
+            product_barcode_snapshot: item.product_barcode_snapshot ?? null,
+          })
+          .select()
+          .single();
+        
+        if (itemInsertError) throw itemInsertError;
+        saleItems.push(insertedItem as SaleItem);
 
-            if (itemInsertError) {
-                // Throw to enter the catch block for rollback
-                throw itemInsertError;
-            }
+        // 3b. Update product stock
+        const { error: stockUpdateError } = await supabase.rpc('decrement_stock', {
+          p_product_id: item.product_id,
+          p_quantity: item.quantity,
+        });
+        
+        if (stockUpdateError) throw stockUpdateError;
+      }
 
-            // 3b. Update product stock
-            const product = products.find(p => p.id === item.product_id)!;
-            const newStock = product.stock_qty - item.quantity;
-            const { error: stockUpdateError } = await supabase
-                .from('products')
-                .update({ stock_qty: newStock })
-                .eq('id', item.product_id);
-            
-            if (stockUpdateError) {
-                // Throw to enter the catch block for rollback
-                throw stockUpdateError;
-            }
-        }
-
-        // 4. If all successful, refresh data
-        await fetchStoreData(user.id);
+      // 4. If all successful, refresh data and return created sale
+      await fetchStoreData(user.id);
+      const newSale: Sale = { ...saleData, items: saleItems };
+      return newSale;
 
     } catch (error: any) {
         // 5. ROLLBACK!
         console.error('[SALE] Transaction failed, rolling back sale record...', error);
         
-        // This assumes ON DELETE CASCADE is set on the foreign key in sale_items.
-        // If not, the sale_items would be orphaned. For this context, deleting the sale is a good-enough rollback.
+        // Deleting the sale should cascade and delete sale_items if the FK is set up correctly.
         const { error: deleteError } = await supabase.from('sales').delete().eq('id', saleId);
         if (deleteError) {
-            // This is a catastrophic failure. The DB is in an inconsistent state.
-             console.error(`[SALE] CATASTROPHIC: FAILED TO ROLLBACK SALE ${saleId}. MANUAL INTERVENTION REQUIRED.`, deleteError);
-             throw new Error(`Falha crítica ao processar a venda. Contate o suporte com o ID: ${saleId}`);
+            console.error(`[SALE] CATASTROPHIC: FAILED TO ROLLBACK SALE ${saleId}. MANUAL INTERVENTION REQUIRED.`, deleteError);
         }
 
         throw new Error(error.message || 'Falha ao processar a venda. A transação foi revertida.');
