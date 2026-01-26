@@ -112,23 +112,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Step 3: Fetch all related data in parallel using the found store ID.
       const [
         storeDetailsResult,
-        membersResult,
         productsResult,
         salesResult,
         cashRegistersResult
       ] = await Promise.all([
         supabase.from('stores').select('*').eq('id', storeId).single(),
-        supabase.from('store_members').select('*, user:users(name, email, avatar_url)').eq('store_id', storeId),
         supabase.from('products').select('*').eq('store_id', storeId).order('name', { ascending: true }),
         supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeId).order('created_at', { ascending: false }),
         supabase.from('cash_registers').select('*').eq('store_id', storeId).order('opened_at', { ascending: false })
       ]);
       
       const { data: storeDetails, error: storeError } = storeDetailsResult;
-      const { data: members, error: membersError } = membersResult;
       const { data: products, error: productsError } = productsResult;
       const { data: sales, error: salesError } = salesResult;
       const { data: cashRegisters, error: cashRegistersError } = cashRegistersResult;
+
+      // Step 3.5: Fetch members and their user profiles in a two-step process
+      let formattedMembers: StoreMember[] = [];
+      const { data: memberEntries, error: membersError } = await supabase
+        .from('store_members')
+        .select('*')
+        .eq('store_id', storeId);
+
+      if (memberEntries && memberEntries.length > 0) {
+        const userIds = memberEntries.map(m => m.user_id);
+        const { data: userProfiles, error: usersError } = await supabase
+          .from('users')
+          .select('*')
+          .in('id', userIds);
+        
+        if (usersError) throw usersError;
+
+        const userProfileMap = new Map((userProfiles || []).map(p => [p.id, p]));
+
+        formattedMembers = memberEntries.map((m: any) => {
+          const profile = userProfileMap.get(m.user_id);
+          return {
+            user_id: m.user_id,
+            store_id: m.store_id,
+            role: m.role,
+            name: profile?.name ?? null,
+            email: profile?.email ?? null,
+            avatar_url: profile?.avatar_url ?? null,
+          };
+        });
+      }
 
       // Step 4: Handle any errors from the parallel fetches.
       if (storeError || membersError || productsError || salesError || cashRegistersError) {
@@ -136,15 +164,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       // Step 5: Format the fetched data and update the application state.
-      const formattedMembers: StoreMember[] = (members || []).map((m: any) => ({
-        user_id: m.user_id,
-        store_id: m.store_id,
-        role: m.role,
-        name: m.user.name,
-        email: m.user.email,
-        avatar_url: m.user.avatar_url,
-      }));
-
       setStore({ ...storeDetails, members: formattedMembers });
       setProductsState(products || []);
       setSalesState(sales || []);
