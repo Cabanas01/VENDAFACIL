@@ -36,18 +36,24 @@ export default function NewSalePage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isConfirming, setIsConfirming] = useState(false);
+  const [isSearchingManually, setIsSearchingManually] = useState(false);
   
   const barcodeInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    // If the user is manually searching, don't trap focus.
+    if (isSearchingManually) {
+      return;
+    }
+
     const focusInput = () => barcodeInputRef.current?.focus();
     focusInput();
-    const interval = setInterval(focusInput, 500); // Keep focus on the input
+    const interval = setInterval(focusInput, 500); // Keep focus on the input for the scanner
     
     return () => {
       clearInterval(interval);
     };
-  }, []);
+  }, [isSearchingManually]);
 
   const handleBarcodeScan = async (scannedCode: string) => {
     if (!scannedCode) return;
@@ -176,6 +182,8 @@ export default function NewSalePage() {
                   className="pl-10" 
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
+                  onFocus={() => setIsSearchingManually(true)}
+                  onBlur={() => setIsSearchingManually(false)}
                 />
               </div>
             </CardHeader>
