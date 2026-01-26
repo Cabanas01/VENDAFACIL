@@ -55,6 +55,7 @@ export type Product = {
   stock_qty: number;
   min_stock_qty?: number;
   active: boolean;
+  barcode?: string;
   created_at: string;
 };
 
@@ -68,7 +69,7 @@ export type Sale = {
 };
 
 export type SaleItem = {
-  id?: string;
+  id: string;
   sale_id: string;
   product_id: string;
   product_name_snapshot: string;

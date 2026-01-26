@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Search, PlusCircle, ChevronsLeft, ChevronsRight, MoreHorizontal, AlertCircle, Edit, Trash2 } from 'lucide-react';
+import { Search, PlusCircle, ChevronsLeft, ChevronsRight, MoreHorizontal, AlertCircle, Edit, Trash2, Barcode } from 'lucide-react';
 
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -53,6 +53,7 @@ import { useAuth } from '@/components/auth-provider';
 
 const productSchema = z.object({
   name: z.string().min(1, 'Nome é obrigatório'),
+  barcode: z.string().optional(),
   category: z.string().optional(),
   stock_qty: z.coerce.number().int().min(0, 'Estoque não pode ser negativo').default(0),
   min_stock_qty: z.coerce.number().int().optional(),
@@ -74,7 +75,7 @@ const parseCurrency = (value: string) => {
 };
 
 export default function ProductsPage() {
-  const { products, addProduct, updateProduct, removeProduct, updateProductStock } = useAuth();
+  const { products, addProduct, updateProduct, removeProduct, updateProductStock, findProductByBarcode } = useAuth();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
@@ -84,6 +85,8 @@ export default function ProductsPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [stockFilter, setStockFilter] = useState('all');
   const { toast } = useToast();
+  
+  const barcodeInputRef = useRef<HTMLInputElement>(null);
 
   const categories = useMemo(() => ['all', ...Array.from(new Set(products.map(p => p.category).filter(Boolean)))], [products]);
 
@@ -119,6 +122,7 @@ export default function ProductsPage() {
     if (product) {
       form.reset({
         name: product.name,
+        barcode: product.barcode || '',
         category: product.category || '',
         stock_qty: product.stock_qty,
         min_stock_qty: product.min_stock_qty,
@@ -127,13 +131,25 @@ export default function ProductsPage() {
         cost_cents: product.cost_cents,
       });
     } else {
-      form.reset({ active: true, stock_qty: 0, price_cents: 0, cost_cents: 0, category: '', min_stock_qty: 0 });
+      form.reset({ active: true, stock_qty: 0, price_cents: 0, cost_cents: 0, category: '', min_stock_qty: 0, barcode: '' });
     }
     setIsModalOpen(true);
   };
 
   const onSubmit = async (values: ProductFormValues) => {
     try {
+      if (values.barcode) {
+        const existingProduct = await findProductByBarcode(values.barcode);
+        if (existingProduct && existingProduct.id !== editingProduct?.id) {
+          toast({
+            variant: 'destructive',
+            title: 'Código de barras já existe',
+            description: `O código "${values.barcode}" já está associado ao produto "${existingProduct.name}".`,
+          });
+          return;
+        }
+      }
+
       if (editingProduct) {
         await updateProduct(editingProduct.id, values);
         toast({ title: "Produto atualizado com sucesso!" });
@@ -258,6 +274,7 @@ export default function ProductsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Nome</TableHead>
+                  <TableHead>Cód. Barras</TableHead>
                   <TableHead>Categoria</TableHead>
                   <TableHead>Preço</TableHead>
                   <TableHead>Custo</TableHead>
@@ -272,6 +289,7 @@ export default function ProductsPage() {
                 {filteredProducts.map(p => (
                   <TableRow key={p.id}>
                     <TableCell className="font-medium">{p.name}</TableCell>
+                    <TableCell className="font-mono text-xs">{p.barcode || '-'}</TableCell>
                     <TableCell>{p.category || '-'}</TableCell>
                     <TableCell>{formatCurrency(p.price_cents)}</TableCell>
                     <TableCell>{formatCurrency(p.cost_cents)}</TableCell>
@@ -324,6 +342,22 @@ export default function ProductsPage() {
                   <FormItem><FormLabel>Categoria (opcional)</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                 )} />
               </div>
+              
+              <FormField name="barcode" control={form.control} render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Código de Barras</FormLabel>
+                  <div className="flex items-center gap-2">
+                    <FormControl>
+                      <Input {...field} ref={barcodeInputRef} placeholder="Clique em 'Ler' ou digite" />
+                    </FormControl>
+                    <Button type="button" variant="outline" onClick={() => barcodeInputRef.current?.focus()}>
+                      <Barcode className="mr-2 h-4 w-4" /> Ler
+                    </Button>
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              
               <div className="grid grid-cols-2 gap-4">
                 <FormField name="stock_qty" control={form.control} render={({ field }) => (
                   <FormItem><FormLabel>Estoque Inicial</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>

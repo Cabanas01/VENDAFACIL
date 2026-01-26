@@ -40,6 +40,7 @@ type AuthContextType = {
   updateProduct: (productId: string, product: Partial<Omit<Product, 'id' | 'store_id'>>) => Promise<void>;
   updateProductStock: (productId: string, newStock: number) => Promise<void>;
   removeProduct: (productId: string) => Promise<void>;
+  findProductByBarcode: (barcode: string) => Promise<Product | null>;
   
   setCashRegisters: (action: React.SetStateAction<CashRegister[]>) => Promise<void>;
 
@@ -322,7 +323,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const addProduct = useCallback(async (product: Omit<Product, 'id' | 'store_id' | 'created_at'>) => {
       if (!supabase || !store || !user) return;
-      const { error } = await supabase.from('products').insert({ ...product, store_id: store.id });
+      const productData = {
+        ...product,
+        store_id: store.id,
+        barcode: product.barcode || null,
+      };
+      const { error } = await supabase.from('products').insert(productData);
       if (error) {
         console.error('[PRODUCT] insert error', error);
         throw error;
@@ -332,7 +338,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   
   const updateProduct = useCallback(async (productId: string, product: Partial<Omit<Product, 'id' | 'store_id'>>) => {
       if (!supabase || !store || !user) return;
-      const { error } = await supabase.from('products').update(product).eq('id', productId).eq('store_id', store.id);
+      const productData = {
+        ...product,
+        barcode: product.barcode || null,
+      };
+      const { error } = await supabase.from('products').update(productData).eq('id', productId).eq('store_id', store.id);
       if (error) {
         console.error('[PRODUCT] update error', error);
         throw error;
@@ -360,6 +370,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await fetchStoreData(user.id);
   }, [supabase, store, user, fetchStoreData]);
   
+  const findProductByBarcode = useCallback(async (barcode: string): Promise<Product | null> => {
+    if (!supabase || !store) return null;
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .eq('store_id', store.id)
+      .eq('barcode', barcode)
+      .maybeSingle();
+
+    if (error) {
+      console.error('[PRODUCT] findProductByBarcode error', error);
+      return null;
+    }
+    return data;
+  }, [supabase, store]);
+
   const setCashRegisters = useCallback(async (action: React.SetStateAction<CashRegister[]>) => {
       if (!supabase || !user || !store) return;
       const currentRegisters = cashRegisters;
@@ -378,76 +404,75 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await fetchStoreData(user.id);
   }, [supabase, user, store, cashRegisters, fetchStoreData]);
 
-  const addSale = useCallback(
-    async (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => {
-      if (!supabase || !store || !user) {
-        throw new Error('Session/store not initialized.');
+  const addSale = useCallback(async (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => {
+    if (!supabase || !store || !user) {
+      throw new Error('Session/store not initialized.');
+    }
+
+    const saleId = crypto.randomUUID();
+    const totalCents = cart.reduce((sum, item) => sum + item.subtotal_cents, 0);
+    const saleData = {
+      id: saleId,
+      store_id: store.id,
+      payment_method: paymentMethod,
+      total_cents: totalCents,
+    };
+
+    // Step 1: Insert the main sale record.
+    const { error: saleError } = await supabase.from('sales').insert(saleData);
+
+    if (saleError) {
+      console.error('[SALE] Error creating sale record:', saleError);
+      throw saleError;
+    }
+
+    try {
+      // Step 2: Insert each sale item individually.
+      for (const item of cart) {
+        const saleItemData = {
+          sale_id: saleId,
+          product_id: item.product_id,
+          product_name_snapshot: item.product_name_snapshot,
+          quantity: item.quantity,
+          unit_price_cents: item.unit_price_cents,
+          subtotal_cents: item.subtotal_cents,
+        };
+        const { error: itemError } = await supabase.from('sale_items').insert(saleItemData);
+
+        if (itemError) {
+          console.error('[SALE] Error creating sale item, rolling back...', itemError);
+          throw itemError; // This will be caught by the outer catch block
+        }
       }
-  
-      const saleId = crypto.randomUUID();
-      const totalCents = cart.reduce((sum, item) => sum + item.subtotal_cents, 0);
-  
-      try {
-        // Step 1: Insert the main sale record.
-        const { error: saleError } = await supabase.from('sales').insert({
-          id: saleId,
-          store_id: store.id,
-          payment_method: paymentMethod,
-          total_cents: totalCents,
+
+      // Step 3: Decrement stock for each product individually.
+      for (const item of cart) {
+        const { error: stockError } = await supabase.rpc('decrement_stock', {
+          p_product_id: item.product_id,
+          p_quantity: item.quantity,
         });
-  
-        if (saleError) {
-          console.error('[SALE] Error creating sale record:', saleError);
-          throw saleError;
+
+        if (stockError) {
+          console.error('[SALE] Stock decrement failed, rolling back...', stockError);
+          throw stockError; // This will be caught by the outer catch block
         }
-  
-        // Step 2: Insert each sale item individually.
-        for (const item of cart) {
-          const { error: itemError } = await supabase.from('sale_items').insert({
-            sale_id: saleId,
-            product_id: item.product_id,
-            product_name_snapshot: item.product_name_snapshot,
-            quantity: item.quantity,
-            unit_price_cents: item.unit_price_cents,
-            subtotal_cents: item.subtotal_cents,
-          });
-  
-          if (itemError) {
-            console.error('[SALE] Error creating sale item, rolling back...', itemError);
-            throw itemError;
-          }
-        }
-  
-        // Step 3: Decrement stock for each product individually.
-        for (const item of cart) {
-          const { error: stockError } = await supabase.rpc('decrement_stock', {
-            p_product_id: item.product_id,
-            p_quantity: item.quantity,
-          });
-  
-          if (stockError) {
-            console.error('[SALE] Stock decrement failed, rolling back...', stockError);
-            throw stockError;
-          }
-        }
-  
-        // If all steps succeed, fetch the latest data.
-        await fetchStoreData(user.id);
-  
-      } catch (error) {
-        // Rollback Logic: If any step in the try block fails, this will execute.
-        console.error('[SALE] Full sale creation process failed:', error);
-        
-        // Attempt to delete the sale record. If the foreign key in 'sale_items'
-        // is set to 'on delete cascade', this will also delete the associated items.
-        await supabase.from('sales').delete().eq('id', saleId);
-        
-        // Re-throw the error so the UI can handle it (e.g., show a toast).
-        throw error;
       }
-    },
-    [supabase, store, user, fetchStoreData]
-  );
+
+      // If all steps succeed, fetch the latest data.
+      await fetchStoreData(user.id);
+
+    } catch (error) {
+      // Rollback Logic: If any step after creating the sale fails, this will execute.
+      console.error('[SALE] Full sale creation process failed, rolling back sale:', error);
+      
+      // Attempt to delete the sale record. If the foreign key in 'sale_items'
+      // is set to 'on delete cascade', this will also delete the associated items.
+      await supabase.from('sales').delete().eq('id', saleId);
+      
+      // Re-throw the original error so the UI can handle it.
+      throw error;
+    }
+  }, [supabase, store, user, fetchStoreData]);
 
   const value: AuthContextType = {
     user,
@@ -471,6 +496,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     updateProduct,
     updateProductStock,
     removeProduct,
+    findProductByBarcode,
     setCashRegisters,
     addSale,
   };

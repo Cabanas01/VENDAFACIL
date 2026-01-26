@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, ShoppingCart, PlusCircle, MinusCircle, Trash2, X, CreditCard, Coins, PiggyBank } from 'lucide-react';
+import { Search, ShoppingCart, PlusCircle, MinusCircle, Trash2, X, CreditCard, Coins, PiggyBank, Barcode } from 'lucide-react';
 
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -31,11 +31,43 @@ const formatCurrency = (value: number) =>
 export default function NewSalePage() {
   const router = useRouter();
   const { toast } = useToast();
-  const { products, addSale } = useAuth();
+  const { products, addSale, findProductByBarcode } = useAuth();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isConfirming, setIsConfirming] = useState(false);
+  
+  const barcodeInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const focusInput = () => barcodeInputRef.current?.focus();
+    focusInput();
+    const interval = setInterval(focusInput, 500); // Keep focus on the input
+    
+    return () => {
+      clearInterval(interval);
+    };
+  }, []);
+
+  const handleBarcodeScan = async (scannedCode: string) => {
+    if (!scannedCode) return;
+
+    const product = await findProductByBarcode(scannedCode);
+
+    if (product) {
+      addToCart(product);
+      toast({
+        title: 'Produto Adicionado',
+        description: `${product.name} foi adicionado ao carrinho.`,
+      });
+    } else {
+      toast({
+        variant: 'destructive',
+        title: 'Produto não encontrado',
+        description: `Nenhum produto encontrado com o código: ${scannedCode}`,
+      });
+    }
+  };
 
   const filteredProducts = useMemo(() => {
     return products.filter(
@@ -111,7 +143,26 @@ export default function NewSalePage() {
 
   return (
     <>
-      <PageHeader title="Nova Venda / PDV" subtitle="Selecione os produtos e finalize a venda." />
+      <input
+        ref={barcodeInputRef}
+        type="text"
+        className="absolute w-0 h-0 p-0 m-0 border-0 opacity-0"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === 'Tab') {
+            e.preventDefault();
+            const scannedCode = (e.target as HTMLInputElement).value;
+            handleBarcodeScan(scannedCode);
+            (e.target as HTMLInputElement).value = '';
+          }
+        }}
+      />
+
+      <PageHeader title="Nova Venda / PDV" subtitle="Use o leitor de código de barras ou selecione os produtos.">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Barcode className="h-5 w-5 text-green-500" />
+          <span>Leitor Ativo</span>
+        </div>
+      </PageHeader>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
         {/* Product Selection */}
