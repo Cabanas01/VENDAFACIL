@@ -108,14 +108,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       
-      const [
-        storeDetailsResult,
-        productsResult,
-        salesResult,
-        cashRegistersResult,
-        memberEntriesResult,
-      ] = await Promise.all([
-        supabase.from('stores').select('*').eq('id', storeId).single(),
+      const storeDetailsResult = await supabase
+  .from('stores')
+  .select('*')
+  .eq('id', storeId)
+  .maybeSingle();
+
+if (storeDetailsResult.error || !storeDetailsResult.data) {
+  throw storeDetailsResult.error || new Error('Store not found');
+}
+
+const [
+  productsResult,
+  salesResult,
+  cashRegistersResult,
+  memberEntriesResult,
+] = await Promise.all([
+        supabase.from('stores').select('*').eq('id', storeId).maybeSingle(),
         supabase.from('products').select('*').eq('store_id', storeId).order('name', { ascending: true }),
         supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeId).order('created_at', { ascending: false }),
         supabase.from('cash_registers').select('*').eq('store_id', storeId).order('opened_at', { ascending: false }),
