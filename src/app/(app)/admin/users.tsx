@@ -43,7 +43,7 @@ export default function AdminUsers() {
     action: string
   ) => {
     const { error } = await supabase
-      .from('public.users') // 👈 CRÍTICO
+      .from('users') // 👈 CRÍTICO
       .update(values)
       .eq('id', id);
 
