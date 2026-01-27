@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { getSupabaseClient } from '@/lib/supabase/client';
+import { useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabase/client';
 
 type StoreRow = {
   id: string;
@@ -10,43 +10,45 @@ type StoreRow = {
 };
 
 export default function AdminStores() {
-  const supabase = useMemo(() => getSupabaseClient(), []);
   const [stores, setStores] = useState<StoreRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  async function load() {
-    setLoading(true);
-    setErrorMsg(null);
-
-    // 🔐 garante sessão válida
-    const { data: sess } = await supabase.auth.getSession();
-    if (!sess.session) {
-      setErrorMsg('Sessão inválida. Faça login novamente.');
-      setLoading(false);
-      return;
-    }
-
-    // ✅ NÃO usa public.stores
-    // ✅ NÃO usa order por coluna inexistente
-    const { data, error } = await supabase
-      .from('stores')
-      .select('id, name, user_id');
-
-    if (error) {
-      setErrorMsg(`Erro ao buscar lojas: ${error.message}`);
-      setStores([]);
-      setLoading(false);
-      return;
-    }
-
-    setStores((data ?? []) as StoreRow[]);
-    setLoading(false);
-  }
-
   useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    async function loadStores() {
+      setLoading(true);
+      setErrorMsg(null);
+
+      // 🔐 garante sessão válida (necessário para RLS)
+      const { data: userData, error: userErr } = await supabase.auth.getUser();
+      if (userErr) {
+        setErrorMsg(`Erro ao validar sessão: ${userErr.message}`);
+        setLoading(false);
+        return;
+      }
+
+      if (!userData.user) {
+        setErrorMsg('Sessão inválida. Faça login novamente.');
+        setLoading(false);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('stores')
+        .select('id, name, user_id');
+
+      if (error) {
+        setErrorMsg(`Erro ao buscar lojas: ${error.message}`);
+        setStores([]);
+        setLoading(false);
+        return;
+      }
+
+      setStores((data ?? []) as StoreRow[]);
+      setLoading(false);
+    }
+
+    loadStores();
   }, []);
 
   if (loading) {
@@ -71,9 +73,9 @@ export default function AdminStores() {
         <div className="overflow-auto border rounded">
           <table className="w-full text-sm">
             <thead className="bg-muted/50">
-              <tr>
-                <th className="p-2 text-left">Nome</th>
-                <th className="p-2 text-left">Owner (user_id)</th>
+              <tr className="text-left">
+                <th className="p-2">Nome</th>
+                <th className="p-2">Owner (user_id)</th>
               </tr>
             </thead>
             <tbody>
