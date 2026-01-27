@@ -265,18 +265,17 @@
   </style>
 </head>
 <body>
-  <!-- Checkout Hotmart -->
+  <!-- Checkout Hotmart por plano -->
   <script>
-    const HOTMART_CHECKOUT_SEMANAL = "https://pay.hotmart.com/A104103229T";
-    const HOTMART_CHECKOUT_MENSAL  = "https://pay.hotmart.com/A104103229T";
-    const HOTMART_CHECKOUT_ANUAL   = "https://pay.hotmart.com/A104103229T";
+    const HOTMART_CHECKOUT_SEMANAL = "https://pay.hotmart.com/A104103229T?off=gczhreyg";
+    const HOTMART_CHECKOUT_MENSAL  = "https://pay.hotmart.com/A104103229T?off=3py3921r&bid=1769483117758";
+    const HOTMART_CHECKOUT_ANUAL   = "https://pay.hotmart.com/A104103229T?off=aa1nsl3j";
   </script>
 
   <header class="topbar">
     <div class="container">
       <div class="topbar-inner">
         <div class="brand">
-          <!-- Logo (Next.js /public/logo.png => /logo.png) -->
           <img src="/logo.png" alt="Logo Venda Fácil Brasil" />
           <div>
             <div style="font-size:15px; opacity:.95">Venda Fácil Brasil</div>
@@ -328,9 +327,7 @@
               </a>
             </div>
 
-            <p class="fine">
-              *Ao clicar em um plano, você será redirecionado para o checkout da Hotmart.
-            </p>
+            <p class="fine">*Ao clicar em um plano, você será redirecionado para o checkout da Hotmart.</p>
           </div>
 
           <div class="card" id="beneficios">
@@ -345,11 +342,9 @@
 
             <!-- IMAGEM OPCIONAL DO SISTEMA / MOCKUP -->
             <div class="mock">
-              <!-- Coloque uma imagem em /public e renomeie abaixo, por exemplo:
-                   /public/mockup.png  =>  src="/mockup.png"
-              -->
               <img src="/mockup.png" alt="Prévia do sistema (adicione a imagem em /public/mockup.png)" onerror="this.style.display='none';" />
               <div class="fine">
+                Dica: se você adicionar um print do sistema em <strong>/public/mockup.png</strong>, ele aparece aqui.
               </div>
             </div>
           </div>
@@ -384,7 +379,7 @@
             </ul>
 
             <a class="btn" id="btnSemanal" href="#" target="_blank" rel="noopener">
-              Ir para o checkout
+              Assinar plano semanal
             </a>
             <div class="fine">Checkout 100% seguro pela Hotmart.</div>
           </div>
@@ -500,7 +495,7 @@
   <script>
     document.getElementById("year").textContent = new Date().getFullYear();
 
-    // Setando links nos botões (facilita trocar depois)
+    // Setando links nos botões
     document.getElementById("btnSemanal").href = HOTMART_CHECKOUT_SEMANAL;
     document.getElementById("btnMensal").href  = HOTMART_CHECKOUT_MENSAL;
     document.getElementById("btnAnual").href   = HOTMART_CHECKOUT_ANUAL;
