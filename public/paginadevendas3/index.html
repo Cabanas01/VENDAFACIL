@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Venda Fácil Brasil — Planos</title>
-  <meta name="description" content="Venda Fácil Brasil: sistema para organizar estoque, registrar vendas e controlar o caixa. Escolha o plano semanal, mensal ou anual e finalize no checkout PerfectPay." />
+  <meta name="description" content="Venda Fácil Brasil: sistema para organizar estoque, registrar vendas e controlar o caixa. Escolha o plano semanal, mensal ou anual e finalize no checkout Kiwify." />
 
   <!-- Favicon -->
   <link rel="icon" href="/logo.png" />
@@ -265,11 +265,11 @@
   </style>
 </head>
 <body>
-  <!-- Checkout PerfectPay por plano -->
+  <!-- Checkout Kiwify por plano -->
   <script>
-    const PERFECTPAY_SEMANAL = "https://go.perfectpay.com.br/PPU38CQ6LL2";
-    const PERFECTPAY_MENSAL  = "https://go.perfectpay.com.br/PPU38CQ6LL1";
-    const PERFECTPAY_ANUAL   = "https://go.perfectpay.com.br/PPU38CQ6LL3";
+    const KIWIFY_SEMANAL = "https://pay.kiwify.com.br/ztu615r";
+    const KIWIFY_MENSAL  = "https://pay.kiwify.com.br/gucdGl2";
+    const KIWIFY_ANUAL   = "https://pay.kiwify.com.br/40Jkhth";
   </script>
 
   <header class="topbar">
@@ -327,7 +327,7 @@
               </a>
             </div>
 
-            <p class="fine">*Ao clicar em um plano, você será redirecionado para o checkout da PerfectPay.</p>
+            <p class="fine">*Ao clicar em um plano, você será redirecionado para o checkout da Kiwify.</p>
           </div>
 
           <div class="card" id="beneficios">
@@ -356,7 +356,7 @@
     <section class="section" id="planos">
       <div class="container">
         <h2>Escolha seu plano</h2>
-        <p>Ao clicar, você será redirecionado para o <strong>checkout da PerfectPay</strong>.</p>
+        <p>Ao clicar, você será redirecionado para o <strong>checkout da Kiwify</strong>.</p>
 
         <div class="plans">
           <!-- Semanal -->
@@ -381,7 +381,7 @@
             <a class="btn" id="btnSemanal" href="#" target="_blank" rel="noopener">
               Assinar plano semanal
             </a>
-            <div class="fine">Checkout seguro pela PerfectPay.</div>
+            <div class="fine">Checkout seguro pela Kiwify.</div>
           </div>
 
           <!-- Mensal (destaque) -->
@@ -407,7 +407,7 @@
             <a class="btn primary" id="btnMensal" href="#" target="_blank" rel="noopener">
               Assinar plano mensal
             </a>
-            <div class="fine">Checkout seguro pela PerfectPay.</div>
+            <div class="fine">Checkout seguro pela Kiwify.</div>
           </div>
 
           <!-- Anual -->
@@ -432,7 +432,7 @@
             <a class="btn" id="btnAnual" href="#" target="_blank" rel="noopener">
               Assinar plano anual
             </a>
-            <div class="fine">Checkout seguro pela PerfectPay.</div>
+            <div class="fine">Checkout seguro pela Kiwify.</div>
           </div>
         </div>
 
@@ -459,7 +459,7 @@
 
         <details>
           <summary>Como funciona o pagamento?</summary>
-          <p>Você finaliza pelo checkout da PerfectPay. Após a confirmação, você recebe as instruções de acesso.</p>
+          <p>Você finaliza pelo checkout da Kiwify. Após a confirmação, você recebe as instruções de acesso.</p>
         </details>
 
         <details>
@@ -496,9 +496,9 @@
     document.getElementById("year").textContent = new Date().getFullYear();
 
     // Setando links nos botões
-    document.getElementById("btnSemanal").href = PERFECTPAY_SEMANAL;
-    document.getElementById("btnMensal").href  = PERFECTPAY_MENSAL;
-    document.getElementById("btnAnual").href   = PERFECTPAY_ANUAL;
+    document.getElementById("btnSemanal").href = KIWIFY_SEMANAL;
+    document.getElementById("btnMensal").href  = KIWIFY_MENSAL;
+    document.getElementById("btnAnual").href   = KIWIFY_ANUAL;
   </script>
 </body>
 </html>
