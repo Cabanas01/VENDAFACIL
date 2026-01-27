@@ -15,7 +15,7 @@ export function getSupabaseClient(): SupabaseClient {
   }
 
   supabase = createClient(supabaseUrl, supabaseAnonKey, {
-    db: { schema: 'public' }, // ✅ força schema public
+    db: { schema: 'public' },
     auth: {
       persistSession: true,
       autoRefreshToken: true,
