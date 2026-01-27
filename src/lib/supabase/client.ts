@@ -1,21 +1,23 @@
 'use client';
 
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { createBrowserClient } from '@supabase/ssr';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
-let supabase: SupabaseClient;
+let browserClient: SupabaseClient | null = null;
 
 export function getSupabaseClient(): SupabaseClient {
-  if (supabase) return supabase;
+  if (browserClient) return browserClient;
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+  browserClient = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
 
-  if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error(
-      'Supabase env vars missing: NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY'
-    );
+  // 🔍 DEBUG (remova depois)
+  if (typeof window !== 'undefined') {
+    // @ts-ignore
+    window.__supabase = browserClient;
   }
 
-  supabase = createClient(supabaseUrl, supabaseAnonKey);
-  return supabase;
+  return browserClient;
 }
