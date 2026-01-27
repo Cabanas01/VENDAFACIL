@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Venda Fácil Brasil — Planos</title>
   <meta name="description" content="Venda Fácil Brasil: sistema para organizar estoque, registrar vendas e controlar o caixa. Escolha o plano semanal, mensal ou anual e finalize no checkout Hotmart." />
+
+  <!-- Favicon -->
+  <link rel="icon" href="/logo.png" />
+
   <style>
     :root{
       --bg:#0b1220;
@@ -39,17 +43,23 @@
     .topbar-inner{
       display:flex; align-items:center; justify-content:space-between;
       padding:14px 0;
+      gap:14px;
     }
     .brand{
       display:flex; align-items:center; gap:10px;
       font-weight:900;
       letter-spacing:.2px;
+      min-width: 260px;
     }
-    .logo{
-      width:40px; height:40px; border-radius:12px;
-      background: linear-gradient(135deg, rgba(34,197,94,.95), rgba(6,182,212,.95));
-      box-shadow:0 10px 30px rgba(34,197,94,.18);
+    .brand img{
+      width:42px; height:42px;
+      border-radius:12px;
+      object-fit:cover;
+      box-shadow:0 10px 30px rgba(34,197,94,.12);
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.06);
     }
+
     .nav{
       display:flex; gap:16px; align-items:center;
       color:var(--muted);
@@ -84,7 +94,7 @@
     .hero{ padding:56px 0 18px; }
     .hero-grid{
       display:grid;
-      grid-template-columns: 1.15fr .85fr;
+      grid-template-columns: 1.05fr .95fr;
       gap:22px;
       align-items:start;
     }
@@ -100,6 +110,24 @@
       margin:0 0 18px;
       max-width: 62ch;
     }
+
+    .hero-logo{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      margin-bottom:14px;
+    }
+    .hero-logo img{
+      width:64px; height:64px;
+      border-radius:18px;
+      object-fit:cover;
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.06);
+      box-shadow: 0 16px 50px rgba(0,0,0,.30);
+    }
+    .hero-logo .t1{ font-weight:950; font-size:18px; margin:0 }
+    .hero-logo .t2{ color:var(--muted); font-weight:800; font-size:12px; margin:0 }
+
     .pill-row{ display:flex; flex-wrap:wrap; gap:10px; margin: 18px 0 8px }
     .pill{
       display:inline-flex; align-items:center; gap:8px;
@@ -125,7 +153,6 @@
       box-shadow: 0 12px 32px rgba(0,0,0,.20);
       padding:16px;
     }
-
     .section{ padding: 18px 0 34px; }
     .section h2{
       margin:0 0 10px;
@@ -146,7 +173,7 @@
       display:flex;
       flex-direction:column;
       gap:12px;
-      min-height: 340px;
+      min-height: 360px;
     }
     .plan h3{ margin:0; font-size:18px; }
     .price{ display:flex; align-items:baseline; gap:8px; margin-top:2px; }
@@ -198,6 +225,21 @@
       font-size:12px;
     }
 
+    .mock{
+      margin-top:14px;
+      display:grid;
+      grid-template-columns: 1fr;
+      gap:12px;
+    }
+    .mock img{
+      width:100%;
+      height:auto;
+      border-radius: 16px;
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.04);
+      box-shadow: 0 16px 50px rgba(0,0,0,.25);
+    }
+
     details{
       background: rgba(255,255,255,.04);
       border:1px solid var(--line);
@@ -223,7 +265,7 @@
   </style>
 </head>
 <body>
-  <!-- Coloque aqui o seu link do checkout Hotmart (único ou específico por plano) -->
+  <!-- Checkout Hotmart -->
   <script>
     const HOTMART_CHECKOUT_SEMANAL = "https://pay.hotmart.com/A104103229T";
     const HOTMART_CHECKOUT_MENSAL  = "https://pay.hotmart.com/A104103229T";
@@ -234,7 +276,8 @@
     <div class="container">
       <div class="topbar-inner">
         <div class="brand">
-          <div class="logo" aria-hidden="true"></div>
+          <!-- Logo (Next.js /public/logo.png => /logo.png) -->
+          <img src="/logo.png" alt="Logo Venda Fácil Brasil" />
           <div>
             <div style="font-size:15px; opacity:.95">Venda Fácil Brasil</div>
             <div style="font-size:12px; color:var(--muted); font-weight:900">Sistema de Vendas • PDV • Controle</div>
@@ -258,16 +301,23 @@
       <div class="container">
         <div class="hero-grid">
           <div>
+            <div class="hero-logo">
+              <img src="/logo.png" alt="Venda Fácil Brasil" />
+              <div>
+                <p class="t1">Venda Fácil Brasil</p>
+                <p class="t2">Organize • Controle • Venda mais</p>
+              </div>
+            </div>
+
             <h1>Organize suas vendas, controle o caixa e tenha clareza do seu lucro.</h1>
             <p class="sub">
-              O <strong>Venda Fácil Brasil</strong> é um sistema simples e profissional para vender com rapidez,
-              controlar estoque e fechar o caixa sem erro.
+              Um sistema simples e profissional para vender com rapidez, controlar estoque e fechar o caixa sem erro.
             </p>
 
             <div class="pill-row">
               <div class="pill"><span class="check"></span> PDV rápido</div>
               <div class="pill"><span class="check"></span> Estoque organizado</div>
-              <div class="pill"><span class="check"></span> Abertura e fechamento de caixa</div>
+              <div class="pill"><span class="check"></span> Caixa completo</div>
               <div class="pill"><span class="check"></span> Histórico de vendas</div>
             </div>
 
@@ -292,6 +342,17 @@
               <li><span class="dot"></span> Histórico e relatórios do período</li>
               <li><span class="dot"></span> Mais organização e menos “achismo”</li>
             </ul>
+
+            <!-- IMAGEM OPCIONAL DO SISTEMA / MOCKUP -->
+            <div class="mock">
+              <!-- Coloque uma imagem em /public e renomeie abaixo, por exemplo:
+                   /public/mockup.png  =>  src="/mockup.png"
+              -->
+              <img src="/mockup.png" alt="Prévia do sistema (adicione a imagem em /public/mockup.png)" onerror="this.style.display='none';" />
+              <div class="fine">
+                Dica: se você adicionar um print do sistema em <strong>/public/mockup.png</strong>, ele aparece aqui.
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -381,12 +442,17 @@
           </div>
         </div>
 
-        <div class="card" style="margin-top:14px">
-          <strong style="color:var(--text)">Suporte:</strong>
-          <span style="color:var(--muted)">
-            dúvidas? Fale no Instagram
-            <a href="https://www.instagram.com/vendafacilbrasil_?igsh=bXo0anB0MnIwN3Ju&utm_source=qr" target="_blank" rel="noopener">@vendafacilbrasil_</a>
-          </span>
+        <div class="card" style="margin-top:14px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+          <img src="/logo.png" alt="Venda Fácil Brasil" style="width:42px;height:42px;border-radius:14px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06)" />
+          <div>
+            <div style="font-weight:900; color:var(--text)">Suporte</div>
+            <div style="color:var(--muted)">
+              Dúvidas? Fale no Instagram:
+              <a href="https://www.instagram.com/vendafacilbrasil_?igsh=bXo0anB0MnIwN3Ju&utm_source=qr" target="_blank" rel="noopener">
+                @vendafacilbrasil_
+              </a>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -433,10 +499,9 @@
   </main>
 
   <script>
-    // Ano automático
     document.getElementById("year").textContent = new Date().getFullYear();
 
-    // Setando links nos botões (p/ facilitar trocar depois)
+    // Setando links nos botões (facilita trocar depois)
     document.getElementById("btnSemanal").href = HOTMART_CHECKOUT_SEMANAL;
     document.getElementById("btnMensal").href  = HOTMART_CHECKOUT_MENSAL;
     document.getElementById("btnAnual").href   = HOTMART_CHECKOUT_ANUAL;
