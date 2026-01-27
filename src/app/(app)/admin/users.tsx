@@ -60,6 +60,12 @@ export default function AdminUsers() {
   ) => {
     setErrorMsg(null);
 
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+        setErrorMsg('Sua sessão expirou ou é inválida. Faça login novamente.');
+        return;
+    }
+
     const { error } = await supabase
       .from('users')
       .update(values)
@@ -70,14 +76,20 @@ export default function AdminUsers() {
       return;
     }
 
-    // 🧾 log administrativo (se existir a RPC)
-    await supabase
-      .rpc('log_admin_action', {
-        p_action: action,
-        p_entity: 'users',
-        p_entity_id: id,
-      })
-      .catch(() => {});
+    // 🧾 Log administrativo via INSERT direto. Mais robusto que depender de uma RPC.
+    const { error: logError } = await supabase
+      .from('admin_logs')
+      .insert({
+        admin_id: user.id,
+        action: action,
+        entity: 'users',
+        entity_id: id,
+      });
+
+    if (logError) {
+        // Não bloqueia a UI, mas avisa no console sobre a falha no log.
+        console.warn("Falha ao registrar ação administrativa:", logError.message);
+    }
 
     setUsers(prev =>
       prev.map(u =>

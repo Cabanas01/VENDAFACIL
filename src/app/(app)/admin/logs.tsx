@@ -10,6 +10,7 @@ type AdminLogRow = {
   entity: string;
   entity_id: string | null;
   created_at: string;
+  admin_email?: string;
 };
 
 export default function AdminLogs() {
@@ -37,7 +38,7 @@ export default function AdminLogs() {
       }
 
       // 📋 busca logs (RLS decide se pode ou não)
-      const { data, error } = await supabase
+      const { data: logsData, error } = await supabase
         .from('admin_logs')
         .select('id, admin_id, action, entity, entity_id, created_at')
         .order('created_at', { ascending: false });
@@ -48,8 +49,37 @@ export default function AdminLogs() {
         setLoading(false);
         return;
       }
+      
+      if (!logsData || logsData.length === 0) {
+          setLogs([]);
+          setLoading(false);
+          return;
+      }
 
-      setLogs((data ?? []) as AdminLogRow[]);
+      // 🙋‍♂️ Melhoria: Busca os emails dos admins para uma exibição mais clara
+      const adminIds = [...new Set(logsData.map(log => log.admin_id).filter(Boolean))];
+      if (adminIds.length > 0) {
+        const { data: usersData, error: usersError } = await supabase
+          .from('users')
+          .select('id, email')
+          .in('id', adminIds);
+        
+        if (usersError) {
+          console.warn("Não foi possível buscar os emails dos administradores:", usersError);
+          // Prossegue sem os emails se a busca falhar
+          setLogs((logsData ?? []) as AdminLogRow[]);
+        } else {
+          const adminEmailMap = new Map(usersData.map(u => [u.id, u.email as string]));
+          const logsWithEmails = logsData.map(log => ({
+            ...log,
+            admin_email: adminEmailMap.get(log.admin_id),
+          }));
+          setLogs(logsWithEmails);
+        }
+      } else {
+        setLogs((logsData ?? []) as AdminLogRow[]);
+      }
+
       setLoading(false);
     }
 
@@ -95,7 +125,7 @@ export default function AdminLogs() {
                     {log.entity_id ?? '-'}
                   </td>
                   <td className="p-2 text-xs text-muted-foreground">
-                    {log.admin_id}
+                    {log.admin_email ?? log.admin_id}
                   </td>
                   <td className="p-2 text-xs">
                     {new Date(log.created_at).toLocaleString()}
