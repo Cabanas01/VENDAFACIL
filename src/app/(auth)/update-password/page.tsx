@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Loader2 } from 'lucide-react';
-import { getSupabaseClient } from '@/lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,7 +22,6 @@ export default function UpdatePasswordPage() {
   const searchParams = useSearchParams();
   const { toast } = useToast();
 
-  const supabase = useMemo(() => getSupabaseClient(), []);
   const [initializing, setInitializing] = useState(true);
 
   const form = useForm<z.infer<typeof schema>>({
@@ -71,7 +70,7 @@ export default function UpdatePasswordPage() {
     };
 
     run();
-  }, [router, searchParams, supabase, toast]);
+  }, [router, searchParams, toast]);
 
   const onSubmit = async (values: z.infer<typeof schema>) => {
     if (!supabase) return;

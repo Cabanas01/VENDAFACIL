@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
-import { getSupabaseClient } from '@/lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 
@@ -14,7 +14,6 @@ export default function AuthCallbackPage() {
   const searchParams = useSearchParams();
   const { toast } = useToast();
 
-  const supabase = useMemo(() => getSupabaseClient(), []);
   const [busy, setBusy] = useState(true);
 
   useEffect(() => {
@@ -74,7 +73,7 @@ export default function AuthCallbackPage() {
     };
 
     run();
-  }, [router, searchParams, supabase, toast]);
+  }, [router, searchParams, toast]);
 
   return (
     <Card className="w-full max-w-md shadow-2xl">

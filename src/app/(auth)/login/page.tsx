@@ -28,7 +28,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { getSupabaseClient } from '@/lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 
 const loginSchema = z.object({
   email: z.string().email({ message: 'Email inválido.' }),
@@ -62,7 +62,6 @@ export default function LoginPage() {
   const searchParams = useSearchParams();
   const { toast } = useToast();
 
-  const supabase = useMemo(() => getSupabaseClient(), []);
   const redirectPath = searchParams.get('redirect') || '/dashboard';
 
   const [loading, setLoading] = useState(false);
