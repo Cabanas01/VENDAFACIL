@@ -132,7 +132,7 @@ export default function AdminLogs() {
             </TableHeader>
             <TableBody>
               {logs.map(log => (
-                <tr key={log.id} className="border-t">
+                <TableRow key={log.id}>
                   <TableCell className="text-xs">
                     {new Date(log.created_at).toLocaleString()}
                   </TableCell>
@@ -144,7 +144,7 @@ export default function AdminLogs() {
                   <TableCell className="font-mono text-xs text-muted-foreground">
                     {log.entity_id ?? '-'}
                   </TableCell>
-                </tr>
+                </TableRow>
               ))}
             </TableBody>
           </Table>
