@@ -9,6 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from '@/components/ui/skeleton';
 import { Terminal } from 'lucide-react';
 
+import AdminDashboard from './dashboard';
 import AdminUsers from './users';
 import AdminStores from './stores';
 import AdminSales from './sales';
@@ -68,7 +69,7 @@ export default function AdminPage() {
             </div>
         </div>
         <div className="space-y-4">
-          <Skeleton className="h-10 w-[450px]" />
+          <Skeleton className="h-10 w-[550px]" />
           <Skeleton className="h-64 w-full" />
         </div>
       </div>
@@ -94,14 +95,16 @@ export default function AdminPage() {
     <div className="space-y-6">
       <PageHeader title="Painel Administrativo" subtitle="Gerenciamento geral do sistema e dados." />
 
-      <Tabs defaultValue="users" className="space-y-4">
+      <Tabs defaultValue="dashboard" className="space-y-4">
         <TabsList>
+            <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
             <TabsTrigger value="users">Usuários</TabsTrigger>
             <TabsTrigger value="stores">Lojas</TabsTrigger>
             <TabsTrigger value="sales">Vendas</TabsTrigger>
             <TabsTrigger value="cash">Caixas</TabsTrigger>
             <TabsTrigger value="logs">Logs</TabsTrigger>
         </TabsList>
+        <TabsContent value="dashboard"><AdminDashboard /></TabsContent>
         <TabsContent value="users"><AdminUsers /></TabsContent>
         <TabsContent value="stores"><AdminStores /></TabsContent>
         <TabsContent value="sales"><AdminSales /></TabsContent>
