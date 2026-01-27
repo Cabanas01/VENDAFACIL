@@ -1,10 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getSupabaseClient } from '@/lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 
-export default function AdminCash() {
-  const supabase = getSupabaseClient();
+export default function AdminCash() 
   const [cash, setCash] = useState<any[]>([]);
 
   useEffect(() => {
