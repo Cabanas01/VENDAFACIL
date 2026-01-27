@@ -2,6 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase/client';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Skeleton } from '@/components/ui/skeleton';
 
 type SaleRow = {
   id: string;
@@ -20,7 +24,6 @@ export default function AdminSales() {
       setLoading(true);
       setErrorMsg(null);
 
-      // 🔐 garante sessão válida (necessário para RLS)
       const { data: userData, error: userErr } = await supabase.auth.getUser();
       if (userErr) {
         setErrorMsg(`Erro ao validar sessão: ${userErr.message}`);
@@ -55,54 +58,63 @@ export default function AdminSales() {
   }, []);
 
   if (loading) {
-    return <div className="p-4 text-sm">Carregando vendas…</div>;
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Últimas Vendas</CardTitle>
+          <CardDescription>Visualize as últimas 50 vendas realizadas em todas as lojas.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-8 w-full" />
+        </CardContent>
+      </Card>
+    );
   }
 
   return (
-    <div className="p-4 space-y-3">
-      <h1 className="text-lg font-semibold">Admin • Vendas</h1>
-
-      {errorMsg && (
-        <div className="text-sm border rounded p-3 bg-red-50 text-red-700">
-          {errorMsg}
-        </div>
-      )}
-
-      {sales.length === 0 ? (
-        <div className="text-sm text-muted-foreground">
-          Nenhuma venda encontrada.
-        </div>
-      ) : (
-        <div className="overflow-auto border rounded">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50">
-              <tr className="text-left">
-                <th className="p-2">Loja</th>
-                <th className="p-2">Total</th>
-                <th className="p-2">Data</th>
-              </tr>
-            </thead>
-            <tbody>
+    <Card>
+      <CardHeader>
+        <CardTitle>Últimas Vendas</CardTitle>
+        <CardDescription>Visualize as últimas 50 vendas realizadas em todas as lojas.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {errorMsg && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertDescription>{errorMsg}</AlertDescription>
+          </Alert>
+        )}
+        {sales.length === 0 && !errorMsg ? (
+          <div className="text-center text-sm text-muted-foreground p-8">
+            Nenhuma venda encontrada.
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Data</TableHead>
+                <TableHead>Loja</TableHead>
+                <TableHead className="text-right">Total</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {sales.map(s => (
-                <tr key={s.id} className="border-t">
-                  <td className="p-2 text-xs text-muted-foreground">
-                    {s.store_id}
-                  </td>
-                  <td className="p-2">
+                <TableRow key={s.id}>
+                  <TableCell>{new Date(s.created_at).toLocaleString()}</TableCell>
+                  <TableCell className="font-mono text-xs">{s.store_id}</TableCell>
+                  <TableCell className="text-right font-medium">
                     {(s.total_cents / 100).toLocaleString('pt-BR', {
                       style: 'currency',
                       currency: 'BRL',
                     })}
-                  </td>
-                  <td className="p-2 text-xs">
-                    {new Date(s.created_at).toLocaleString()}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
   );
 }

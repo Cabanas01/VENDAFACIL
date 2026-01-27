@@ -2,6 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase/client';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Skeleton } from '@/components/ui/skeleton';
 
 type CashRegisterRow = {
   id: string;
@@ -20,7 +24,6 @@ export default function AdminCash() {
       setLoading(true);
       setErrorMsg(null);
 
-      // 🔐 garante sessão válida (necessário para RLS)
       const { data: userData, error: userErr } = await supabase.auth.getUser();
       if (userErr) {
         setErrorMsg(`Erro ao validar sessão: ${userErr.message}`);
@@ -55,42 +58,63 @@ export default function AdminCash() {
   }, []);
 
   if (loading) {
-    return <div className="p-4 text-sm">Carregando caixas…</div>;
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Registros de Caixa</CardTitle>
+          <CardDescription>Visualize as últimas 30 aberturas de caixa em todas as lojas.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-8 w-full" />
+        </CardContent>
+      </Card>
+    );
   }
 
   return (
-    <div className="p-4 space-y-3">
-      <h1 className="text-lg font-semibold">Admin • Caixas</h1>
-
-      {errorMsg && (
-        <div className="text-sm border rounded p-3 bg-red-50 text-red-700">
-          {errorMsg}
-        </div>
-      )}
-
-      {cash.length === 0 ? (
-        <div className="text-sm text-muted-foreground">
-          Nenhum caixa encontrado.
-        </div>
-      ) : (
-        <ul className="space-y-2">
-          {cash.map(c => (
-            <li key={c.id} className="border p-3 rounded text-sm">
-              <div><strong>Loja:</strong> {c.store_id}</div>
-              <div>
-                <strong>Abertura:</strong>{' '}
-                {(c.opening_amount_cents / 100).toLocaleString('pt-BR', {
-                  style: 'currency',
-                  currency: 'BRL',
-                })}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {c.opened_at ? new Date(c.opened_at).toLocaleString() : '-'}
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+    <Card>
+       <CardHeader>
+        <CardTitle>Registros de Caixa</CardTitle>
+        <CardDescription>Visualize as últimas 30 aberturas de caixa em todas as lojas.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {errorMsg && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertDescription>{errorMsg}</AlertDescription>
+          </Alert>
+        )}
+        {cash.length === 0 && !errorMsg ? (
+           <div className="text-center text-sm text-muted-foreground p-8">
+            Nenhum caixa encontrado.
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Data de Abertura</TableHead>
+                <TableHead>Loja</TableHead>
+                <TableHead className="text-right">Valor de Abertura</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {cash.map(c => (
+                <TableRow key={c.id}>
+                  <TableCell>{c.opened_at ? new Date(c.opened_at).toLocaleString() : '-'}</TableCell>
+                  <TableCell className="font-mono text-xs">{c.store_id}</TableCell>
+                  <TableCell className="text-right font-medium">
+                    {(c.opening_amount_cents / 100).toLocaleString('pt-BR', {
+                      style: 'currency',
+                      currency: 'BRL',
+                    })}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
   );
 }

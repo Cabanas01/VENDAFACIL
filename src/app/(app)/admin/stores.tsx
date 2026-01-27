@@ -2,6 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase/client';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Skeleton } from '@/components/ui/skeleton';
 
 type StoreRow = {
   id: string;
@@ -19,7 +23,6 @@ export default function AdminStores() {
       setLoading(true);
       setErrorMsg(null);
 
-      // 🔐 garante sessão válida (necessário para RLS)
       const { data: userData, error: userErr } = await supabase.auth.getUser();
       if (userErr) {
         setErrorMsg(`Erro ao validar sessão: ${userErr.message}`);
@@ -52,45 +55,58 @@ export default function AdminStores() {
   }, []);
 
   if (loading) {
-    return <div className="p-4 text-sm">Carregando lojas…</div>;
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Lojas</CardTitle>
+          <CardDescription>Visualize todas as lojas cadastradas no sistema.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-8 w-full" />
+        </CardContent>
+      </Card>
+    );
   }
 
   return (
-    <div className="p-4 space-y-3">
-      <h1 className="text-lg font-semibold">Admin • Lojas</h1>
-
-      {errorMsg && (
-        <div className="text-sm border rounded p-3 bg-red-50 text-red-700">
-          {errorMsg}
-        </div>
-      )}
-
-      {stores.length === 0 ? (
-        <div className="text-sm text-muted-foreground">
-          Nenhuma loja encontrada.
-        </div>
-      ) : (
-        <div className="overflow-auto border rounded">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50">
-              <tr className="text-left">
-                <th className="p-2">Nome</th>
-                <th className="p-2">Owner (user_id)</th>
-              </tr>
-            </thead>
-            <tbody>
+    <Card>
+      <CardHeader>
+        <CardTitle>Lojas</CardTitle>
+        <CardDescription>Visualize todas as lojas cadastradas no sistema.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {errorMsg && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertDescription>{errorMsg}</AlertDescription>
+          </Alert>
+        )}
+        {stores.length === 0 && !errorMsg ? (
+          <div className="text-center text-sm text-muted-foreground p-8">
+            Nenhuma loja encontrada.
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>ID da Loja</TableHead>
+                <TableHead>Nome</TableHead>
+                <TableHead>ID do Dono</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {stores.map(s => (
-                <tr key={s.id} className="border-t">
-                  <td className="p-2">{s.name ?? '-'}</td>
-                  <td className="p-2 text-xs text-muted-foreground">
-                    {s.user_id}
-                  </td>
-                </tr>
+                <TableRow key={s.id}>
+                  <TableCell className="font-mono text-xs">{s.id}</TableCell>
+                  <TableCell className="font-medium">{s.name ?? '-'}</TableCell>
+                  <TableCell className="font-mono text-xs">{s.user_id}</TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
   );
 }

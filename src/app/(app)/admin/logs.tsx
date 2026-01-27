@@ -2,6 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase/client';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Skeleton } from '@/components/ui/skeleton';
 
 type AdminLogRow = {
   id: string;
@@ -23,7 +27,6 @@ export default function AdminLogs() {
       setLoading(true);
       setErrorMsg(null);
 
-      // 🔐 garante sessão válida
       const { data: userData, error: userErr } = await supabase.auth.getUser();
       if (userErr) {
         setErrorMsg(`Erro ao validar sessão: ${userErr.message}`);
@@ -37,7 +40,6 @@ export default function AdminLogs() {
         return;
       }
 
-      // 📋 busca logs (RLS decide se pode ou não)
       const { data: logsData, error } = await supabase
         .from('admin_logs')
         .select('id, admin_id, action, entity, entity_id, created_at')
@@ -56,7 +58,6 @@ export default function AdminLogs() {
           return;
       }
 
-      // 🙋‍♂️ Melhoria: Busca os emails dos admins para uma exibição mais clara
       const adminIds = [...new Set(logsData.map(log => log.admin_id).filter(Boolean))];
       if (adminIds.length > 0) {
         const { data: usersData, error: usersError } = await supabase
@@ -66,7 +67,6 @@ export default function AdminLogs() {
         
         if (usersError) {
           console.warn("Não foi possível buscar os emails dos administradores:", usersError);
-          // Prossegue sem os emails se a busca falhar
           setLogs((logsData ?? []) as AdminLogRow[]);
         } else {
           const adminEmailMap = new Map((usersData ?? []).map(u => [u.id, u.email as string]));
@@ -87,55 +87,69 @@ export default function AdminLogs() {
   }, []);
 
   if (loading) {
-    return <div className="p-4 text-sm">Carregando logs…</div>;
+     return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Logs de Atividade</CardTitle>
+          <CardDescription>Ações administrativas realizadas no sistema.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-8 w-full" />
+        </CardContent>
+      </Card>
+    );
   }
 
   return (
-    <div className="p-4 space-y-3">
-      <h1 className="text-lg font-semibold">Admin • Logs</h1>
+    <Card>
+      <CardHeader>
+        <CardTitle>Logs de Atividade</CardTitle>
+        <CardDescription>Ações administrativas realizadas no sistema.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {errorMsg && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertDescription>{errorMsg}</AlertDescription>
+          </Alert>
+        )}
 
-      {errorMsg && (
-        <div className="text-sm border rounded p-3 bg-red-50 text-red-700">
-          {errorMsg}
-        </div>
-      )}
-
-      {logs.length === 0 ? (
-        <div className="text-sm text-muted-foreground">
-          Nenhum log registrado ainda.
-        </div>
-      ) : (
-        <div className="overflow-auto border rounded">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50">
-              <tr className="text-left">
-                <th className="p-2">Ação</th>
-                <th className="p-2">Entidade</th>
-                <th className="p-2">ID da Entidade</th>
-                <th className="p-2">Admin</th>
-                <th className="p-2">Data</th>
-              </tr>
-            </thead>
-            <tbody>
+        {logs.length === 0 && !errorMsg ? (
+          <div className="text-center text-sm text-muted-foreground p-8">
+            Nenhum log registrado ainda.
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Data</TableHead>
+                <TableHead>Admin</TableHead>
+                <TableHead>Ação</TableHead>
+                <TableHead>Entidade</TableHead>
+                <TableHead>ID da Entidade</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {logs.map(log => (
                 <tr key={log.id} className="border-t">
-                  <td className="p-2">{log.action}</td>
-                  <td className="p-2">{log.entity}</td>
-                  <td className="p-2 text-xs text-muted-foreground">
-                    {log.entity_id ?? '-'}
-                  </td>
-                  <td className="p-2 text-xs text-muted-foreground">
-                    {log.admin_email ?? log.admin_id}
-                  </td>
-                  <td className="p-2 text-xs">
+                  <TableCell className="text-xs">
                     {new Date(log.created_at).toLocaleString()}
-                  </td>
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {log.admin_email ?? log.admin_id}
+                  </TableCell>
+                  <TableCell className="font-medium">{log.action}</TableCell>
+                  <TableCell>{log.entity}</TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">
+                    {log.entity_id ?? '-'}
+                  </TableCell>
                 </tr>
               ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
   );
 }

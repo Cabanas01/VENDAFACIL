@@ -2,6 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase/client';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Switch } from '@/components/ui/switch';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Skeleton } from '@/components/ui/skeleton';
 
 type AdminUserRow = {
   id: string;
@@ -20,7 +25,6 @@ export default function AdminUsers() {
       setLoading(true);
       setErrorMsg(null);
 
-      // 🔐 garante sessão válida (necessário para RLS)
       const { data: userData, error: userErr } = await supabase.auth.getUser();
       if (userErr) {
         setErrorMsg(`Erro ao validar sessão: ${userErr.message}`);
@@ -76,7 +80,6 @@ export default function AdminUsers() {
       return;
     }
 
-    // 🧾 Log administrativo via INSERT direto. Mais robusto que depender de uma RPC.
     const { error: logError } = await supabase
       .from('admin_logs')
       .insert({
@@ -87,7 +90,6 @@ export default function AdminUsers() {
       });
 
     if (logError) {
-        // Não bloqueia a UI, mas avisa no console sobre a falha no log.
         console.warn("Falha ao registrar ação administrativa:", logError.message);
     }
 
@@ -99,72 +101,75 @@ export default function AdminUsers() {
   };
 
   if (loading) {
-    return <div className="p-4 text-sm">Carregando usuários…</div>;
-  }
+    return (
+     <Card>
+       <CardHeader>
+         <CardTitle>Usuários</CardTitle>
+         <CardDescription>Gerencie usuários, permissões de administrador e status de bloqueio.</CardDescription>
+       </CardHeader>
+       <CardContent className="space-y-2">
+         <Skeleton className="h-8 w-full" />
+         <Skeleton className="h-8 w-full" />
+         <Skeleton className="h-8 w-full" />
+       </CardContent>
+     </Card>
+   );
+ }
 
   return (
-    <div className="p-4 space-y-3">
-      <h1 className="text-lg font-semibold">Admin • Usuários</h1>
-
-      {errorMsg && (
-        <div className="text-sm border rounded p-3 bg-red-50 text-red-700">
-          {errorMsg}
-        </div>
-      )}
-
-      {users.length === 0 ? (
-        <div className="text-sm text-muted-foreground">
-          Nenhum usuário encontrado.
-        </div>
-      ) : (
-        <div className="overflow-auto border rounded">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50">
-              <tr className="text-left">
-                <th className="p-2">Email</th>
-                <th className="p-2">Admin</th>
-                <th className="p-2">Bloqueado</th>
-                <th className="p-2">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
+    <Card>
+      <CardHeader>
+        <CardTitle>Usuários</CardTitle>
+        <CardDescription>Gerencie usuários, permissões de administrador e status de bloqueio.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {errorMsg && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertDescription>{errorMsg}</AlertDescription>
+          </Alert>
+        )}
+        {users.length === 0 && !errorMsg ? (
+          <div className="text-center text-sm text-muted-foreground p-8">
+            Nenhum usuário encontrado.
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Email</TableHead>
+                <TableHead className="text-center">Admin</TableHead>
+                <TableHead className="text-center">Bloqueado</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {users.map(u => (
-                <tr key={u.id} className="border-t">
-                  <td className="p-2">{u.email ?? '-'}</td>
-                  <td className="p-2">{u.is_admin ? '✅' : '❌'}</td>
-                  <td className="p-2">{u.is_blocked ? '⛔' : '🟢'}</td>
-                  <td className="p-2 space-x-2">
-                    <button
-                      className="px-2 py-1 border rounded"
-                      onClick={() =>
-                        updateUser(
-                          u.id,
-                          { is_admin: !u.is_admin },
-                          'toggle_admin'
-                        )
+                <TableRow key={u.id}>
+                  <TableCell className="font-medium">{u.email ?? '-'}</TableCell>
+                  <TableCell className="text-center">
+                    <Switch
+                      checked={u.is_admin}
+                      onCheckedChange={(checked) =>
+                        updateUser(u.id, { is_admin: checked }, 'toggle_admin')
                       }
-                    >
-                      Toggle Admin
-                    </button>
-                    <button
-                      className="px-2 py-1 border rounded"
-                      onClick={() =>
-                        updateUser(
-                          u.id,
-                          { is_blocked: !u.is_blocked },
-                          'toggle_block'
-                        )
+                      aria-label="Toggle Admin"
+                    />
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Switch
+                      checked={u.is_blocked}
+                      onCheckedChange={(checked) =>
+                        updateUser(u.id, { is_blocked: checked }, 'toggle_block')
                       }
-                    >
-                      Toggle Block
-                    </button>
-                  </td>
-                </tr>
+                      aria-label="Toggle Block"
+                      className="data-[state=checked]:bg-destructive"
+                    />
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
   );
 }

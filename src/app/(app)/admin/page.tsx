@@ -3,24 +3,19 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase/client';
 
+import { PageHeader } from '@/components/page-header';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Skeleton } from '@/components/ui/skeleton';
+import { Terminal } from 'lucide-react';
+
 import AdminUsers from './users';
 import AdminStores from './stores';
 import AdminSales from './sales';
 import AdminCash from './cash';
 import AdminLogs from './logs';
 
-type TabId = 'users' | 'stores' | 'sales' | 'cash' | 'logs';
-
-const tabs: { id: TabId; label: string }[] = [
-  { id: 'users', label: 'Usuários' },
-  { id: 'stores', label: 'Lojas' },
-  { id: 'sales', label: 'Vendas' },
-  { id: 'cash', label: 'Caixas' },
-  { id: 'logs', label: 'Logs' },
-];
-
 export default function AdminPage() {
-  const [tab, setTab] = useState<TabId>('users');
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isVerifiedAdmin, setIsVerifiedAdmin] = useState(false);
@@ -64,45 +59,55 @@ export default function AdminPage() {
   }, []);
 
   if (loading) {
-    return <div className="p-6 text-sm">Validando permissões de administrador…</div>;
-  }
-
-  if (errorMsg || !isVerifiedAdmin) {
     return (
-      <div className="p-6">
-        <h1 className="text-2xl font-bold mb-4">Painel Administrativo</h1>
-        <div className="border rounded p-4 bg-red-50 text-red-700 text-sm">
-          {errorMsg || 'Acesso negado.'}
+       <div className="space-y-6">
+        <div className="flex items-center justify-between">
+            <div className="space-y-2">
+                <Skeleton className="h-8 w-64" />
+                <Skeleton className="h-4 w-96" />
+            </div>
+        </div>
+        <div className="space-y-4">
+          <Skeleton className="h-10 w-[450px]" />
+          <Skeleton className="h-64 w-full" />
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="p-6 space-y-6">
-      <h1 className="text-3xl font-bold">Painel Administrativo</h1>
-
-      <div className="flex gap-2 flex-wrap">
-        {tabs.map(t => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`px-4 py-2 rounded transition ${
-              tab === t.id
-                ? 'bg-black text-white'
-                : 'bg-muted hover:bg-muted/80'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
+  if (errorMsg || !isVerifiedAdmin) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Painel Administrativo" />
+        <Alert variant="destructive">
+          <Terminal className="h-4 w-4" />
+          <AlertTitle>Acesso Negado</AlertTitle>
+          <AlertDescription>
+            {errorMsg || 'Você não tem permissão para acessar esta página.'}
+          </AlertDescription>
+        </Alert>
       </div>
+    );
+  }
 
-      {tab === 'users' && <AdminUsers />}
-      {tab === 'stores' && <AdminStores />}
-      {tab === 'sales' && <AdminSales />}
-      {tab === 'cash' && <AdminCash />}
-      {tab === 'logs' && <AdminLogs />}
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Painel Administrativo" subtitle="Gerenciamento geral do sistema e dados." />
+
+      <Tabs defaultValue="users" className="space-y-4">
+        <TabsList>
+            <TabsTrigger value="users">Usuários</TabsTrigger>
+            <TabsTrigger value="stores">Lojas</TabsTrigger>
+            <TabsTrigger value="sales">Vendas</TabsTrigger>
+            <TabsTrigger value="cash">Caixas</TabsTrigger>
+            <TabsTrigger value="logs">Logs</TabsTrigger>
+        </TabsList>
+        <TabsContent value="users"><AdminUsers /></TabsContent>
+        <TabsContent value="stores"><AdminStores /></TabsContent>
+        <TabsContent value="sales"><AdminSales /></TabsContent>
+        <TabsContent value="cash"><AdminCash /></TabsContent>
+        <TabsContent value="logs"><AdminLogs /></TabsContent>
+    </Tabs>
     </div>
   );
 }
