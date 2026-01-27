@@ -69,7 +69,7 @@ export default function AdminLogs() {
           // Prossegue sem os emails se a busca falhar
           setLogs((logsData ?? []) as AdminLogRow[]);
         } else {
-          const adminEmailMap = new Map(usersData.map(u => [u.id, u.email as string]));
+          const adminEmailMap = new Map((usersData ?? []).map(u => [u.id, u.email as string]));
           const logsWithEmails = logsData.map(log => ({
             ...log,
             admin_email: adminEmailMap.get(log.admin_id),

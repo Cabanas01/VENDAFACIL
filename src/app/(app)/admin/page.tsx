@@ -23,42 +23,56 @@ export default function AdminPage() {
   const [tab, setTab] = useState<TabId>('users');
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isVerifiedAdmin, setIsVerifiedAdmin] = useState(false);
 
   useEffect(() => {
-    async function validateSession() {
+    async function validateAdminSession() {
       setLoading(true);
       setErrorMsg(null);
 
-      const { data, error } = await supabase.auth.getUser();
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
 
-      if (error) {
-        setErrorMsg(`Erro ao validar sessão: ${error.message}`);
+      if (authError || !user) {
+        setErrorMsg(`Erro ao validar sessão: ${authError?.message || 'Acesso negado. Faça login para continuar.'}`);
+        setLoading(false);
+        return;
+      }
+      
+      const { data: profile, error: profileError } = await supabase
+        .from('users')
+        .select('is_admin')
+        .eq('id', user.id)
+        .single();
+        
+      if (profileError) {
+        setErrorMsg(`Erro ao verificar permissões: ${profileError.message}`);
+        setLoading(false);
+        return;
+      }
+      
+      if (!profile?.is_admin) {
+        setErrorMsg('Acesso negado. Você não tem permissão para acessar esta página.');
         setLoading(false);
         return;
       }
 
-      if (!data.user) {
-        setErrorMsg('Acesso negado. Faça login para continuar.');
-        setLoading(false);
-        return;
-      }
-
+      setIsVerifiedAdmin(true);
       setLoading(false);
     }
 
-    validateSession();
+    validateAdminSession();
   }, []);
 
   if (loading) {
-    return <div className="p-6 text-sm">Validando sessão…</div>;
+    return <div className="p-6 text-sm">Validando permissões de administrador…</div>;
   }
 
-  if (errorMsg) {
+  if (errorMsg || !isVerifiedAdmin) {
     return (
       <div className="p-6">
         <h1 className="text-2xl font-bold mb-4">Painel Administrativo</h1>
         <div className="border rounded p-4 bg-red-50 text-red-700 text-sm">
-          {errorMsg}
+          {errorMsg || 'Acesso negado.'}
         </div>
       </div>
     );
