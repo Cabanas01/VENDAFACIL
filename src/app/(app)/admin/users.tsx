@@ -21,7 +21,7 @@ export default function AdminUsers() {
       setLoading(true);
 
       const { data, error } = await supabase
-        .from('public.users') // 👈 CRÍTICO
+        .from('users') // 👈 CRÍTICO
         .select('id, email, is_admin, is_blocked, created_at')
         .order('created_at', { ascending: false });
 
