@@ -1,0 +1,135 @@
+'use client';
+
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { Loader2 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { useToast } from '@/hooks/use-toast';
+import { grantPlan } from '@/app/actions/admin-actions';
+import type { StoreRow } from './stores'; // Assuming StoreRow is exported from stores.tsx
+
+const grantPlanSchema = z.object({
+  planId: z.enum(['monthly', 'yearly'], { required_error: 'Selecione um plano.' }),
+  durationMonths: z.coerce.number().int().min(1, 'Duração deve ser de no mínimo 1 mês.'),
+});
+
+type GrantPlanFormValues = z.infer<typeof grantPlanSchema>;
+
+type GrantPlanDialogProps = {
+  store: StoreRow | null;
+  isOpen: boolean;
+  onOpenChange: (isOpen: boolean) => void;
+  onSuccess: () => void;
+};
+
+export function GrantPlanDialog({ store, isOpen, onOpenChange, onSuccess }: GrantPlanDialogProps) {
+  const { toast } = useToast();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const form = useForm<GrantPlanFormValues>({
+    resolver: zodResolver(grantPlanSchema),
+    defaultValues: {
+      planId: 'monthly',
+      durationMonths: 1,
+    },
+  });
+
+  const onSubmit = async (values: GrantPlanFormValues) => {
+    if (!store) return;
+    setIsSubmitting(true);
+    try {
+      const result = await grantPlan({
+        storeId: store.id,
+        planId: values.planId,
+        durationMonths: values.durationMonths,
+      });
+
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
+      toast({
+        title: 'Plano concedido com sucesso!',
+        description: `A loja "${store.name}" agora tem o plano ${values.planId} por ${values.durationMonths} meses.`,
+      });
+      onSuccess();
+      onOpenChange(false);
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao conceder plano',
+        description: error.message,
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (!store) return null;
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Conceder Plano para "{store.name}"</DialogTitle>
+          <DialogDescription>
+            Esta ação concederá um plano pago manualmente, sem gerar cobrança.
+          </DialogDescription>
+        </DialogHeader>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 py-4">
+            <FormField
+              control={form.control}
+              name="planId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Plano</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione o plano" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="monthly">Mensal</SelectItem>
+                      <SelectItem value="yearly">Anual</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="durationMonths"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Duração (em meses)</FormLabel>
+                  <FormControl>
+                    <Input type="number" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Conceder Plano
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+}

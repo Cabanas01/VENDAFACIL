@@ -7,13 +7,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
-import { MoreHorizontal, Eye, Lock, Trash2, Users } from 'lucide-react';
+import { MoreHorizontal, Eye, Lock, Trash2, Users, Gift } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { GrantPlanDialog } from './grant-plan-dialog';
 
-type StoreRow = {
+export type StoreRow = {
   id: string;
   name: string | null;
   user_id: string | null;
@@ -51,62 +52,69 @@ export default function AdminStores() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('general');
+  const [isGrantModalOpen, setIsGrantModalOpen] = useState(false);
+  const [selectedStore, setSelectedStore] = useState<StoreRow | null>(null);
   const router = useRouter();
 
-  useEffect(() => {
-    async function loadStores() {
-      setLoading(true);
-      setErrorMsg(null);
+  const fetchStores = async () => {
+    setLoading(true);
+    setErrorMsg(null);
 
-      let query = supabase
-        .from('stores')
-        .select('id, name, user_id, status, business_type');
+    let query = supabase
+      .from('stores')
+      .select('id, name, user_id, status, business_type');
 
-      if (activeTab !== 'all') {
-        query = query.eq('business_type', activeTab);
-      }
-      
-      const { data: storesData, error: storesError } = await query;
+    if (activeTab !== 'all') {
+      query = query.eq('business_type', activeTab);
+    }
+    
+    const { data: storesData, error: storesError } = await query;
 
-      if (storesError) {
-        setErrorMsg(`Erro ao buscar lojas: ${storesError.message}`);
-        setLoading(false);
-        return;
-      }
-      
-      if (!storesData || storesData.length === 0) {
-        setStores([]);
-        setLoading(false);
-        return;
-      }
-
-      const ownerIds = [...new Set(storesData.map(s => s.user_id).filter(Boolean))];
-      let ownerEmailMap = new Map<string, string>();
-      if (ownerIds.length > 0) {
-        const { data: usersData, error: usersError } = await supabase
-          .from('users')
-          .select('id, email')
-          .in('id', ownerIds as string[]);
-
-        if (usersError) {
-          console.warn("Could not fetch owner emails:", usersError.message);
-        } else {
-          ownerEmailMap = new Map((usersData ?? []).map(u => [u.id, u.email as string]));
-        }
-      }
-      
-      const combinedData = storesData.map((store, index) => ({
-        ...store,
-        owner_email: store.user_id ? ownerEmailMap.get(store.user_id) : 'N/A',
-        plan: (['free', 'monthly', 'yearly'] as const)[index % 3], // Mocked plan
-      }));
-
-      setStores(combinedData as StoreRow[]);
+    if (storesError) {
+      setErrorMsg(`Erro ao buscar lojas: ${storesError.message}`);
       setLoading(false);
+      return;
+    }
+    
+    if (!storesData || storesData.length === 0) {
+      setStores([]);
+      setLoading(false);
+      return;
     }
 
-    loadStores();
+    const ownerIds = [...new Set(storesData.map(s => s.user_id).filter(Boolean))];
+    let ownerEmailMap = new Map<string, string>();
+    if (ownerIds.length > 0) {
+      const { data: usersData, error: usersError } = await supabase
+        .from('users')
+        .select('id, email')
+        .in('id', ownerIds as string[]);
+
+      if (usersError) {
+        console.warn("Could not fetch owner emails:", usersError.message);
+      } else {
+        ownerEmailMap = new Map((usersData ?? []).map(u => [u.id, u.email as string]));
+      }
+    }
+    
+    const combinedData = storesData.map((store, index) => ({
+      ...store,
+      owner_email: store.user_id ? ownerEmailMap.get(store.user_id) : 'N/A',
+      plan: (['free', 'monthly', 'yearly'] as const)[index % 3], // Mocked plan
+    }));
+
+    setStores(combinedData as StoreRow[]);
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    fetchStores();
   }, [activeTab]);
+
+  const handleOpenGrantModal = (store: StoreRow) => {
+    setSelectedStore(store);
+    setIsGrantModalOpen(true);
+  };
 
   const renderTable = (storeList: StoreRow[]) => {
       if (loading) {
@@ -164,6 +172,10 @@ export default function AdminStores() {
                         <DropdownMenuItem>
                           <Eye className="mr-2 h-4 w-4" /> Ver Detalhes
                         </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onSelect={() => handleOpenGrantModal(s)}>
+                            <Gift className="mr-2 h-4 w-4" /> Conceder Plano
+                        </DropdownMenuItem>
                         <DropdownMenuItem>
                           <Lock className="mr-2 h-4 w-4" /> Suspender
                         </DropdownMenuItem>
@@ -181,30 +193,38 @@ export default function AdminStores() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Gerenciamento de Lojas</CardTitle>
-        <CardDescription>Visualize e gerencie todas as lojas (tenants) do sistema, segmentadas por categoria.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {errorMsg && (
-          <Alert variant="destructive" className="mb-4">
-            <AlertDescription>{errorMsg}</AlertDescription>
-          </Alert>
-        )}
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-3 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-11">
+    <>
+      <GrantPlanDialog 
+        store={selectedStore}
+        isOpen={isGrantModalOpen}
+        onOpenChange={setIsGrantModalOpen}
+        onSuccess={fetchStores}
+      />
+      <Card>
+        <CardHeader>
+          <CardTitle>Gerenciamento de Lojas</CardTitle>
+          <CardDescription>Visualize e gerencie todas as lojas (tenants) do sistema, segmentadas por categoria.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {errorMsg && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertDescription>{errorMsg}</AlertDescription>
+            </Alert>
+          )}
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsList className="grid w-full grid-cols-3 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-11">
+              {businessCategories.map(cat => (
+                  <TabsTrigger key={cat} value={cat}>{categoryLabels[cat]}</TabsTrigger>
+              ))}
+            </TabsList>
             {businessCategories.map(cat => (
-                <TabsTrigger key={cat} value={cat}>{categoryLabels[cat]}</TabsTrigger>
-            ))}
-          </TabsList>
-           {businessCategories.map(cat => (
-              <TabsContent key={cat} value={cat}>
-                {renderTable(stores)}
-              </TabsContent>
-            ))}
-        </Tabs>
-      </CardContent>
-    </Card>
+                <TabsContent key={cat} value={cat}>
+                  {renderTable(stores)}
+                </TabsContent>
+              ))}
+          </Tabs>
+        </CardContent>
+      </Card>
+    </>
   );
 }

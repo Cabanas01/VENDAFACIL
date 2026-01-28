@@ -1,18 +1,21 @@
 'use client';
 
-import { PageHeader } from '@/components/page-header';
+import { useEffect, useState } from 'react';
+import { CheckCircle, AlertTriangle, XCircle, Info, ShieldCheck } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { useAuth } from '@/components/auth-provider';
 import { useAccess } from '@/hooks/use-entitlements';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
-import { CheckCircle, AlertTriangle, XCircle, ShoppingCart } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-import { CHECKOUT_LINKS } from '@/lib/billing/checkoutLinks';
-import type { PlanType } from '@/lib/billing/checkoutLinks';
 import { useAnalytics } from '@/lib/analytics/track';
 import { useToast } from '@/hooks/use-toast';
-import { useRouter } from 'next/navigation';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Label } from '@/components/ui/label';
+import { PLANS_CONFIG, CHECKOUT_LINKS } from '@/lib/billing/checkoutLinks';
+import type { PlanID, CheckoutProvider } from '@/lib/billing/checkoutLinks';
+
 
 const getStatusInfo = (accessStatus: import('@/lib/types').StoreAccessStatus | null) => {
     if (!accessStatus) {
@@ -35,11 +38,11 @@ const getStatusInfo = (accessStatus: import('@/lib/types').StoreAccessStatus | n
         }
     }
 
-    if (accessStatus.plano_nome === 'Sem Plano') {
+    if (accessStatus.plano_nome === 'Sem Plano' || accessStatus.plano_nome === 'Trial Expirado') {
          return {
-            icon: <XCircle className="h-5 w-5 text-destructive" />,
-            text: 'Sem Plano Ativo',
-            badgeVariant: 'destructive' as const,
+            icon: <Info className="h-5 w-5 text-blue-500" />,
+            text: accessStatus.plano_nome,
+            badgeVariant: 'secondary' as const,
             description: accessStatus.mensagem,
             planName: 'Nenhum'
         }
@@ -80,11 +83,18 @@ const getStatusInfo = (accessStatus: import('@/lib/types').StoreAccessStatus | n
 export default function BillingPage() {
   const { user, store } = useAuth();
   const { accessStatus, isLoading } = useAccess();
-  const { registerUniqueClick } = useAnalytics();
+  const { trackReportOpened, registerUniqueClick } = useAnalytics();
   const { toast } = useToast();
-  const router = useRouter();
+  
+  const [selectedPlan, setSelectedPlan] = useState<PlanID>('monthly');
+  const [selectedProvider, setSelectedProvider] = useState<CheckoutProvider>('hotmart');
 
-  const handleCheckout = (plan: PlanType) => {
+  useEffect(() => {
+    trackReportOpened('billing_page');
+  }, [trackReportOpened]);
+
+
+  const handleCheckout = () => {
     if (!store || !user) {
         toast({
             variant: 'destructive',
@@ -93,25 +103,26 @@ export default function BillingPage() {
         });
         return;
     }
+    
+    registerUniqueClick(`billing_plan_select_${selectedPlan}`);
 
-    const provider = 'hotmart';
-    const url = CHECKOUT_LINKS[provider]?.[plan];
+    const url = CHECKOUT_LINKS[selectedProvider]?.[selectedPlan];
     
     if (!url) {
         toast({
             variant: 'destructive',
             title: 'Link de Checkout Indisponível',
-            description: 'O link para este plano ainda não foi configurado.'
+            description: `O link para o plano ${PLANS_CONFIG[selectedPlan].name} com ${selectedProvider} não foi configurado.`
         });
         return;
     }
 
-    const externalReference = `${store.id}|${plan}|${user.id}`;
-    const finalUrl = `${url}&external_reference=${encodeURIComponent(externalReference)}`;
+    const externalReference = `${store.id}|${selectedPlan}|${user.id}`;
+    const finalUrl = `${url}${url.includes('?') ? '&' : '?'}external_reference=${encodeURIComponent(externalReference)}`;
 
-    registerUniqueClick(`billing_checkout_${provider}_${plan}`, {
-        provider,
-        plan,
+    registerUniqueClick(`billing_checkout_${selectedProvider}_${selectedPlan}`, {
+        provider: selectedProvider,
+        plan: selectedPlan,
         source: 'billing_page',
     });
 
@@ -126,101 +137,133 @@ export default function BillingPage() {
 
   if (isLoading || !store) {
     return (
-        <>
-            <PageHeader title="Plano e Assinatura" subtitle="Gerencie sua assinatura e veja seu histórico de cobranças." />
-            <Card>
-                <CardHeader>
-                    <Skeleton className="h-6 w-1/3" />
-                    <Skeleton className="h-4 w-2/3" />
-                </CardHeader>
-                <CardContent>
-                    <div className="space-y-4">
-                        <Skeleton className="h-10 w-full" />
-                        <Skeleton className="h-10 w-full" />
-                    </div>
-                </CardContent>
-            </Card>
-        </>
+        <div className="p-8">
+            <Skeleton className="h-10 w-1/3 mb-8" />
+            <div className="space-y-4">
+                <Skeleton className="h-24 w-full" />
+                <Skeleton className="h-64 w-full" />
+            </div>
+        </div>
     );
   }
 
   const statusInfo = getStatusInfo(accessStatus);
-  
-  return (
-    <>
-      <PageHeader title="Plano e Assinatura" subtitle="Gerencie sua assinatura e veja seu histórico de cobranças." />
-      
-      <div className="grid gap-8 md:grid-cols-1">
-        <Card>
-          <CardHeader>
-            <CardTitle>Situação do Acesso</CardTitle>
-            <CardDescription>Informações sobre o seu plano de acesso atual.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
-                <div className="font-bold text-lg">{statusInfo.planName}</div>
-                <Badge variant={statusInfo.badgeVariant} className="flex items-center gap-2">
-                    {statusInfo.icon}
-                    <span>{statusInfo.text}</span>
-                </Badge>
-            </div>
-            <p className="text-sm text-muted-foreground mt-2">{statusInfo.description}</p>
-          </CardContent>
-        </Card>
+  const planOrder: PlanID[] = ['monthly', 'yearly', 'weekly'];
 
-        <Card>
-            <CardHeader>
-                <CardTitle>Nossos Planos</CardTitle>
-                <CardDescription>Escolha um dos planos abaixo para renovar ou iniciar sua assinatura. O pagamento é processado via Hotmart.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                <div className="grid md:grid-cols-3 gap-6">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Semanal</CardTitle>
-                            <CardDescription>Acesso por 7 dias.</CardDescription>
+  return (
+    <div className="max-w-5xl mx-auto p-4 sm:p-8">
+        <div className="text-center mb-12">
+            <h1 className="text-4xl font-extrabold tracking-tight lg:text-5xl">Nossos Planos</h1>
+            <p className="mt-4 text-lg text-muted-foreground">Escolha o plano ideal para o seu negócio e comece a vender mais e melhor.</p>
+        </div>
+      
+        <div className="grid gap-8 md:grid-cols-1 mb-12">
+            <Card>
+                <CardHeader>
+                    <CardTitle>Situação do seu Acesso</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 bg-muted/50 rounded-lg">
+                        <div className="mb-2 sm:mb-0">
+                            <p className="font-bold text-lg">{statusInfo.planName}</p>
+                            <p className="text-sm text-muted-foreground">{statusInfo.description}</p>
+                        </div>
+                        <Badge variant={statusInfo.badgeVariant} className="flex items-center gap-2 text-sm px-3 py-1">
+                            {statusInfo.icon}
+                            <span>{statusInfo.text}</span>
+                        </Badge>
+                    </div>
+                </CardContent>
+            </Card>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch">
+            {planOrder.map(planId => {
+                const plan = PLANS_CONFIG[planId];
+                if (plan.isFree) return null; // Não mostra plano free aqui
+                
+                const isRecommended = planId === 'yearly';
+
+                return (
+                    <Card key={planId} className={cn(
+                        "flex flex-col",
+                        isRecommended ? 'border-primary border-2 shadow-lg' : ''
+                    )}>
+                        {isRecommended && (
+                            <div className="py-1 px-4 bg-primary text-primary-foreground text-center text-sm font-semibold rounded-t-lg">
+                                Mais Popular
+                            </div>
+                        )}
+                        <CardHeader className="text-center">
+                            <CardTitle className="text-2xl">{plan.name}</CardTitle>
+                            <CardDescription>{plan.description}</CardDescription>
                         </CardHeader>
-                        <CardContent>
-                            <p className="text-3xl font-bold">R$29</p>
+                        <CardContent className="flex-grow flex flex-col items-center justify-center text-center">
+                            <div className="mb-6">
+                                <span className="text-4xl font-bold">{plan.price}</span>
+                                <span className="text-muted-foreground">/{plan.periodicity}</span>
+                            </div>
+                            <ul className="space-y-3 text-muted-foreground">
+                                {plan.benefits.map((benefit, i) => (
+                                    <li key={i} className="flex items-center gap-2">
+                                        <CheckCircle className="h-4 w-4 text-green-500" />
+                                        <span>{benefit}</span>
+                                    </li>
+                                ))}
+                            </ul>
                         </CardContent>
-                        <CardContent>
-                            <Button className="w-full" onClick={() => handleCheckout('weekly')}>
-                                <ShoppingCart className="mr-2 h-4 w-4" /> Continuar
+                        <CardFooter>
+                            <Button 
+                                className="w-full" 
+                                size="lg" 
+                                variant={isRecommended ? 'default' : 'secondary'}
+                                onClick={() => {
+                                    setSelectedPlan(planId);
+                                    // Adiciona um pequeno delay para a UI do botão focar antes do checkout
+                                    setTimeout(handleCheckout, 100);
+                                }}
+                            >
+                                Assinar Agora
                             </Button>
-                        </CardContent>
+                        </CardFooter>
                     </Card>
-                    <Card className="border-primary">
-                        <CardHeader>
-                            <CardTitle>Mensal</CardTitle>
-                            <CardDescription>O mais popular. Acesso por 30 dias.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <p className="text-3xl font-bold">R$97</p>
-                        </CardContent>
-                        <CardContent>
-                            <Button className="w-full" onClick={() => handleCheckout('monthly')}>
-                                <ShoppingCart className="mr-2 h-4 w-4" /> Continuar
-                            </Button>
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Anual</CardTitle>
-                            <CardDescription>O melhor custo-benefício. Acesso por 365 dias.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <p className="text-3xl font-bold">R$297</p>
-                        </CardContent>
-                        <CardContent>
-                            <Button className="w-full" onClick={() => handleCheckout('yearly')}>
-                                <ShoppingCart className="mr-2 h-4 w-4" /> Continuar
-                            </Button>
-                        </CardContent>
-                    </Card>
+                );
+            })}
+        </div>
+        
+        <div className="mt-12 flex flex-col items-center gap-6">
+            <p className="font-semibold text-center">Escolha seu método de pagamento preferido:</p>
+             <RadioGroup
+                defaultValue="hotmart"
+                className="grid grid-cols-3 gap-4"
+                onValueChange={(value: CheckoutProvider) => setSelectedProvider(value)}
+            >
+                <div>
+                    <RadioGroupItem value="kiwify" id="kiwify" className="peer sr-only" />
+                    <Label htmlFor="kiwify" className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer">
+                        Kiwify
+                    </Label>
                 </div>
-            </CardContent>
-        </Card>
-      </div>
-    </>
+                <div>
+                    <RadioGroupItem value="hotmart" id="hotmart" className="peer sr-only" />
+                    <Label htmlFor="hotmart" className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer">
+                        Hotmart
+                    </Label>
+                </div>
+                 <div>
+                    <RadioGroupItem value="perfectpay" id="perfectpay" className="peer sr-only" />
+                    <Label htmlFor="perfectpay" className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer">
+                        PerfectPay
+                    </Label>
+                </div>
+            </RadioGroup>
+            
+            <div className="text-center text-muted-foreground text-sm flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-green-600" />
+                <span>Pagamento seguro e você pode cancelar quando quiser.</span>
+            </div>
+        </div>
+
+    </div>
   );
 }

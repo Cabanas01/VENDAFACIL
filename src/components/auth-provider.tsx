@@ -23,6 +23,7 @@ import type {
   SaleItem,
   StoreAccessStatus,
 } from '@/lib/types';
+import { addDays } from 'date-fns';
 
 type AuthContextType = {
   user: User | null;
@@ -79,25 +80,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .rpc('get_store_access_status', { p_store_id: storeId });
     
     if (error) {
-      setAccessStatus({
-        acesso_liberado: false,
-        data_fim_acesso: null,
-        plano_nome: 'Erro',
-        mensagem: 'Não foi possível verificar seu acesso. Tente novamente mais tarde.'
-      });
-      return;
+        setAccessStatus({
+            acesso_liberado: false,
+            data_fim_acesso: null,
+            plano_nome: 'Erro',
+            mensagem: 'Não foi possível verificar seu acesso. Tente novamente mais tarde.'
+        });
+        return;
     }
 
-    if (data && data.length > 0) {
-      setAccessStatus(data[0]);
+    if (Array.isArray(data) && data.length > 0) {
+        setAccessStatus(data[0]);
     } else {
-      // This case should ideally not be reached if the SQL function is correct, but it's a safe fallback.
-      setAccessStatus({
-        acesso_liberado: false,
-        data_fim_acesso: null,
-        plano_nome: 'Erro',
-        mensagem: 'Nenhuma informação de acesso encontrada para a loja.'
-      });
+        const fallbackStatus = {
+            acesso_liberado: false,
+            data_fim_acesso: null,
+            plano_nome: 'Sem Plano',
+            mensagem: 'Sua loja não possui um plano de acesso. Escolha um plano para começar.'
+        };
+        setAccessStatus(fallbackStatus);
     }
   }, []);
 
@@ -265,7 +266,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const createStore = useCallback(async (storeData: any) => {
     if (!user) return null;
-    const { data, error } = await supabase.rpc('create_new_store', {
+    
+    // 1. Create the store
+    const { data: newStore, error } = await supabase.rpc('create_new_store', {
       p_name: storeData.name,
       p_legal_name: storeData.legal_name,
       p_cnpj: storeData.cnpj,
@@ -274,13 +277,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       p_timezone: storeData.timezone,
     }).select().single();
 
-    if (error) {
-      setStoreError(error.message);
+    if (error || !newStore) {
+      setStoreError(error?.message || 'Failed to create store.');
       return null;
+    }
+    
+    // 2. Grant initial 7-day trial
+    const now = new Date();
+    const trialEndDate = addDays(now, 7);
+    const { error: trialError } = await supabase
+      .from('store_access')
+      .insert({
+          store_id: newStore.id,
+          plano_nome: 'Trial',
+          plano_tipo: 'free',
+          data_inicio_acesso: now.toISOString(),
+          data_fim_acesso: trialEndDate.toISOString(),
+          status_acesso: 'ativo',
+          origem: 'onboarding',
+          renovavel: false,
+      });
+    
+    if (trialError) {
+      console.error('Failed to grant initial trial:', trialError.message);
+      // Don't fail the whole onboarding, just log the error. The user can go to /billing.
     }
 
     await fetchStoreData(user.id);
-    return data as Store;
+    return newStore as Store;
   }, [user, fetchStoreData]);
 
   const updateStore = useCallback(async (data: any) => {

@@ -17,6 +17,7 @@ import AdminSales from './sales';
 import AdminCash from './cash';
 import AdminLogs from './logs';
 import AdminCustomers from './customers';
+import AdminBilling from './billing';
 
 export default function AdminPage() {
   const [loading, setLoading] = useState(true);
@@ -76,7 +77,7 @@ export default function AdminPage() {
             </div>
         </div>
         <div className="space-y-4">
-          <Skeleton className="h-10 w-[650px]" />
+          <Skeleton className="h-10 w-[750px]" />
           <Skeleton className="h-64 w-full" />
         </div>
       </div>
@@ -110,6 +111,7 @@ export default function AdminPage() {
             <TabsTrigger value="customers">Clientes (Global)</TabsTrigger>
             <TabsTrigger value="sales">Vendas</TabsTrigger>
             <TabsTrigger value="cash">Caixas</TabsTrigger>
+            <TabsTrigger value="billing">Faturamento</TabsTrigger>
             <TabsTrigger value="logs">Logs</TabsTrigger>
         </TabsList>
         <TabsContent value="dashboard"><AdminDashboard /></TabsContent>
@@ -118,6 +120,7 @@ export default function AdminPage() {
         <TabsContent value="customers"><AdminCustomers /></TabsContent>
         <TabsContent value="sales"><AdminSales /></TabsContent>
         <TabsContent value="cash"><AdminCash /></TabsContent>
+        <TabsContent value="billing"><AdminBilling /></TabsContent>
         <TabsContent value="logs"><AdminLogs /></TabsContent>
     </Tabs>
     </div>

@@ -119,11 +119,11 @@ export type StoreStatus = 'unknown' | 'loading' | 'has' | 'none' | 'error';
 export type StoreAccess = {
     store_id: string;
     plano_nome: string;
-    plano_tipo: 'trial' | 'semanal' | 'mensal' | 'anual' | 'vitalicio';
+    plano_tipo: 'free' | 'weekly' | 'monthly' | 'yearly' | 'vitalicio';
     data_inicio_acesso: string;
     data_fim_acesso: string;
     status_acesso: 'ativo' | 'expirado' | 'bloqueado' | 'aguardando_liberacao';
-    origem?: string;
+    origem?: 'hotmart' | 'kiwify' | 'perfectpay' | 'admin' | 'onboarding';
     renovavel: boolean;
     updated_at: string;
 }
@@ -134,6 +134,20 @@ export type StoreAccessStatus = {
     plano_nome: string;
     mensagem: string;
 }
+
+// Types for Subscriptions & Billing
+export type SubscriptionEvent = {
+    id: number;
+    created_at: string;
+    provider: 'hotmart' | 'kiwify' | 'perfectpay' | 'admin';
+    event_type: string;
+    event_id: string; // Unique ID from the provider
+    store_id?: string;
+    user_id?: string;
+    plan_id?: string;
+    status: 'processed_access_granted' | 'processed_access_revoked' | 'logged_for_analytics' | 'error_missing_ref' | 'error_invalid_ref' | 'error_unknown_plan' | 'error_db_update' | 'error_exception';
+    raw_payload: Record<string, any>;
+};
 
 
 // Types for Analytics
