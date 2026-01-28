@@ -23,6 +23,16 @@ const getStatusInfo = (accessStatus: import('@/lib/types').StoreAccessStatus | n
         }
     }
 
+    if (accessStatus.plano_nome === 'Erro') {
+        return {
+            icon: <XCircle className="h-5 w-5 text-destructive" />,
+            text: 'Erro de Verificação',
+            badgeVariant: 'destructive' as const,
+            description: accessStatus.mensagem,
+            planName: 'Erro'
+        }
+    }
+
     const isExpired = !accessStatus.acesso_liberado && (accessStatus.mensagem.includes('expirou') || accessStatus.mensagem.includes('bloqueado'));
     const isWaiting = !accessStatus.acesso_liberado && accessStatus.mensagem.includes('aguardando');
 
