@@ -76,11 +76,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchAccessStatus = useCallback(async (storeId: string) => {
     const { data, error } = await supabase
-      .rpc('get_store_access_status', { p_store_id: storeId })
-      .single();
+      .rpc('get_store_access_status', { p_store_id: storeId });
     
     if (error) {
-      // Set a default blocked status on error
       setAccessStatus({
         acesso_liberado: false,
         data_fim_acesso: null,
@@ -90,7 +88,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    setAccessStatus(data);
+    if (data && data.length > 0) {
+      setAccessStatus(data[0]);
+    } else {
+      // This case should ideally not be reached if the SQL function is correct, but it's a safe fallback.
+      setAccessStatus({
+        acesso_liberado: false,
+        data_fim_acesso: null,
+        plano_nome: 'Erro',
+        mensagem: 'Nenhuma informação de acesso encontrada para a loja.'
+      });
+    }
   }, []);
 
   const fetchStoreData = useCallback(async (userId: string) => {
