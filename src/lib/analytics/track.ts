@@ -55,7 +55,6 @@ export function useAnalytics() {
       const sessionId = getOrCreateSessionId();
       await supabase.rpc('rpc_register_unique_click', {
           p_store_id: store.id,
-          p_user_id: user.id,
           p_session_id: sessionId,
           p_target: target,
           p_metadata: metadata

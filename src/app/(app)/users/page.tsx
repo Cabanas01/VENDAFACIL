@@ -65,7 +65,7 @@ export default function UsersAnalyticsPage() {
       const toDate = (dateRange.to || dateRange.from).toISOString();
 
       const { data, error } = await supabase
-        .rpc('rpc_analytics_summary', {
+        .rpc('get_analytics_summary', {
           p_store_id: store.id,
           p_from: fromDate,
           p_to: toDate,
