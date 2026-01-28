@@ -80,7 +80,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .single();
     
     if (error) {
-      console.error('[ACCESS_STATUS] Fetch error:', error);
       // Set a default blocked status on error
       setAccessStatus({
         acesso_liberado: false,
