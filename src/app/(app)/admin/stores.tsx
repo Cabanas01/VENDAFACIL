@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -11,7 +12,6 @@ import { Button } from '@/components/ui/button';
 import { MoreHorizontal, Eye, Lock, Trash2, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import Link from 'next/link';
 
 type StoreRow = {
   id: string;
@@ -51,6 +51,7 @@ export default function AdminStores() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('general');
+  const router = useRouter();
 
   useEffect(() => {
     async function loadStores() {
@@ -157,11 +158,9 @@ export default function AdminStores() {
                         <Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                         <DropdownMenuItem asChild>
-                          <Link href={`/admin/customers?store_id=${s.id}`}>
-                            <Users className="mr-2 h-4 w-4" /> Ver Clientes
-                          </Link>
-                        </DropdownMenuItem>
+                         <DropdownMenuItem onSelect={() => router.push(`/admin/customers?store_id=${s.id}`)}>
+                           <Users className="mr-2 h-4 w-4" /> Ver Clientes
+                         </DropdownMenuItem>
                         <DropdownMenuItem>
                           <Eye className="mr-2 h-4 w-4" /> Ver Detalhes
                         </DropdownMenuItem>
