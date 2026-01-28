@@ -22,6 +22,7 @@ import type {
   StoreMember,
   SaleItem,
   StoreAccessStatus,
+  Customer,
 } from '@/lib/types';
 import { addDays } from 'date-fns';
 
@@ -50,6 +51,7 @@ type AuthContextType = {
   cashRegisters: CashRegister[];
 
   addProduct: (product: Omit<Product, 'id' | 'store_id' | 'created_at'>) => Promise<void>;
+  addCustomer: (customer: Omit<Customer, 'id' | 'store_id' | 'created_at'>) => Promise<void>;
   updateProduct: (productId: string, product: Partial<Omit<Product, 'id' | 'store_id'>>) => Promise<void>;
   updateProductStock: (productId: string, newStock: number) => Promise<void>;
   removeProduct: (productId: string) => Promise<void>;
@@ -338,6 +340,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.from('products').insert({ ...product, store_id: store.id, barcode: product.barcode || null });
     await fetchStoreData(user.id);
   }, [store, user, fetchStoreData]);
+  
+  const addCustomer = useCallback(async (customer: Omit<Customer, 'id' | 'store_id' | 'created_at'>) => {
+    if (!store || !user) throw new Error('Sessão inválida');
+
+    if (accessStatus?.plano_nome === 'Trial') {
+        const { count, error } = await supabase.from('customers').select('id', { count: 'exact', head: true }).eq('store_id', store.id);
+
+        if (error) {
+            console.error("Failed to check customers limit:", error.message);
+        } else if (count !== null && count >= 10) {
+            throw new Error('Você atingiu o limite de 10 clientes no plano de avaliação. Faça o upgrade para continuar.');
+        }
+    }
+    
+    const { error: insertError } = await supabase.from('customers').insert({ ...customer, store_id: store.id });
+
+    if (insertError) {
+        throw insertError;
+    }
+    // No fetchStoreData here, clients/page.tsx handles its own state
+  }, [store, user, accessStatus]);
+
 
   const updateProduct = useCallback(async (id: string, product: any) => {
     if (!store || !user) return;
@@ -385,6 +409,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const addSale = useCallback(async (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => {
     if (!store || !user) throw new Error('Sessão inválida');
+
+    // Free plan limitation check
+    if (accessStatus?.plano_nome === 'Trial') {
+        const { count, error } = await supabase.from('sales').select('id', { count: 'exact', head: true }).eq('store_id', store.id);
+        if (error) {
+            console.error("Failed to check sales limit:", error.message);
+        } else if (count !== null && count >= 5) {
+            throw new Error('Você atingiu o limite de 5 vendas do plano de avaliação. Faça o upgrade para continuar vendendo.');
+        }
+    }
 
     // Pre-flight check in the frontend for immediate feedback
     for (const item of cart) {
@@ -447,7 +481,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await supabase.from('sales').delete().eq('id', saleId);
         throw new Error(error.message || 'Falha ao processar a venda. A transação foi revertida.');
     }
-  }, [store, user, products, fetchStoreData]);
+  }, [store, user, products, accessStatus, fetchStoreData]);
 
   const value: AuthContextType = {
     user,
@@ -469,6 +503,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     sales,
     cashRegisters,
     addProduct,
+    addCustomer,
     updateProduct,
     updateProductStock,
     removeProduct,

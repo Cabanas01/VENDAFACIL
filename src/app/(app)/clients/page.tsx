@@ -66,7 +66,7 @@ type CustomerFormValues = z.infer<typeof customerSchema>;
 const PAGE_SIZE = 20;
 
 export default function ClientsPage() {
-  const { store } = useAuth();
+  const { store, addCustomer } = useAuth();
   const { toast } = useToast();
 
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -139,13 +139,13 @@ export default function ClientsPage() {
         await supabase.from('customers').update(values).eq('id', editingCustomer.id);
         toast({ title: "Cliente atualizado com sucesso!" });
       } else {
-        await supabase.from('customers').insert({ ...values, store_id: store.id });
+        await addCustomer(values);
         toast({ title: "Cliente criado com sucesso!" });
       }
       setIsModalOpen(false);
       fetchCustomers();
     } catch (error: any) {
-      toast({ variant: 'destructive', title: "Erro ao salvar cliente", description: error.message });
+      toast({ variant: 'destructive', title: error.message.includes('limite') ? 'Limite do Plano Atingido' : "Erro ao salvar cliente", description: error.message });
     }
   };
   
