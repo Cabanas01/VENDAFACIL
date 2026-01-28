@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { PageHeader } from '@/components/page-header';
 import { useAuth } from '@/components/auth-provider';
 import { useAccess } from '@/hooks/use-entitlements';
@@ -117,10 +118,12 @@ export default function BillingPage() {
             
           </CardContent>
           <CardFooter>
-            <Button>
-                <ShoppingCart className="mr-2 h-4 w-4" />
-                Ver Planos e Renovar
-            </Button>
+            <Link href="https://app.vendafacil.com/planos" target="_blank" rel="noopener noreferrer" asChild>
+                <Button>
+                    <ShoppingCart className="mr-2 h-4 w-4" />
+                    Ver Planos e Renovar
+                </Button>
+            </Link>
           </CardFooter>
         </Card>
       </div>
