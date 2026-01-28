@@ -1,32 +1,20 @@
 'use client';
 
 import { useAuth } from '@/components/auth-provider';
-import type { Entitlement } from '@/lib/types';
+import type { StoreAccessStatus } from '@/lib/types';
 
-type UseEntitlementsOutput = {
-  entitlements: Entitlement | null;
-  hasAccess: (feature: string) => boolean;
-  getLimit: (limit: string) => number;
+type UseAccessOutput = {
+  accessStatus: StoreAccessStatus | null;
+  isAllowed: boolean;
   isLoading: boolean;
 };
 
-export function useEntitlements(): UseEntitlementsOutput {
-  const { entitlements, loading } = useAuth();
-
-  const hasAccess = (feature: string): boolean => {
-    if (!entitlements) return false;
-    return entitlements.features?.[feature] ?? false;
-  };
-
-  const getLimit = (limit: string): number => {
-    if (!entitlements) return 0;
-    return entitlements.limits?.[limit] ?? 0;
-  };
+export function useAccess(): UseAccessOutput {
+  const { accessStatus, loading } = useAuth();
 
   return {
-    entitlements,
-    hasAccess,
-    getLimit,
-    isLoading: loading || !entitlements,
+    accessStatus,
+    isAllowed: accessStatus?.acesso_liberado ?? false,
+    isLoading: loading || !accessStatus,
   };
 }

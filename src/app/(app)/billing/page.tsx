@@ -2,25 +2,62 @@
 
 import { PageHeader } from '@/components/page-header';
 import { useAuth } from '@/components/auth-provider';
-import { useEntitlements } from '@/hooks/use-entitlements';
+import { useAccess } from '@/hooks/use-access';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { CheckCircle, AlertTriangle, XCircle, CreditCard } from 'lucide-react';
+import { CheckCircle, AlertTriangle, XCircle, CreditCard, ShoppingCart } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
-const planNames: Record<string, string> = {
-  free: 'Plano Gratuito (Trial)',
-  weekly: 'Plano Semanal',
-  monthly: 'Plano Mensal',
-  yearly: 'Plano Anual',
-};
+
+const getStatusInfo = (accessStatus: import('@/lib/types').StoreAccessStatus | null) => {
+    if (!accessStatus) {
+        return {
+            icon: <AlertTriangle className="h-5 w-5 text-yellow-500" />,
+            text: 'Verificando...',
+            badgeVariant: 'secondary' as const,
+            description: 'Aguarde enquanto verificamos o status do seu acesso.',
+            planName: 'N/A'
+        }
+    }
+
+    const isExpired = !accessStatus.acesso_liberado && (accessStatus.mensagem.includes('expirou') || accessStatus.mensagem.includes('bloqueado'));
+    const isWaiting = !accessStatus.acesso_liberado && accessStatus.mensagem.includes('aguardando');
+
+    if (isExpired) {
+        return {
+            icon: <XCircle className="h-5 w-5 text-destructive" />,
+            text: 'Acesso Expirado',
+            badgeVariant: 'destructive' as const,
+            description: accessStatus.mensagem,
+            planName: accessStatus.plano_nome
+        }
+    }
+    if (isWaiting) {
+        return {
+            icon: <AlertTriangle className="h-5 w-5 text-yellow-500" />,
+            text: 'Aguardando Liberação',
+            badgeVariant: 'secondary' as const,
+            description: accessStatus.mensagem,
+            planName: accessStatus.plano_nome
+        }
+    }
+    // Default to active
+    return {
+        icon: <CheckCircle className="h-5 w-5 text-green-500" />,
+        text: 'Plano Ativo',
+        badgeVariant: 'default' as const,
+        description: accessStatus.mensagem,
+        planName: accessStatus.plano_nome
+    }
+}
+
 
 export default function BillingPage() {
   const { store } = useAuth();
-  const { entitlements, isLoading } = useEntitlements();
+  const { accessStatus, isLoading } = useAccess();
 
   if (isLoading || !store) {
     return (
@@ -45,50 +82,21 @@ export default function BillingPage() {
     );
   }
 
-  const isTrial = entitlements?.plan_id === 'free';
-  const isExpired = new Date() > new Date(entitlements?.access_until || 0);
-
-  const getStatusInfo = () => {
-    if (isExpired) {
-        return {
-            icon: <XCircle className="h-5 w-5 text-destructive" />,
-            text: 'Acesso Expirado',
-            badgeVariant: 'destructive' as const,
-            description: `Seu acesso expirou em ${format(new Date(entitlements?.access_until || 0), 'dd/MM/yyyy')}. Para continuar usando, por favor, escolha um plano.`
-        }
-    }
-    if (isTrial) {
-        return {
-            icon: <AlertTriangle className="h-5 w-5 text-yellow-500" />,
-            text: 'Período de Testes',
-            badgeVariant: 'secondary' as const,
-            description: `Seu acesso de teste termina em ${format(new Date(entitlements?.access_until || 0), 'dd/MM/yyyy')}.`
-        }
-    }
-    return {
-        icon: <CheckCircle className="h-5 w-5 text-green-500" />,
-        text: 'Plano Ativo',
-        badgeVariant: 'default' as const,
-        description: `Sua assinatura está ativa e será renovada em ${format(new Date(entitlements?.access_until || 0), 'dd/MM/yyyy')}.`
-    }
-  }
-
-  const statusInfo = getStatusInfo();
-  const currentPlanName = entitlements ? planNames[entitlements.plan_id] : 'Nenhum plano';
+  const statusInfo = getStatusInfo(accessStatus);
   
   return (
     <>
       <PageHeader title="Plano e Assinatura" subtitle="Gerencie sua assinatura e veja seu histórico de cobranças." />
       
-      <div className="grid gap-8 md:grid-cols-2">
+      <div className="grid gap-8 md:grid-cols-1">
         <Card>
           <CardHeader>
-            <CardTitle>Plano Atual</CardTitle>
-            <CardDescription>Informações sobre sua assinatura atual.</CardDescription>
+            <CardTitle>Situação do Acesso</CardTitle>
+            <CardDescription>Informações sobre o seu plano de acesso atual.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
-                <div className="font-bold text-lg">{currentPlanName}</div>
+                <div className="font-bold text-lg">{statusInfo.planName}</div>
                 <Badge variant={statusInfo.badgeVariant} className="flex items-center gap-2">
                     {statusInfo.icon}
                     <span>{statusInfo.text}</span>
@@ -100,22 +108,10 @@ export default function BillingPage() {
           </CardContent>
           <CardFooter>
             <Button>
-                <CreditCard className="mr-2 h-4 w-4" />
-                Gerenciar Assinatura
+                <ShoppingCart className="mr-2 h-4 w-4" />
+                Ver Planos e Renovar
             </Button>
           </CardFooter>
-        </Card>
-
-         <Card>
-          <CardHeader>
-            <CardTitle>Histórico de Cobranças</CardTitle>
-             <CardDescription>Aqui aparecerão suas faturas e pagamentos.</CardDescription>
-          </CardHeader>
-          <CardContent>
-             <div className="flex items-center justify-center h-40 border-2 border-dashed rounded-lg">
-                <p className="text-muted-foreground text-sm">Nenhum histórico de cobrança ainda.</p>
-             </div>
-          </CardContent>
         </Card>
       </div>
     </>

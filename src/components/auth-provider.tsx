@@ -21,7 +21,7 @@ import type {
   StoreStatus,
   StoreMember,
   SaleItem,
-  Entitlement,
+  StoreAccessStatus,
 } from '@/lib/types';
 
 type AuthContextType = {
@@ -32,7 +32,7 @@ type AuthContextType = {
   storeStatus: StoreStatus;
   storeError: string | null;
 
-  entitlements: Entitlement | null;
+  accessStatus: StoreAccessStatus | null;
 
   login: (email: string, password: string) => Promise<{ error: AuthError | null }>;
   signup: (email: string, password: string) => Promise<{ error: AuthError | null }>;
@@ -65,7 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const [user, setUser] = useState<User | null>(null);
   const [store, setStore] = useState<Store | null>(null);
-  const [entitlements, setEntitlements] = useState<Entitlement | null>(null);
+  const [accessStatus, setAccessStatus] = useState<StoreAccessStatus | null>(null);
   const [storeStatus, setStoreStatus] = useState<StoreStatus>('unknown');
   const [storeError, setStoreError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -74,24 +74,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [sales, setSales] = useState<Sale[]>([]);
   const [cashRegisters, setCashRegistersState] = useState<CashRegister[]>([]);
 
-  const fetchEntitlements = useCallback(async (storeId: string) => {
+  const fetchAccessStatus = useCallback(async (storeId: string) => {
     const { data, error } = await supabase
-      .rpc('get_store_entitlements', { p_store_id: storeId })
+      .rpc('get_store_access_status', { p_store_id: storeId })
       .single();
     
     if (error) {
-      console.error('[ENTITLEMENTS] Fetch error:', error);
-      setEntitlements(null);
+      console.error('[ACCESS_STATUS] Fetch error:', error);
+      // Set a default blocked status on error
+      setAccessStatus({
+        acesso_liberado: false,
+        data_fim_acesso: null,
+        plano_nome: 'Erro',
+        mensagem: 'Não foi possível verificar seu acesso. Tente novamente mais tarde.'
+      });
       return;
     }
 
-    setEntitlements(data);
+    setAccessStatus(data);
   }, []);
 
   const fetchStoreData = useCallback(async (userId: string) => {
     setStoreStatus('loading');
     setStoreError(null);
-    setEntitlements(null);
+    setAccessStatus(null);
 
     try {
       let storeId: string | null = null;
@@ -126,7 +132,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      await fetchEntitlements(storeId);
+      await fetchAccessStatus(storeId);
 
       const { data: storeDetails, error: storeErr } = await supabase
         .from('stores')
@@ -176,7 +182,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setStoreStatus('error');
       setStoreError(err.message ?? 'Erro desconhecido');
     }
-  }, [fetchEntitlements]);
+  }, [fetchAccessStatus]);
 
   const handleSession = useCallback(
     async (session: any) => {
@@ -188,7 +194,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      setUser({ id: supabaseUser.id, email: supabaseUser.email } as User);
+      const {data: profile} = await supabase.from('users').select('id, email, name, avatar_url, is_admin').eq('id', supabaseUser.id).single();
+      setUser(profile as User);
+
       await fetchStoreData(supabaseUser.id);
     },
     [fetchStoreData]
@@ -417,7 +425,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loading,
     storeStatus,
     storeError,
-    entitlements,
+    accessStatus,
     login,
     signup,
     logout,

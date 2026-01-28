@@ -3,6 +3,7 @@ export type User = {
   email: string;
   name?: string;
   avatar_url?: string;
+  is_admin?: boolean;
 };
 
 export type StoreSettings = {
@@ -114,42 +115,26 @@ export type Customer = {
 export type StoreStatus = 'unknown' | 'loading' | 'has' | 'none' | 'error';
 
 
-// Types for SaaS Billing & Entitlements
-export type Plan = {
-    id: 'free' | 'weekly' | 'monthly' | 'yearly';
-    name: string;
-    price_cents: number;
-    billing_period: 'day' | 'week' | 'month' | 'year';
-    features: { [key: string]: boolean };
-    limits: { [key: string]: number };
-};
-
-export type SubscriptionStatus = 'trialing' | 'active' | 'expired' | 'canceled' | 'past_due';
-
-export type Subscription = {
-    id: string;
-    user_id: string;
+// Types for Time-based Access Control
+export type StoreAccess = {
     store_id: string;
-    plan_id: Plan['id'];
-    status: SubscriptionStatus;
-    started_at: string;
-    trial_ends_at?: string | null;
-    current_period_end: string;
-    provider: 'kiwify' | 'manual';
-    provider_subscription_id?: string | null;
-    provider_customer_id?: string | null;
-    last_payment_at?: string | null;
-};
-
-export type Entitlement = {
-    store_id: string;
-    plan_id: Plan['id'];
-    is_paying: boolean;
-    access_until: string;
-    features: { [key: string]: boolean };
-    limits: { [key: string]: number };
+    plano_nome: string;
+    plano_tipo: 'trial' | 'semanal' | 'mensal' | 'anual' | 'vitalicio';
+    data_inicio_acesso: string;
+    data_fim_acesso: string;
+    status_acesso: 'ativo' | 'expirado' | 'bloqueado' | 'aguardando_liberacao';
+    origem?: string;
+    renovavel: boolean;
     updated_at: string;
-};
+}
+
+export type StoreAccessStatus = {
+    acesso_liberado: boolean;
+    data_fim_acesso: string | null;
+    plano_nome: string;
+    mensagem: string;
+}
+
 
 // Types for Analytics
 export type UserSession = {
