@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import { PageHeader } from '@/components/page-header';
 import { useAuth } from '@/components/auth-provider';
 import { useAccess } from '@/hooks/use-entitlements';
@@ -9,8 +8,6 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CheckCircle, AlertTriangle, XCircle, ShoppingCart } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { Label } from '@/components/ui/label';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { CHECKOUT_LINKS } from '@/lib/billing/checkoutLinks';
 import type { CheckoutProvider, PlanType } from '@/lib/billing/checkoutLinks';
 import { useAnalytics } from '@/lib/analytics/track';
@@ -82,9 +79,9 @@ export default function BillingPage() {
   const { store } = useAuth();
   const { accessStatus, isLoading } = useAccess();
   const { registerUniqueClick } = useAnalytics();
-  const [provider, setProvider] = useState<CheckoutProvider>('kiwify');
 
   const handleCheckout = (plan: PlanType) => {
+    const provider: CheckoutProvider = 'hotmart';
     const url = CHECKOUT_LINKS[provider][plan];
     registerUniqueClick(`billing_checkout_${provider}_${plan}`, {
         provider,
@@ -140,80 +137,53 @@ export default function BillingPage() {
 
         <Card>
             <CardHeader>
-                <CardTitle>Renovar ou Trocar de Plano</CardTitle>
-                <CardDescription>Escolha um dos planos abaixo e seu provedor de pagamento preferido.</CardDescription>
+                <CardTitle>Nossos Planos</CardTitle>
+                <CardDescription>Escolha um dos planos abaixo para renovar ou iniciar sua assinatura. O pagamento é processado via Hotmart.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-                <div>
-                    <Label className="text-base font-medium">1. Escolha o Provedor de Pagamento</Label>
-                    <RadioGroup defaultValue="kiwify" value={provider} onValueChange={(v) => setProvider(v as CheckoutProvider)} className="mt-2 grid grid-cols-3 gap-4">
-                        <div>
-                            <RadioGroupItem value="kiwify" id="kiwify" className="peer sr-only" />
-                            <Label htmlFor="kiwify" className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary">
-                                Kiwify
-                            </Label>
-                        </div>
-                        <div>
-                            <RadioGroupItem value="hotmart" id="hotmart" className="peer sr-only" />
-                            <Label htmlFor="hotmart" className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary">
-                                Hotmart
-                            </Label>
-                        </div>
-                        <div>
-                            <RadioGroupItem value="perfectpay" id="perfectpay" className="peer sr-only" />
-                            <Label htmlFor="perfectpay" className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary">
-                                PerfectPay
-                            </Label>
-                        </div>
-                    </RadioGroup>
-                </div>
-                
-                <div>
-                    <Label className="text-base font-medium">2. Escolha o Plano</Label>
-                    <div className="mt-2 grid md:grid-cols-3 gap-6">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Semanal</CardTitle>
-                                <CardDescription>Acesso por 7 dias.</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <p className="text-3xl font-bold">R$29</p>
-                            </CardContent>
-                            <CardContent>
-                                <Button className="w-full" onClick={() => handleCheckout('weekly')}>
-                                    <ShoppingCart className="mr-2 h-4 w-4" /> Continuar
-                                </Button>
-                            </CardContent>
-                        </Card>
-                        <Card className="border-primary">
-                            <CardHeader>
-                                <CardTitle>Mensal</CardTitle>
-                                <CardDescription>O mais popular. Acesso por 30 dias.</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <p className="text-3xl font-bold">R$97</p>
-                            </CardContent>
-                            <CardContent>
-                                <Button className="w-full" onClick={() => handleCheckout('monthly')}>
-                                    <ShoppingCart className="mr-2 h-4 w-4" /> Continuar
-                                </Button>
-                            </CardContent>
-                        </Card>
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Anual</CardTitle>
-                                <CardDescription>O melhor custo-benefício. Acesso por 365 dias.</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <p className="text-3xl font-bold">R$297</p>
-                            </CardContent>
-                            <CardContent>
-                                <Button className="w-full" onClick={() => handleCheckout('yearly')}>
-                                    <ShoppingCart className="mr-2 h-4 w-4" /> Continuar
-                                </Button>
-                            </CardContent>
-                        </Card>
-                    </div>
+            <CardContent>
+                <div className="grid md:grid-cols-3 gap-6">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Semanal</CardTitle>
+                            <CardDescription>Acesso por 7 dias.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <p className="text-3xl font-bold">R$29</p>
+                        </CardContent>
+                        <CardContent>
+                            <Button className="w-full" onClick={() => handleCheckout('weekly')}>
+                                <ShoppingCart className="mr-2 h-4 w-4" /> Continuar
+                            </Button>
+                        </CardContent>
+                    </Card>
+                    <Card className="border-primary">
+                        <CardHeader>
+                            <CardTitle>Mensal</CardTitle>
+                            <CardDescription>O mais popular. Acesso por 30 dias.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <p className="text-3xl font-bold">R$97</p>
+                        </CardContent>
+                        <CardContent>
+                            <Button className="w-full" onClick={() => handleCheckout('monthly')}>
+                                <ShoppingCart className="mr-2 h-4 w-4" /> Continuar
+                            </Button>
+                        </CardContent>
+                    </Card>
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Anual</CardTitle>
+                            <CardDescription>O melhor custo-benefício. Acesso por 365 dias.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <p className="text-3xl font-bold">R$297</p>
+                        </CardContent>
+                        <CardContent>
+                            <Button className="w-full" onClick={() => handleCheckout('yearly')}>
+                                <ShoppingCart className="mr-2 h-4 w-4" /> Continuar
+                            </Button>
+                        </CardContent>
+                    </Card>
                 </div>
             </CardContent>
         </Card>
