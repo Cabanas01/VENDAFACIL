@@ -31,6 +31,7 @@ import {
   LogOut,
   ChevronDown,
   CreditCard,
+  Users
 } from 'lucide-react';
 import { useAuth } from '@/components/auth-provider';
 
@@ -38,6 +39,7 @@ const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: Home },
   { href: '/sales', label: 'Vendas', icon: ShoppingCart },
   { href: '/products', label: 'Produtos', icon: Package },
+  { href: '/clients', label: 'Clientes', icon: Users },
   { href: '/cash', label: 'Caixa', icon: Wallet },
   { href: '/reports', label: 'Relatórios', icon: BarChart3 },
 ];

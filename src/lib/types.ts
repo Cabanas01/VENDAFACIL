@@ -99,6 +99,16 @@ export type CashRegister = {
   closing_amount_cents: number | null;
 };
 
+export type Customer = {
+    id: string;
+    store_id: string;
+    name: string;
+    email: string;
+    phone: string;
+    cpf: string | null;
+    created_at: string;
+};
+
 export type StoreStatus = 'unknown' | 'loading' | 'has' | 'none' | 'error';
 
 
