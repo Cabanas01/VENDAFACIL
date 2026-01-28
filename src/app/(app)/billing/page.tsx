@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { CHECKOUT_LINKS } from '@/lib/billing/checkoutLinks';
 import type { CheckoutProvider, PlanType } from '@/lib/billing/checkoutLinks';
 import { useAnalytics } from '@/lib/analytics/track';
+import { useToast } from '@/hooks/use-toast';
 
 const getStatusInfo = (accessStatus: import('@/lib/types').StoreAccessStatus | null) => {
     if (!accessStatus) {
@@ -79,10 +80,21 @@ export default function BillingPage() {
   const { store } = useAuth();
   const { accessStatus, isLoading } = useAccess();
   const { registerUniqueClick } = useAnalytics();
+  const { toast } = useToast();
 
   const handleCheckout = (plan: PlanType) => {
     const provider: CheckoutProvider = 'hotmart';
-    const url = CHECKOUT_LINKS[provider][plan];
+    const url = CHECKOUT_LINKS[provider]?.[plan];
+    
+    if (!url) {
+        toast({
+            variant: 'destructive',
+            title: 'Link de Checkout Indisponível',
+            description: 'O link para este plano ainda não foi configurado.'
+        });
+        return;
+    }
+
     registerUniqueClick(`billing_checkout_${provider}_${plan}`, {
         provider,
         plan,
