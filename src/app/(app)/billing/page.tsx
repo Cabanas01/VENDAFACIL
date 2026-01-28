@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { CheckCircle, AlertTriangle, XCircle, Info, ShieldCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/components/auth-provider';
-import { useAccess } from '@/hooks/use-entitlements';
 import { useAnalytics } from '@/lib/analytics/track';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -79,8 +78,7 @@ const getStatusInfo = (accessStatus: import('@/lib/types').StoreAccessStatus | n
 
 
 export default function BillingPage() {
-  const { user, store } = useAuth();
-  const { accessStatus, isLoading } = useAccess();
+  const { user, store, accessStatus, isLoading, startTrial } = useAuth();
   const { trackReportOpened, registerUniqueClick } = useAnalytics();
   const { toast } = useToast();
   
@@ -130,6 +128,24 @@ export default function BillingPage() {
     link.click();
     document.body.removeChild(link);
   }
+  
+  const handleStartTrial = async () => {
+    const { error } = await startTrial();
+    if (error) {
+        toast({
+            variant: 'destructive',
+            title: 'Não foi possível iniciar a avaliação',
+            description: error.message,
+        });
+    } else {
+        toast({
+            title: 'Avaliação iniciada!',
+            description: 'Você agora tem 7 dias de acesso gratuito.',
+        });
+        // The page will re-render due to the state change in AuthProvider,
+        // and the layout effect will redirect to /dashboard if access is granted.
+    }
+};
 
   if (isLoading || !store) {
     return (
@@ -144,7 +160,7 @@ export default function BillingPage() {
   }
 
   const statusInfo = getStatusInfo(accessStatus);
-  const planOrder: PlanID[] = ['monthly', 'yearly', 'weekly'];
+  const planOrder: PlanID[] = ['free', 'monthly', 'yearly'];
 
   return (
     <div className="max-w-5xl mx-auto p-4 sm:p-8">
@@ -176,7 +192,53 @@ export default function BillingPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch">
             {planOrder.map(planId => {
                 const plan = PLANS_CONFIG[planId];
-                if (plan.isFree) return null; // Não mostra plano free aqui
+                if (!plan) return null;
+                
+                if (plan.isFree) {
+                    const trialUsedOrActive = accessStatus?.plano_nome.includes('Trial');
+
+                    return (
+                        <Card key={planId} className="flex flex-col">
+                            <CardHeader className="text-center">
+                                <CardTitle className="text-2xl">{plan.name}</CardTitle>
+                                <CardDescription>{plan.description}</CardDescription>
+                            </CardHeader>
+                            <CardContent className="flex-grow flex flex-col items-center justify-center text-center">
+                                <div className="mb-6">
+                                    <span className="text-4xl font-bold">{plan.price}</span>
+                                    <span className="text-muted-foreground">/{plan.periodicity}</span>
+                                </div>
+                                <ul className="space-y-3 text-muted-foreground">
+                                    {plan.benefits.map((benefit, i) => (
+                                        <li key={i} className="flex items-center gap-2">
+                                            <CheckCircle className="h-4 w-4 text-green-500" />
+                                            <span>{benefit}</span>
+                                        </li>
+                                    ))}
+                                    <li className="flex items-center gap-2 text-yellow-500 pt-2">
+                                        <AlertTriangle className="h-4 w-4" />
+                                        <span>Limite de 10 clientes</span>
+                                    </li>
+                                    <li className="flex items-center gap-2 text-yellow-500">
+                                        <AlertTriangle className="h-4 w-4" />
+                                        <span>Limite de 5 vendas</span>
+                                    </li>
+                                </ul>
+                            </CardContent>
+                            <CardFooter>
+                                <Button 
+                                    className="w-full" 
+                                    size="lg" 
+                                    variant={'secondary'}
+                                    onClick={handleStartTrial}
+                                    disabled={trialUsedOrActive}
+                                >
+                                    {trialUsedOrActive ? 'Avaliação já utilizada' : 'Começar avaliação'}
+                                </Button>
+                            </CardFooter>
+                        </Card>
+                    );
+                }
                 
                 const isRecommended = planId === 'yearly';
 
