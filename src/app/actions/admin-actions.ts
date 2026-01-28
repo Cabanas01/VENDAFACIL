@@ -4,13 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 import { addMonths } from 'date-fns';
 import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
-import { config } from 'dotenv';
-config();
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { supabaseAdmin } from '@/lib/supabase/admin';
 
 async function verifyAdmin(): Promise<{ userId: string } | { error: string }> {
     const cookieStore = cookies();
