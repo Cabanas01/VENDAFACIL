@@ -78,13 +78,22 @@ const getStatusInfo = (accessStatus: import('@/lib/types').StoreAccessStatus | n
 
 
 export default function BillingPage() {
-  const { store } = useAuth();
+  const { user, store } = useAuth();
   const { accessStatus, isLoading } = useAccess();
   const { registerUniqueClick } = useAnalytics();
   const { toast } = useToast();
   const router = useRouter();
 
   const handleCheckout = (plan: PlanType) => {
+    if (!store || !user) {
+        toast({
+            variant: 'destructive',
+            title: 'Erro de Autenticação',
+            description: 'Não foi possível identificar seu usuário ou loja. Por favor, faça login novamente.'
+        });
+        return;
+    }
+
     const provider = 'hotmart';
     const url = CHECKOUT_LINKS[provider]?.[plan];
     
@@ -97,6 +106,9 @@ export default function BillingPage() {
         return;
     }
 
+    const externalReference = `${store.id}|${plan}|${user.id}`;
+    const finalUrl = `${url}&external_reference=${encodeURIComponent(externalReference)}`;
+
     registerUniqueClick(`billing_checkout_${provider}_${plan}`, {
         provider,
         plan,
@@ -104,7 +116,7 @@ export default function BillingPage() {
     });
 
     const link = document.createElement('a');
-    link.href = url;
+    link.href = finalUrl;
     link.target = '_blank';
     link.rel = 'noopener noreferrer';
     document.body.appendChild(link);
