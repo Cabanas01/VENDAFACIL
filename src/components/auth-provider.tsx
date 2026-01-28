@@ -21,6 +21,7 @@ import type {
   StoreStatus,
   StoreMember,
   SaleItem,
+  Entitlement,
 } from '@/lib/types';
 
 type AuthContextType = {
@@ -30,6 +31,8 @@ type AuthContextType = {
   loading: boolean;
   storeStatus: StoreStatus;
   storeError: string | null;
+
+  entitlements: Entitlement | null;
 
   login: (email: string, password: string) => Promise<{ error: AuthError | null }>;
   signup: (email: string, password: string) => Promise<{ error: AuthError | null }>;
@@ -62,6 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const [user, setUser] = useState<User | null>(null);
   const [store, setStore] = useState<Store | null>(null);
+  const [entitlements, setEntitlements] = useState<Entitlement | null>(null);
   const [storeStatus, setStoreStatus] = useState<StoreStatus>('unknown');
   const [storeError, setStoreError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -70,9 +74,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [sales, setSales] = useState<Sale[]>([]);
   const [cashRegisters, setCashRegistersState] = useState<CashRegister[]>([]);
 
+  const fetchEntitlements = useCallback(async (storeId: string) => {
+    const { data, error } = await supabase
+      .rpc('get_store_entitlements', { p_store_id: storeId })
+      .single();
+    
+    if (error) {
+      console.error('[ENTITLEMENTS] Fetch error:', error);
+      setEntitlements(null);
+      return;
+    }
+
+    setEntitlements(data);
+  }, []);
+
   const fetchStoreData = useCallback(async (userId: string) => {
     setStoreStatus('loading');
     setStoreError(null);
+    setEntitlements(null);
 
     try {
       let storeId: string | null = null;
@@ -106,6 +125,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setCashRegistersState([]);
         return;
       }
+
+      await fetchEntitlements(storeId);
 
       const { data: storeDetails, error: storeErr } = await supabase
         .from('stores')
@@ -155,7 +176,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setStoreStatus('error');
       setStoreError(err.message ?? 'Erro desconhecido');
     }
-  }, []);
+  }, [fetchEntitlements]);
 
   const handleSession = useCallback(
     async (session: any) => {
@@ -326,6 +347,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const addSale = useCallback(async (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => {
     if (!store || !user) throw new Error('Sessão inválida');
 
+    // Pre-flight check in the frontend for immediate feedback
     for (const item of cart) {
       const product = products.find(p => p.id === item.product_id);
       if (!product || product.stock_qty < item.quantity) {
@@ -336,39 +358,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const saleId = crypto.randomUUID();
     const total = cart.reduce((s, i) => s + i.subtotal_cents, 0);
 
-    const { data: sale } = await supabase
-      .from('sales')
-      .insert({ id: saleId, store_id: store.id, total_cents: total, payment_method: paymentMethod })
-      .select()
-      .single();
+    const { data: saleData, error: saleError } = await supabase
+        .from('sales')
+        .insert({ id: saleId, store_id: store.id, total_cents: total, payment_method: paymentMethod })
+        .select()
+        .single();
+    
+    if (saleError || !saleData) {
+        throw new Error(saleError?.message || 'Falha ao criar o registro da venda.');
+    }
+    
+    let createdSaleItems: SaleItem[] = [];
 
-    const items: SaleItem[] = [];
     try {
-      for (const item of cart) {
-        const { data } = await supabase.from('sale_items').insert({
-          id: crypto.randomUUID(),
-          sale_id: saleId,
-          product_id: item.product_id,
-          quantity: item.quantity,
-          unit_price_cents: item.unit_price_cents,
-          subtotal_cents: item.subtotal_cents,
-          product_name_snapshot: item.product_name_snapshot,
-          product_barcode_snapshot: item.product_barcode_snapshot ?? null,
-        }).select().single();
+        // Sequentially process each item
+        for (const item of cart) {
+            // 1. Insert the sale item
+            const { data: saleItemData, error: itemError } = await supabase
+                .from('sale_items')
+                .insert({
+                    sale_id: saleId,
+                    product_id: item.product_id,
+                    quantity: item.quantity,
+                    unit_price_cents: item.unit_price_cents,
+                    subtotal_cents: item.subtotal_cents,
+                    product_name_snapshot: item.product_name_snapshot,
+                    product_barcode_snapshot: item.product_barcode_snapshot,
+                })
+                .select()
+                .single();
 
-        items.push(data as SaleItem);
+            if (itemError) throw itemError;
+            createdSaleItems.push(saleItemData as SaleItem);
 
-        await supabase.rpc('decrement_stock', {
-          p_product_id: item.product_id,
-          p_quantity: item.quantity,
-        });
-      }
+            // 2. Decrement stock
+            const { error: stockError } = await supabase.rpc('decrement_stock', {
+                p_product_id: item.product_id,
+                p_quantity: item.quantity,
+            });
+            if (stockError) throw stockError;
+        }
 
-      await fetchStoreData(user.id);
-      return { ...sale, items } as Sale;
-    } catch (err) {
-      await supabase.from('sales').delete().eq('id', saleId);
-      throw err;
+        // If all items are processed successfully, finalize by fetching all data
+        await fetchStoreData(user.id);
+        return { ...saleData, items: createdSaleItems } as Sale;
+
+    } catch (error: any) {
+        console.error('[SALE] Transaction failed, rolling back sale record...', error);
+        await supabase.from('sales').delete().eq('id', saleId);
+        throw new Error(error.message || 'Falha ao processar a venda. A transação foi revertida.');
     }
   }, [store, user, products, fetchStoreData]);
 
@@ -379,6 +417,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loading,
     storeStatus,
     storeError,
+    entitlements,
     login,
     signup,
     logout,

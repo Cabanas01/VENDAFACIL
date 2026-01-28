@@ -30,6 +30,7 @@ import {
   Settings,
   LogOut,
   ChevronDown,
+  CreditCard,
 } from 'lucide-react';
 import { useAuth } from '@/components/auth-provider';
 
@@ -42,6 +43,7 @@ const navItems = [
 ];
 
 const settingsNav = { href: '/settings', label: 'Configurações', icon: Settings };
+const billingNav = { href: '/billing', label: 'Plano e Assinatura', icon: CreditCard };
 
 export function MainNav() {
   const pathname = usePathname();
@@ -69,7 +71,7 @@ export function MainNav() {
             <SidebarMenuItem key={item.href}>
               <Link href={item.href} passHref>
                 <SidebarMenuButton
-                  isActive={pathname === item.href}
+                  isActive={pathname.startsWith(item.href) && (item.href !== '/sales' || pathname === '/sales')}
                   className="justify-start"
                 >
                   <item.icon className="h-5 w-5" />
@@ -84,9 +86,20 @@ export function MainNav() {
       <SidebarFooter className="p-4">
         <SidebarMenu>
             <SidebarMenuItem>
+                <Link href={billingNav.href} passHref>
+                    <SidebarMenuButton
+                    isActive={pathname.startsWith(billingNav.href)}
+                    className="justify-start"
+                    >
+                    <billingNav.icon className="h-5 w-5" />
+                    <span>{billingNav.label}</span>
+                    </SidebarMenuButton>
+                </Link>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
                 <Link href={settingsNav.href} passHref>
                     <SidebarMenuButton
-                    isActive={pathname === settingsNav.href}
+                    isActive={pathname.startsWith(settingsNav.href)}
                     className="justify-start"
                     >
                     <settingsNav.icon className="h-5 w-5" />

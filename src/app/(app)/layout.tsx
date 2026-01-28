@@ -10,7 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 
 export default function AppLayout({ children }: { children: ReactNode }) {
-  const { isAuthenticated, store, loading, storeStatus, storeError, logout } = useAuth();
+  const { isAuthenticated, store, loading, storeStatus, storeError, logout, entitlements } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -31,7 +31,13 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     if (storeStatus === 'has' && store && pathname === '/onboarding') {
       router.replace('/dashboard');
     }
-  }, [loading, isAuthenticated, storeStatus, store, pathname, router]);
+    
+    // Paywall logic
+    if (entitlements && !entitlements.is_paying && new Date() > new Date(entitlements.access_until) && pathname !== '/billing') {
+        router.replace('/billing?reason=expired');
+    }
+
+  }, [loading, isAuthenticated, storeStatus, store, pathname, router, entitlements]);
 
   if (loading || (isAuthenticated && (storeStatus === 'loading' || storeStatus === 'unknown'))) {
     return (
@@ -76,7 +82,11 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   }
 
   // While redirecting, don't render children to avoid flashes of wrong content
-  if (!isAuthenticated || (storeStatus === 'none' && pathname !== '/onboarding')) {
+  const isRedirecting = !isAuthenticated || 
+                        (storeStatus === 'none' && pathname !== '/onboarding') ||
+                        (entitlements && !entitlements.is_paying && new Date() > new Date(entitlements.access_until) && pathname !== '/billing');
+
+  if (isRedirecting) {
     return null;
   }
   

@@ -100,3 +100,41 @@ export type CashRegister = {
 };
 
 export type StoreStatus = 'unknown' | 'loading' | 'has' | 'none' | 'error';
+
+
+// Types for SaaS Billing & Entitlements
+export type Plan = {
+    id: 'free' | 'weekly' | 'monthly' | 'yearly';
+    name: string;
+    price_cents: number;
+    billing_period: 'day' | 'week' | 'month' | 'year';
+    features: { [key: string]: boolean };
+    limits: { [key: string]: number };
+};
+
+export type SubscriptionStatus = 'trialing' | 'active' | 'expired' | 'canceled' | 'past_due';
+
+export type Subscription = {
+    id: string;
+    user_id: string;
+    store_id: string;
+    plan_id: Plan['id'];
+    status: SubscriptionStatus;
+    started_at: string;
+    trial_ends_at?: string | null;
+    current_period_end: string;
+    provider: 'kiwify' | 'manual';
+    provider_subscription_id?: string | null;
+    provider_customer_id?: string | null;
+    last_payment_at?: string | null;
+};
+
+export type Entitlement = {
+    store_id: string;
+    plan_id: Plan['id'];
+    is_paying: boolean;
+    access_until: string;
+    features: { [key: string]: boolean };
+    limits: { [key: string]: number };
+    updated_at: string;
+};
