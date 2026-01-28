@@ -44,6 +44,8 @@ export type Store = {
   timezone: string;
   settings: StoreSettings; // This is a JSONB field in Supabase
   members?: StoreMember[]; // This is a joined relation, not a real column
+  business_type: string;
+  status: 'active' | 'trial' | 'suspended' | 'blocked' | 'deleted';
 };
 
 export type Product = {

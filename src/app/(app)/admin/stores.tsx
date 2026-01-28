@@ -8,39 +8,64 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
-import { MoreHorizontal, Eye, Lock, Edit, Trash2 } from 'lucide-react';
+import { MoreHorizontal, Eye, Lock, Edit, Trash2, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import Link from 'next/link';
 
 type StoreRow = {
   id: string;
   name: string | null;
   user_id: string | null;
   owner_email?: string | null;
-  status: 'active' | 'suspended' | 'blocked'; // Mocked for now
-  plan: 'free' | 'monthly' | 'yearly'; // Mocked for now
+  status: 'active' | 'trial' | 'suspended' | 'blocked' | 'deleted';
+  business_type: string;
+  plan: 'free' | 'monthly' | 'yearly'; // Placeholder
 };
+
+const businessCategories = ['general', 'restaurant', 'hamburgueria', 'pizzaria', 'acai', 'mercearia', 'farmacia', 'barbearia', 'salao', 'outros'];
+const categoryLabels: Record<string, string> = {
+  general: 'Geral',
+  restaurant: 'Restaurante',
+  hamburgueria: 'Hamburgueria',
+  pizzaria: 'Pizzaria',
+  acai: 'Açaí',
+  mercearia: 'Mercearia',
+  farmacia: 'Farmácia',
+  barbearia: 'Barbearia',
+  salao: 'Salão',
+  outros: 'Outros',
+};
+
+const statusConfig: Record<StoreRow['status'], { variant: "default" | "secondary" | "destructive" | "outline", label: string, className?: string }> = {
+    active: { variant: 'default', label: 'Ativa', className: 'bg-green-500' },
+    trial: { variant: 'default', label: 'Trial', className: 'bg-blue-500' },
+    suspended: { variant: 'outline', label: 'Suspensa' },
+    blocked: { variant: 'destructive', label: 'Bloqueada' },
+    deleted: { variant: 'destructive', label: 'Excluída' },
+};
+
 
 export default function AdminStores() {
   const [stores, setStores] = useState<StoreRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('general');
 
   useEffect(() => {
     async function loadStores() {
       setLoading(true);
       setErrorMsg(null);
 
-      const { data: userData, error: userErr } = await supabase.auth.getUser();
-      if (userErr || !userData.user) {
-        setErrorMsg(`Sessão inválida: ${userErr?.message || 'Faça login novamente.'}`);
-        setLoading(false);
-        return;
-      }
-
-      // Fetch stores
-      const { data: storesData, error: storesError } = await supabase
+      let query = supabase
         .from('stores')
-        .select('id, name, user_id');
+        .select('id, name, user_id, status, business_type');
+
+      if (activeTab !== 'all') {
+        query = query.eq('business_type', activeTab);
+      }
+      
+      const { data: storesData, error: storesError } = await query;
 
       if (storesError) {
         setErrorMsg(`Erro ao buscar lojas: ${storesError.message}`);
@@ -54,7 +79,6 @@ export default function AdminStores() {
         return;
       }
 
-      // Fetch user emails for owners
       const ownerIds = [...new Set(storesData.map(s => s.user_id).filter(Boolean))];
       let ownerEmailMap = new Map<string, string>();
       if (ownerIds.length > 0) {
@@ -69,14 +93,11 @@ export default function AdminStores() {
           ownerEmailMap = new Map((usersData ?? []).map(u => [u.id, u.email as string]));
         }
       }
-
-      // Combine data and add mocked status/plan
+      
       const combinedData = storesData.map((store, index) => ({
         ...store,
         owner_email: store.user_id ? ownerEmailMap.get(store.user_id) : 'N/A',
-        // Mock data for status and plan for demonstration
-        status: (['active', 'suspended', 'blocked'] as const)[index % 3],
-        plan: (['free', 'monthly', 'yearly'] as const)[index % 3],
+        plan: (['free', 'monthly', 'yearly'] as const)[index % 3], // Mocked plan
       }));
 
       setStores(combinedData as StoreRow[]);
@@ -84,42 +105,27 @@ export default function AdminStores() {
     }
 
     loadStores();
-  }, []);
+  }, [activeTab]);
 
-  if (loading) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Gerenciamento de Lojas</CardTitle>
-          <CardDescription>Visualize e gerencie todas as lojas (tenants) do sistema.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <Skeleton className="h-8 w-full" />
-          <Skeleton className="h-8 w-full" />
-          <Skeleton className="h-8 w-full" />
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Gerenciamento de Lojas</CardTitle>
-        <CardDescription>Visualize e gerencie todas as lojas (tenants) do sistema.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {errorMsg && (
-          <Alert variant="destructive" className="mb-4">
-            <AlertDescription>{errorMsg}</AlertDescription>
-          </Alert>
-        )}
-        {stores.length === 0 && !errorMsg ? (
-          <div className="text-center text-sm text-muted-foreground p-8">
-            Nenhuma loja encontrada.
-          </div>
-        ) : (
-          <Table>
+  const renderTable = (storeList: StoreRow[]) => {
+      if (loading) {
+          return (
+             <div className="space-y-2 pt-4">
+                <Skeleton className="h-8 w-full" />
+                <Skeleton className="h-8 w-full" />
+                <Skeleton className="h-8 w-full" />
+            </div>
+          );
+      }
+      if (storeList.length === 0 && !errorMsg) {
+          return (
+            <div className="text-center text-sm text-muted-foreground p-8">
+                Nenhuma loja encontrada nesta categoria.
+            </div>
+          );
+      }
+      return (
+        <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Loja</TableHead>
@@ -130,7 +136,7 @@ export default function AdminStores() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {stores.map(s => (
+              {storeList.map(s => (
                 <TableRow key={s.id}>
                   <TableCell>
                     <div className="font-medium">{s.name ?? '-'}</div>
@@ -141,8 +147,8 @@ export default function AdminStores() {
                     <Badge variant="secondary" className="capitalize">{s.plan}</Badge>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={s.status === 'active' ? 'default' : s.status === 'suspended' ? 'outline' : 'destructive'} className={`${s.status === 'active' ? 'bg-green-500' : ''} capitalize`}>
-                      {s.status === 'active' ? 'Ativa' : s.status === 'suspended' ? 'Suspensa' : 'Bloqueada'}
+                    <Badge variant={statusConfig[s.status].variant} className={`${statusConfig[s.status].className ?? ''} capitalize`}>
+                      {statusConfig[s.status].label}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
@@ -151,6 +157,11 @@ export default function AdminStores() {
                         <Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                         <DropdownMenuItem asChild>
+                          <Link href={`/admin/customers?store_id=${s.id}`}>
+                            <Users className="mr-2 h-4 w-4" /> Ver Clientes
+                          </Link>
+                        </DropdownMenuItem>
                         <DropdownMenuItem>
                           <Eye className="mr-2 h-4 w-4" /> Ver Detalhes
                         </DropdownMenuItem>
@@ -170,7 +181,33 @@ export default function AdminStores() {
               ))}
             </TableBody>
           </Table>
+      );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Gerenciamento de Lojas</CardTitle>
+        <CardDescription>Visualize e gerencie todas as lojas (tenants) do sistema, segmentadas por categoria.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {errorMsg && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertDescription>{errorMsg}</AlertDescription>
+          </Alert>
         )}
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="grid w-full grid-cols-3 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-11">
+            {businessCategories.map(cat => (
+                <TabsTrigger key={cat} value={cat}>{categoryLabels[cat]}</TabsTrigger>
+            ))}
+          </TabsList>
+           {businessCategories.map(cat => (
+              <TabsContent key={cat} value={cat}>
+                {renderTable(stores)}
+              </TabsContent>
+            ))}
+        </Tabs>
       </CardContent>
     </Card>
   );
