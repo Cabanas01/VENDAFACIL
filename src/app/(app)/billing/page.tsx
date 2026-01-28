@@ -93,7 +93,7 @@ export default function BillingPage() {
           <CardHeader>
             <CardTitle>Situação do Acesso</CardTitle>
             <CardDescription>Informações sobre o seu plano de acesso atual.</CardDescription>
-          </Header>
+          </CardHeader>
           <CardContent className="space-y-6">
             <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
                 <div className="font-bold text-lg">{statusInfo.planName}</div>
