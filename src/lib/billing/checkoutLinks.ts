@@ -4,8 +4,8 @@ export type PlanType = 'weekly' | 'monthly' | 'yearly';
 // ATENÇÃO: Substitua os links placeholders pelos seus links de checkout reais, se necessário.
 export const CHECKOUT_LINKS: Record<CheckoutProvider, Record<PlanType, string>> = {
   hotmart: {
-    weekly: 'https://vendafacilbrasil.shop/paginadevendas-semanal',
-    monthly: 'https://vendafacilbrasil.shop/paginadevendas-mensal',
-    yearly: 'https://vendafacilbrasil.shop/paginadevendas-anual',
+    weekly: 'https://pay.hotmart.com/A104103229T?off=gczhreyg',
+    monthly: 'https://pay.hotmart.com/A104103229T?off=3py3921r&bid=1769483117758',
+    yearly: 'https://pay.hotmart.com/A104103229T?off=aa1nsl3j',
   },
 };
