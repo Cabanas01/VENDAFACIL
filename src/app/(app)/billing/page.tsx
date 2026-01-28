@@ -2,7 +2,7 @@
 
 import { PageHeader } from '@/components/page-header';
 import { useAuth } from '@/components/auth-provider';
-import { useAccess } from '@/hooks/use-access';
+import { useAccess } from '@/hooks/use-entitlements';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -93,7 +93,7 @@ export default function BillingPage() {
           <CardHeader>
             <CardTitle>Situação do Acesso</CardTitle>
             <CardDescription>Informações sobre o seu plano de acesso atual.</CardDescription>
-          </CardHeader>
+          </Header>
           <CardContent className="space-y-6">
             <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
                 <div className="font-bold text-lg">{statusInfo.planName}</div>
