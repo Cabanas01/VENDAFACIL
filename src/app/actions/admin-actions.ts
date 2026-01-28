@@ -4,9 +4,10 @@ import { createClient } from '@supabase/supabase-js';
 import { addMonths } from 'date-fns';
 import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
-import { supabaseAdmin } from '@/lib/supabase/admin';
+import { getSupabaseAdmin } from '@/lib/supabase/admin';
 
 async function verifyAdmin(): Promise<{ userId: string } | { error: string }> {
+    const supabaseAdmin = getSupabaseAdmin();
     const cookieStore = cookies();
     const supabase = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -54,7 +55,8 @@ export async function grantPlan(input: GrantPlanInput): Promise<{ success: boole
     if ('error' in adminCheck) {
         return { success: false, error: adminCheck.error };
     }
-
+    
+    const supabaseAdmin = getSupabaseAdmin();
     const { storeId, planId, durationMonths } = input;
     const adminId = adminCheck.userId;
 

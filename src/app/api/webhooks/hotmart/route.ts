@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase/admin';
+import { getSupabaseAdmin } from '@/lib/supabase/admin';
 import crypto from 'crypto';
 import { addDays } from 'date-fns';
 
 const HOTMART_WEBHOOK_SECRET = process.env.HOTMART_WEBHOOK_SECRET;
 
 async function logEvent(payload: any, status: string, details: object = {}) {
+    const supabaseAdmin = getSupabaseAdmin();
     const { event, data } = payload;
     const [store_id, plan_id, user_id] = (data.purchase?.external_reference || '||').split('|');
 
@@ -22,6 +23,7 @@ async function logEvent(payload: any, status: string, details: object = {}) {
 }
 
 export async function POST(request: Request) {
+  const supabaseAdmin = getSupabaseAdmin();
   const rawBody = await request.text();
   
   if (HOTMART_WEBHOOK_SECRET) {
