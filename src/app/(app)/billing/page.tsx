@@ -160,10 +160,10 @@ export default function BillingPage() {
   }
 
   const statusInfo = getStatusInfo(accessStatus);
-  const planOrder: PlanID[] = ['free', 'monthly', 'yearly'];
+  const planOrder: PlanID[] = ['free', 'weekly', 'monthly', 'yearly'];
 
   return (
-    <div className="max-w-5xl mx-auto p-4 sm:p-8">
+    <div className="max-w-7xl mx-auto p-4 sm:p-8">
         <div className="text-center mb-12">
             <h1 className="text-4xl font-extrabold tracking-tight lg:text-5xl">Nossos Planos</h1>
             <p className="mt-4 text-lg text-muted-foreground">Escolha o plano ideal para o seu negócio e comece a vender mais e melhor.</p>
@@ -189,7 +189,7 @@ export default function BillingPage() {
             </Card>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 items-stretch">
             {planOrder.map(planId => {
                 const plan = PLANS_CONFIG[planId];
                 if (!plan) return null;

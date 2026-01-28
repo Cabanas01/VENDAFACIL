@@ -271,7 +271,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const createStore = useCallback(async (storeData: any) => {
     if (!user) return null;
     
-    // 1. Create the store
     const { data: newStore, error } = await supabase.rpc('create_new_store', {
       p_name: storeData.name,
       p_legal_name: storeData.legal_name,
@@ -286,27 +285,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return null;
     }
     
-    // 2. Grant initial 7-day trial
-    const now = new Date();
-    const trialEndDate = addDays(now, 7);
-    const { error: trialError } = await supabase
-      .from('store_access')
-      .insert({
-          store_id: newStore.id,
-          plano_nome: 'Trial',
-          plano_tipo: 'free',
-          data_inicio_acesso: now.toISOString(),
-          data_fim_acesso: trialEndDate.toISOString(),
-          status_acesso: 'ativo',
-          origem: 'onboarding',
-          renovavel: false,
-      });
-    
-    if (trialError) {
-      console.error('Failed to grant initial trial:', trialError.message);
-      // Don't fail the whole onboarding, just log the error. The user can go to /billing.
-    }
-
     await fetchStoreData(user.id);
     return newStore as Store;
   }, [user, fetchStoreData]);
