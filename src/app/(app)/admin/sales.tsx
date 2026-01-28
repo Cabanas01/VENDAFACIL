@@ -61,8 +61,8 @@ export default function AdminSales() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Últimas Vendas</CardTitle>
-          <CardDescription>Visualize as últimas 50 vendas realizadas em todas as lojas.</CardDescription>
+          <CardTitle>Vendas Globais</CardTitle>
+          <CardDescription>Visualize as últimas 50 vendas realizadas em todo o sistema.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">
           <Skeleton className="h-8 w-full" />
@@ -76,8 +76,8 @@ export default function AdminSales() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Últimas Vendas</CardTitle>
-        <CardDescription>Visualize as últimas 50 vendas realizadas em todas as lojas.</CardDescription>
+        <CardTitle>Vendas Globais</CardTitle>
+        <CardDescription>Visualize as últimas 50 vendas realizadas em todo o sistema.</CardDescription>
       </CardHeader>
       <CardContent>
         {errorMsg && (

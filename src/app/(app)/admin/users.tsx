@@ -104,8 +104,8 @@ export default function AdminUsers() {
     return (
      <Card>
        <CardHeader>
-         <CardTitle>Usuários</CardTitle>
-         <CardDescription>Gerencie usuários, permissões de administrador e status de bloqueio.</CardDescription>
+         <CardTitle>Usuários Globais</CardTitle>
+         <CardDescription>Gerencie todos os usuários do sistema, permissões e status de bloqueio.</CardDescription>
        </CardHeader>
        <CardContent className="space-y-2">
          <Skeleton className="h-8 w-full" />
@@ -119,8 +119,8 @@ export default function AdminUsers() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Usuários</CardTitle>
-        <CardDescription>Gerencie usuários, permissões de administrador e status de bloqueio.</CardDescription>
+        <CardTitle>Usuários Globais</CardTitle>
+        <CardDescription>Gerencie todos os usuários do sistema, permissões e status de bloqueio.</CardDescription>
       </CardHeader>
       <CardContent>
         {errorMsg && (

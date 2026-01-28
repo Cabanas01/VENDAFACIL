@@ -61,8 +61,8 @@ export default function AdminCash() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Registros de Caixa</CardTitle>
-          <CardDescription>Visualize as últimas 30 aberturas de caixa em todas as lojas.</CardDescription>
+          <CardTitle>Caixas Globais</CardTitle>
+          <CardDescription>Visualize os últimos 30 registros de caixa de todo o sistema.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">
           <Skeleton className="h-8 w-full" />
@@ -76,8 +76,8 @@ export default function AdminCash() {
   return (
     <Card>
        <CardHeader>
-        <CardTitle>Registros de Caixa</CardTitle>
-        <CardDescription>Visualize as últimas 30 aberturas de caixa em todas as lojas.</CardDescription>
+        <CardTitle>Caixas Globais</CardTitle>
+        <CardDescription>Visualize os últimos 30 registros de caixa de todo o sistema.</CardDescription>
       </CardHeader>
       <CardContent>
         {errorMsg && (

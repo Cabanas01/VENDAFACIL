@@ -90,8 +90,8 @@ export default function AdminLogs() {
      return (
       <Card>
         <CardHeader>
-          <CardTitle>Logs de Atividade</CardTitle>
-          <CardDescription>Ações administrativas realizadas no sistema.</CardDescription>
+          <CardTitle>Logs de Auditoria</CardTitle>
+          <CardDescription>Ações administrativas críticas realizadas no sistema.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">
           <Skeleton className="h-8 w-full" />
@@ -105,8 +105,8 @@ export default function AdminLogs() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Logs de Atividade</CardTitle>
-        <CardDescription>Ações administrativas realizadas no sistema.</CardDescription>
+        <CardTitle>Logs de Auditoria</CardTitle>
+        <CardDescription>Ações administrativas críticas realizadas no sistema.</CardDescription>
       </CardHeader>
       <CardContent>
         {errorMsg && (
