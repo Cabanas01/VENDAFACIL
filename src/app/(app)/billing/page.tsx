@@ -1,4 +1,3 @@
-
 'use client';
 
 import { PageHeader } from '@/components/page-header';
@@ -196,7 +195,7 @@ export default function BillingPage() {
                         <CardHeader>
                             <CardTitle>Anual</CardTitle>
                             <CardDescription>O melhor custo-benefício. Acesso por 365 dias.</CardDescription>
-                        </Header>
+                        </CardHeader>
                         <CardContent>
                             <p className="text-3xl font-bold">R$297</p>
                         </CardContent>
