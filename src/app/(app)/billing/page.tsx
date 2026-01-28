@@ -1,3 +1,4 @@
+
 'use client';
 
 import { PageHeader } from '@/components/page-header';
@@ -9,9 +10,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { CheckCircle, AlertTriangle, XCircle, ShoppingCart } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { CHECKOUT_LINKS } from '@/lib/billing/checkoutLinks';
-import type { CheckoutProvider, PlanType } from '@/lib/billing/checkoutLinks';
+import type { PlanType } from '@/lib/billing/checkoutLinks';
 import { useAnalytics } from '@/lib/analytics/track';
 import { useToast } from '@/hooks/use-toast';
+import { useRouter } from 'next/navigation';
 
 const getStatusInfo = (accessStatus: import('@/lib/types').StoreAccessStatus | null) => {
     if (!accessStatus) {
@@ -23,7 +25,7 @@ const getStatusInfo = (accessStatus: import('@/lib/types').StoreAccessStatus | n
             planName: 'N/A'
         }
     }
-
+    
     if (accessStatus.plano_nome === 'Erro') {
         return {
             icon: <XCircle className="h-5 w-5 text-destructive" />,
@@ -33,7 +35,7 @@ const getStatusInfo = (accessStatus: import('@/lib/types').StoreAccessStatus | n
             planName: 'Erro'
         }
     }
-    
+
     if (accessStatus.plano_nome === 'Sem Plano') {
          return {
             icon: <XCircle className="h-5 w-5 text-destructive" />,
@@ -81,9 +83,10 @@ export default function BillingPage() {
   const { accessStatus, isLoading } = useAccess();
   const { registerUniqueClick } = useAnalytics();
   const { toast } = useToast();
+  const router = useRouter();
 
   const handleCheckout = (plan: PlanType) => {
-    const provider: CheckoutProvider = 'hotmart';
+    const provider = 'hotmart';
     const url = CHECKOUT_LINKS[provider]?.[plan];
     
     if (!url) {
@@ -100,7 +103,14 @@ export default function BillingPage() {
         plan,
         source: 'billing_page',
     });
-    window.open(url, '_blank', 'noopener,noreferrer');
+
+    const link = document.createElement('a');
+    link.href = url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }
 
   if (isLoading || !store) {
@@ -186,7 +196,7 @@ export default function BillingPage() {
                         <CardHeader>
                             <CardTitle>Anual</CardTitle>
                             <CardDescription>O melhor custo-benefício. Acesso por 365 dias.</CardDescription>
-                        </CardHeader>
+                        </Header>
                         <CardContent>
                             <p className="text-3xl font-bold">R$297</p>
                         </CardContent>
