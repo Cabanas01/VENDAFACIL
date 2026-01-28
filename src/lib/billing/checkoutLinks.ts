@@ -1,4 +1,4 @@
-export type CheckoutProvider = 'hotmart' | 'kiwify' | 'perfectpay';
+export type CheckoutProvider = 'hotmart';
 export type PlanID = 'free' | 'weekly' | 'monthly' | 'yearly';
 
 export type PlanConfig = {
@@ -69,17 +69,5 @@ export const CHECKOUT_LINKS: Record<CheckoutProvider, Partial<Record<PlanID, str
     weekly: 'https://pay.hotmart.com/A104103229T?off=gczhreyg',
     monthly: 'https://pay.hotmart.com/A104103229T?off=3py3921r&bid=1769483117758',
     yearly: 'https://pay.hotmart.com/A104103229T?off=aa1nsl3j',
-  },
-  kiwify: {
-    // Substitua por seus links reais da Kiwify
-    weekly: 'https://vendafacilbrasil.shop/paginadevendas',
-    monthly: 'https://vendafacilbrasil.shop/paginadevendas',
-    yearly: 'https://vendafacilbrasil.shop/paginadevendas',
-  },
-  perfectpay: {
-    // Substitua por seus links reais da PerfectPay
-    weekly: 'https://vendafacilbrasil.shop/paginadevendas',
-    monthly: 'https://vendafacilbrasil.shop/paginadevendas',
-    yearly: 'https://vendafacilbrasil.shop/paginadevendas',
   },
 };

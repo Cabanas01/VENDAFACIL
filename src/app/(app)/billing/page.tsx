@@ -11,10 +11,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Label } from '@/components/ui/label';
 import { PLANS_CONFIG, CHECKOUT_LINKS } from '@/lib/billing/checkoutLinks';
-import type { PlanID, CheckoutProvider } from '@/lib/billing/checkoutLinks';
+import type { PlanID } from '@/lib/billing/checkoutLinks';
 
 
 const getStatusInfo = (accessStatus: import('@/lib/types').StoreAccessStatus | null) => {
@@ -86,15 +84,12 @@ export default function BillingPage() {
   const { trackReportOpened, registerUniqueClick } = useAnalytics();
   const { toast } = useToast();
   
-  const [selectedPlan, setSelectedPlan] = useState<PlanID>('monthly');
-  const [selectedProvider, setSelectedProvider] = useState<CheckoutProvider>('hotmart');
-
   useEffect(() => {
     trackReportOpened('billing_page');
   }, [trackReportOpened]);
 
 
-  const handleCheckout = () => {
+  const handleCheckout = (planId: PlanID) => {
     if (!store || !user) {
         toast({
             variant: 'destructive',
@@ -104,25 +99,26 @@ export default function BillingPage() {
         return;
     }
     
-    registerUniqueClick(`billing_plan_select_${selectedPlan}`);
+    registerUniqueClick(`billing_plan_select_${planId}`);
 
-    const url = CHECKOUT_LINKS[selectedProvider]?.[selectedPlan];
+    const provider = 'hotmart';
+    const url = CHECKOUT_LINKS[provider]?.[planId];
     
     if (!url) {
         toast({
             variant: 'destructive',
             title: 'Link de Checkout Indisponível',
-            description: `O link para o plano ${PLANS_CONFIG[selectedPlan].name} com ${selectedProvider} não foi configurado.`
+            description: `O link para o plano ${PLANS_CONFIG[planId].name} com ${provider} não foi configurado.`
         });
         return;
     }
 
-    const externalReference = `${store.id}|${selectedPlan}|${user.id}`;
+    const externalReference = `${store.id}|${planId}|${user.id}`;
     const finalUrl = `${url}${url.includes('?') ? '&' : '?'}external_reference=${encodeURIComponent(externalReference)}`;
 
-    registerUniqueClick(`billing_checkout_${selectedProvider}_${selectedPlan}`, {
-        provider: selectedProvider,
-        plan: selectedPlan,
+    registerUniqueClick(`billing_checkout_${provider}_${planId}`, {
+        provider: provider,
+        plan: planId,
         source: 'billing_page',
     });
 
@@ -217,11 +213,7 @@ export default function BillingPage() {
                                 className="w-full" 
                                 size="lg" 
                                 variant={isRecommended ? 'default' : 'secondary'}
-                                onClick={() => {
-                                    setSelectedPlan(planId);
-                                    // Adiciona um pequeno delay para a UI do botão focar antes do checkout
-                                    setTimeout(handleCheckout, 100);
-                                }}
+                                onClick={() => handleCheckout(planId)}
                             >
                                 Assinar Agora
                             </Button>
@@ -232,35 +224,9 @@ export default function BillingPage() {
         </div>
         
         <div className="mt-12 flex flex-col items-center gap-6">
-            <p className="font-semibold text-center">Escolha seu método de pagamento preferido:</p>
-             <RadioGroup
-                defaultValue="hotmart"
-                className="grid grid-cols-3 gap-4"
-                onValueChange={(value: CheckoutProvider) => setSelectedProvider(value)}
-            >
-                <div>
-                    <RadioGroupItem value="kiwify" id="kiwify" className="peer sr-only" />
-                    <Label htmlFor="kiwify" className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer">
-                        Kiwify
-                    </Label>
-                </div>
-                <div>
-                    <RadioGroupItem value="hotmart" id="hotmart" className="peer sr-only" />
-                    <Label htmlFor="hotmart" className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer">
-                        Hotmart
-                    </Label>
-                </div>
-                 <div>
-                    <RadioGroupItem value="perfectpay" id="perfectpay" className="peer sr-only" />
-                    <Label htmlFor="perfectpay" className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer">
-                        PerfectPay
-                    </Label>
-                </div>
-            </RadioGroup>
-            
             <div className="text-center text-muted-foreground text-sm flex items-center gap-2">
                 <ShieldCheck className="h-4 w-4 text-green-600" />
-                <span>Pagamento seguro e você pode cancelar quando quiser.</span>
+                <span>Pagamento seguro via Hotmart. Você pode cancelar quando quiser.</span>
             </div>
         </div>
 
