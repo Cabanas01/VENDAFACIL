@@ -29,7 +29,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
-import { login, signup } from './actions';
+import { login, signup } from '../actions';
 
 const loginSchema = z.object({
   email: z.string().email({ message: 'Email inválido.' }),
