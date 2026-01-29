@@ -18,6 +18,7 @@ import AdminCash from './cash';
 import AdminLogs from './logs';
 import AdminCustomers from './customers';
 import AdminBilling from './billing';
+import AdminAnalytics from './analytics';
 
 export default function AdminPage() {
   const [loading, setLoading] = useState(true);
@@ -114,6 +115,7 @@ export default function AdminPage() {
             <TabsTrigger value="sales">Vendas</TabsTrigger>
             <TabsTrigger value="cash">Caixas</TabsTrigger>
             <TabsTrigger value="billing">Faturamento</TabsTrigger>
+            <TabsTrigger value="analytics">Analytics</TabsTrigger>
             <TabsTrigger value="logs">Logs</TabsTrigger>
         </TabsList>
         <TabsContent value="dashboard"><AdminDashboard /></TabsContent>
@@ -123,6 +125,7 @@ export default function AdminPage() {
         <TabsContent value="sales"><AdminSales /></TabsContent>
         <TabsContent value="cash"><AdminCash /></TabsContent>
         <TabsContent value="billing"><AdminBilling /></TabsContent>
+        <TabsContent value="analytics"><AdminAnalytics /></TabsContent>
         <TabsContent value="logs"><AdminLogs /></TabsContent>
     </Tabs>
     </div>
