@@ -205,7 +205,13 @@ export default function SettingsPage() {
         toast({ title: "Excluindo sua conta...", description: "Aguarde um momento." });
         const { error } = await deleteAccount();
         if (error) {
-            toast({ variant: "destructive", title: "Erro ao excluir conta", description: error.message });
+            // Check for the specific schema cache error and provide a more user-friendly message.
+            const isSchemaCacheError = error.message.includes('Could not find the function') && error.message.includes('schema cache');
+            const description = isSchemaCacheError 
+                ? "Não foi possível comunicar com o banco de dados para realizar esta ação. Por favor, contate o suporte técnico informando sobre o erro de 'schema cache'."
+                : error.message;
+
+            toast({ variant: "destructive", title: "Erro ao excluir conta", description: description });
         } else {
             toast({ title: "Conta excluída", description: "Sua conta e todos os dados foram removidos."});
             // O provedor de autenticação irá redirecionar automaticamente.
