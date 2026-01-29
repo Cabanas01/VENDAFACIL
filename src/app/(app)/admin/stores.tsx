@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -13,6 +14,7 @@ import { MoreHorizontal, Eye, Lock, Trash2, Users, Gift } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { GrantPlanDialog } from './grant-plan-dialog';
+import { getPlanLabel } from '@/lib/plan-label';
 
 export type StoreRow = {
   id: string;
@@ -21,7 +23,9 @@ export type StoreRow = {
   owner_email?: string | null;
   status: 'active' | 'trial' | 'suspended' | 'blocked' | 'deleted';
   business_type: string;
-  plan: 'free' | 'monthly' | 'yearly'; // Placeholder
+  store_access: {
+    plano_tipo: string;
+  } | null;
 };
 
 const businessCategories = ['general', 'restaurant', 'hamburgueria', 'pizzaria', 'acai', 'mercearia', 'farmacia', 'barbearia', 'salao', 'outros'];
@@ -62,7 +66,7 @@ export default function AdminStores() {
 
     let query = supabase
       .from('stores')
-      .select('id, name, user_id, status, business_type');
+      .select('id, name, user_id, status, business_type, store_access(plano_tipo)');
 
     if (activeTab !== 'all') {
       query = query.eq('business_type', activeTab);
@@ -72,6 +76,7 @@ export default function AdminStores() {
 
     if (storesError) {
       setErrorMsg(`Erro ao buscar lojas: ${storesError.message}`);
+      setStores([]);
       setLoading(false);
       return;
     }
@@ -97,10 +102,9 @@ export default function AdminStores() {
       }
     }
     
-    const combinedData = storesData.map((store, index) => ({
+    const combinedData = storesData.map((store) => ({
       ...store,
       owner_email: store.user_id ? ownerEmailMap.get(store.user_id) : 'N/A',
-      plan: (['free', 'monthly', 'yearly'] as const)[index % 3], // Mocked plan
     }));
 
     setStores(combinedData as StoreRow[]);
@@ -153,7 +157,9 @@ export default function AdminStores() {
                   </TableCell>
                   <TableCell>{s.owner_email ?? '-'}</TableCell>
                    <TableCell>
-                    <Badge variant="secondary" className="capitalize">{s.plan}</Badge>
+                    <Badge variant="secondary" className="capitalize">
+                      {getPlanLabel(s.store_access?.plano_tipo)}
+                    </Badge>
                   </TableCell>
                   <TableCell>
                     <Badge variant={statusConfig[s.status].variant} className={`${statusConfig[s.status].className ?? ''} capitalize`}>
