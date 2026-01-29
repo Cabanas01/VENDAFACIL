@@ -1,6 +1,5 @@
 'use server'
 
-import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
@@ -29,18 +28,13 @@ export async function signup(formData: FormData) {
   
   const supabase = createSupabaseServerClient();
   
-  const headersList = headers();
-  const host = headersList.get('host');
-  const protocol = headersList.get('x-forwarded-proto') ?? 'http';
-  const siteUrl = `${protocol}://${host}`;
-
+  // By removing `emailRedirectTo`, Supabase will default to using the "Site URL"
+  // configured in your Supabase project's auth settings (Auth > URL Configuration).
+  // This is the most robust approach. Make sure it's set correctly in your Supabase dashboard.
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: {
-      emailRedirectTo: `${siteUrl}/auth/callback`,
-    },
-  })
+  });
 
   if (error) {
     return { error: { message: error.message, code: error.code } }
