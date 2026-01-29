@@ -25,6 +25,7 @@ import type {
   Customer,
 } from '@/lib/types';
 import { addDays } from 'date-fns';
+import { startTrialAction } from '@/app/actions/billing-actions';
 
 type AuthContextType = {
   user: User | null;
@@ -46,7 +47,7 @@ type AuthContextType = {
   updateUser: (userData: Partial<Omit<User, 'id' | 'email'>>) => Promise<void>;
   removeStoreMember: (userId: string) => Promise<{ error: AuthError | Error | null }>;
 
-  startTrial: () => Promise<{ error: AuthError | Error | null }>;
+  startTrial: () => Promise<{ error: Error | null }>;
 
   products: Product[];
   sales: Sale[];
@@ -315,45 +316,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error };
   }, [store, user, fetchStoreData]);
 
-  const startTrial = useCallback(async (): Promise<{ error: AuthError | Error | null }> => {
-    if (!store || !user) return { error: new Error('Usuário ou loja não autenticados.') };
+  const startTrial = useCallback(async (): Promise<{ error: Error | null }> => {
+    if (!user || !store) return { error: new Error('Sessão inválida. Por favor, recarregue a página.') };
 
-    // Check if trial was already used by checking if any 'free' plan exists for this store
-    const { count, error: countError } = await supabase
-        .from('store_access')
-        .select('id', { count: 'exact', head: true })
-        .eq('store_id', store.id)
-        .eq('plano_tipo', 'free');
+    const result = await startTrialAction();
 
-    if (countError) {
-        return { error: countError };
-    }
-
-    if (count && count > 0) {
-        return { error: new Error('O período de avaliação para esta loja já foi ativado.') };
-    }
-
-    const now = new Date();
-    const trialEndDate = addDays(now, 7);
-    const { error: insertError } = await supabase.from('store_access').insert({
-        store_id: store.id,
-        plano_nome: 'Trial',
-        plano_tipo: 'free',
-        data_inicio_acesso: now.toISOString(),
-        data_fim_acesso: trialEndDate.toISOString(),
-        status_acesso: 'ativo',
-        origem: 'billing_page',
-        renovavel: false,
-    });
-
-    if (insertError) {
-        return { error: insertError };
+    if (result.error) {
+        return { error: new Error(result.error) };
     }
 
     // Refresh all auth data, including accessStatus
     await fetchStoreData(user.id);
     return { error: null };
-  }, [store, user, fetchStoreData]);
+  }, [user, store, fetchStoreData]);
+
 
   const addProduct = useCallback(async (product: any) => {
     if (!store || !user) return;
