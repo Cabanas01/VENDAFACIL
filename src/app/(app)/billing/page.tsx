@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { CheckCircle, AlertTriangle, XCircle, Info, ShieldCheck } from 'lucide-react';
+import { CheckCircle, AlertTriangle, XCircle, Info, ShieldCheck, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/components/auth-provider';
 import { useAnalytics } from '@/lib/analytics/track';
@@ -78,9 +78,10 @@ const getStatusInfo = (accessStatus: import('@/lib/types').StoreAccessStatus | n
 
 
 export default function BillingPage() {
-  const { user, store, accessStatus, isLoading, startTrial } = useAuth();
+  const { user, store, accessStatus, isLoading, fetchStoreData } = useAuth();
   const { trackReportOpened, registerUniqueClick } = useAnalytics();
   const { toast } = useToast();
+  const [isStartingTrial, setIsStartingTrial] = useState(false);
   
   useEffect(() => {
     trackReportOpened('billing_page');
@@ -130,20 +131,31 @@ export default function BillingPage() {
   }
   
   const handleStartTrial = async () => {
-    const { error } = await startTrial();
-    if (error) {
+    setIsStartingTrial(true);
+    try {
+        const response = await fetch('/api/billing/start-trial', { method: 'POST' });
+        const result = await response.json();
+
+        if (!response.ok) {
+            throw new Error(result.error || 'Ocorreu um erro desconhecido.');
+        }
+
+        toast({
+            title: 'Avaliação iniciada!',
+            description: 'Você agora tem 7 dias de acesso gratuito.',
+        });
+        // Refresh all auth data, including accessStatus and trial status
+        if(user) {
+            await fetchStoreData(user.id);
+        }
+    } catch (error: any) {
         toast({
             variant: 'destructive',
             title: 'Não foi possível iniciar a avaliação',
             description: error.message,
         });
-    } else {
-        toast({
-            title: 'Avaliação iniciada!',
-            description: 'Você agora tem 7 dias de acesso gratuito.',
-        });
-        // The page will re-render due to the state change in AuthProvider,
-        // and the layout effect will redirect to /dashboard if access is granted.
+    } finally {
+        setIsStartingTrial(false);
     }
 };
 
@@ -195,8 +207,6 @@ export default function BillingPage() {
                 if (!plan) return null;
                 
                 if (plan.isFree) {
-                    const trialUsedOrActive = accessStatus?.plano_nome.includes('Trial');
-
                     return (
                         <Card key={planId} className="flex flex-col">
                             <CardHeader className="text-center">
@@ -231,9 +241,10 @@ export default function BillingPage() {
                                     size="lg" 
                                     variant={'secondary'}
                                     onClick={handleStartTrial}
-                                    disabled={trialUsedOrActive}
+                                    disabled={store.trial_used || isStartingTrial}
                                 >
-                                    {trialUsedOrActive ? 'Avaliação já utilizada' : 'Começar avaliação'}
+                                    {isStartingTrial && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                    {store.trial_used ? 'Avaliação já utilizada' : 'Começar avaliação'}
                                 </Button>
                             </CardFooter>
                         </Card>

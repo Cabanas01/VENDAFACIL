@@ -47,6 +47,8 @@ export type Store = {
   members?: StoreMember[]; // This is a joined relation, not a real column
   business_type: string;
   status: 'active' | 'trial' | 'suspended' | 'blocked' | 'deleted';
+  trial_used: boolean;
+  trial_started_at: string | null;
 };
 
 export type Product = {
@@ -126,6 +128,8 @@ export type StoreAccess = {
     origem?: 'hotmart' | 'kiwify' | 'perfectpay' | 'admin' | 'onboarding';
     renovavel: boolean;
     updated_at: string;
+    limits?: { max_sales: number; max_customers: number; };
+    features?: Record<string, boolean>;
 }
 
 export type StoreAccessStatus = {

@@ -25,7 +25,6 @@ import type {
   Customer,
 } from '@/lib/types';
 import { addDays } from 'date-fns';
-import { startTrialAction } from '@/app/actions/billing-actions';
 
 type AuthContextType = {
   user: User | null;
@@ -46,8 +45,7 @@ type AuthContextType = {
   updateStore: (storeData: Partial<Omit<Store, 'id' | 'user_id' | 'members'>>) => Promise<void>;
   updateUser: (userData: Partial<Omit<User, 'id' | 'email'>>) => Promise<void>;
   removeStoreMember: (userId: string) => Promise<{ error: AuthError | Error | null }>;
-
-  startTrial: () => Promise<{ error: Error | null }>;
+  fetchStoreData: (userId: string) => Promise<void>;
 
   products: Product[];
   sales: Sale[];
@@ -149,7 +147,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const { data: storeDetails, error: storeErr } = await supabase
         .from('stores')
-        .select('*')
+        .select('*, trial_used, trial_started_at')
         .eq('id', storeId)
         .single();
 
@@ -316,21 +314,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error };
   }, [store, user, fetchStoreData]);
 
-  const startTrial = useCallback(async (): Promise<{ error: Error | null }> => {
-    if (!user || !store) return { error: new Error('Sessão inválida. Por favor, recarregue a página.') };
-
-    const result = await startTrialAction();
-
-    if (result.error) {
-        return { error: new Error(result.error) };
-    }
-
-    // Refresh all auth data, including accessStatus
-    await fetchStoreData(user.id);
-    return { error: null };
-  }, [user, store, fetchStoreData]);
-
-
   const addProduct = useCallback(async (product: any) => {
     if (!store || !user) return;
     await supabase.from('products').insert({ ...product, store_id: store.id, barcode: product.barcode || null });
@@ -340,23 +323,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const addCustomer = useCallback(async (customer: Omit<Customer, 'id' | 'store_id' | 'created_at'>) => {
     if (!store || !user) throw new Error('Sessão inválida');
 
-    if (accessStatus?.plano_nome === 'Trial') {
-        const { count, error } = await supabase.from('customers').select('id', { count: 'exact', head: true }).eq('store_id', store.id);
-
-        if (error) {
-            console.error("Failed to check customers limit:", error.message);
-        } else if (count !== null && count >= 10) {
-            throw new Error('Você atingiu o limite de 10 clientes no plano de avaliação. Faça o upgrade para continuar.');
+    try {
+      const { error: insertError } = await supabase.from('customers').insert({ ...customer, store_id: store.id });
+      if (insertError) throw insertError;
+    } catch (error: any) {
+        if (error.message.includes('trial_customer_limit')) {
+            throw new Error('Limite de 10 clientes do plano de avaliação foi atingido. Faça o upgrade para continuar.');
         }
+        throw error;
     }
-    
-    const { error: insertError } = await supabase.from('customers').insert({ ...customer, store_id: store.id });
-
-    if (insertError) {
-        throw insertError;
-    }
-    // No fetchStoreData here, clients/page.tsx handles its own state
-  }, [store, user, accessStatus]);
+  }, [store, user]);
 
 
   const updateProduct = useCallback(async (id: string, product: any) => {
@@ -406,16 +382,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const addSale = useCallback(async (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => {
     if (!store || !user) throw new Error('Sessão inválida');
 
-    // Free plan limitation check
-    if (accessStatus?.plano_nome === 'Trial') {
-        const { count, error } = await supabase.from('sales').select('id', { count: 'exact', head: true }).eq('store_id', store.id);
-        if (error) {
-            console.error("Failed to check sales limit:", error.message);
-        } else if (count !== null && count >= 5) {
-            throw new Error('Você atingiu o limite de 5 vendas do plano de avaliação. Faça o upgrade para continuar vendendo.');
-        }
-    }
-
     // Pre-flight check in the frontend for immediate feedback
     for (const item of cart) {
       const product = products.find(p => p.id === item.product_id);
@@ -427,57 +393,69 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const saleId = crypto.randomUUID();
     const total = cart.reduce((s, i) => s + i.subtotal_cents, 0);
 
-    const { data: saleData, error: saleError } = await supabase
-        .from('sales')
-        .insert({ id: saleId, store_id: store.id, total_cents: total, payment_method: paymentMethod })
-        .select()
-        .single();
-    
-    if (saleError || !saleData) {
-        throw new Error(saleError?.message || 'Falha ao criar o registro da venda.');
-    }
-    
-    let createdSaleItems: SaleItem[] = [];
+    let saleData, saleError;
 
     try {
-        // Sequentially process each item
-        for (const item of cart) {
-            // 1. Insert the sale item
-            const { data: saleItemData, error: itemError } = await supabase
-                .from('sale_items')
-                .insert({
-                    sale_id: saleId,
-                    product_id: item.product_id,
-                    quantity: item.quantity,
-                    unit_price_cents: item.unit_price_cents,
-                    subtotal_cents: item.subtotal_cents,
-                    product_name_snapshot: item.product_name_snapshot,
-                    product_barcode_snapshot: item.product_barcode_snapshot,
-                })
-                .select()
-                .single();
+      const saleInsertResult = await supabase
+          .from('sales')
+          .insert({ id: saleId, store_id: store.id, total_cents: total, payment_method: paymentMethod })
+          .select()
+          .single();
+      saleData = saleInsertResult.data;
+      saleError = saleInsertResult.error;
 
-            if (itemError) throw itemError;
-            createdSaleItems.push(saleItemData as SaleItem);
+      if (saleError) throw saleError;
+      if (!saleData) throw new Error('Falha ao criar o registro da venda.');
+    
+      let createdSaleItems: SaleItem[] = [];
 
-            // 2. Decrement stock
-            const { error: stockError } = await supabase.rpc('decrement_stock', {
-                p_product_id: item.product_id,
-                p_quantity: item.quantity,
-            });
-            if (stockError) throw stockError;
-        }
+      // Sequentially process each item
+      for (const item of cart) {
+          // 1. Insert the sale item
+          const { data: saleItemData, error: itemError } = await supabase
+              .from('sale_items')
+              .insert({
+                  sale_id: saleId,
+                  product_id: item.product_id,
+                  quantity: item.quantity,
+                  unit_price_cents: item.unit_price_cents,
+                  subtotal_cents: item.subtotal_cents,
+                  product_name_snapshot: item.product_name_snapshot,
+                  product_barcode_snapshot: item.product_barcode_snapshot,
+              })
+              .select()
+              .single();
 
-        // If all items are processed successfully, finalize by fetching all data
-        await fetchStoreData(user.id);
-        return { ...saleData, items: createdSaleItems } as Sale;
+          if (itemError) throw itemError;
+          createdSaleItems.push(saleItemData as SaleItem);
+
+          // 2. Decrement stock
+          const { error: stockError } = await supabase.rpc('decrement_stock', {
+              p_product_id: item.product_id,
+              p_quantity: item.quantity,
+          });
+          if (stockError) throw stockError;
+      }
+
+      // If all items are processed successfully, finalize by fetching all data
+      await fetchStoreData(user.id);
+      return { ...saleData, items: createdSaleItems } as Sale;
 
     } catch (error: any) {
-        console.error('[SALE] Transaction failed, rolling back sale record...', error);
-        await supabase.from('sales').delete().eq('id', saleId);
+        console.error('[SALE] Transaction failed, attempting rollback...', error);
+        
+        // If sale record was created, attempt to delete it.
+        if (saleData) {
+          await supabase.from('sales').delete().eq('id', saleId);
+        }
+
+        if (error.message.includes('trial_sales_limit')) {
+            throw new Error('Limite de 5 vendas do plano de avaliação foi atingido. Faça o upgrade para continuar.');
+        }
+
         throw new Error(error.message || 'Falha ao processar a venda. A transação foi revertida.');
     }
-  }, [store, user, products, accessStatus, fetchStoreData]);
+  }, [store, user, products, fetchStoreData]);
 
   const value: AuthContextType = {
     user,
@@ -495,7 +473,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     updateStore,
     updateUser,
     removeStoreMember,
-    startTrial,
+    fetchStoreData,
     products,
     sales,
     cashRegisters,
