@@ -13,8 +13,8 @@ export type PlanConfig = {
 // Configuração central para os planos, usada para construir a UI da página de billing.
 export const PLANS_CONFIG: Record<PlanID, PlanConfig> = {
     free: {
-        name: 'Plano Gratuito',
-        description: 'Comece a usar agora com um teste de 7 dias.',
+        name: 'Avaliação Gratuita',
+        description: 'Experimente todos os recursos sem compromisso.',
         price: 'Grátis',
         periodicity: '7 dias',
         benefits: [

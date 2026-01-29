@@ -1,4 +1,3 @@
-
 'use client';
 
 /**
@@ -19,7 +18,7 @@ export function getPlanLabel(planoTipo?: string | null): string {
     case 'semanal':
       return 'Semanal';
     case 'free':
-      return 'Gratuito';
+      return 'Avaliação';
     case 'trial':
       return 'Avaliação';
     default:
