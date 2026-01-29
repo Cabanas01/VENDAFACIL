@@ -28,7 +28,7 @@ export const PLANS_CONFIG: Record<PlanID, PlanConfig> = {
     weekly: {
         name: 'Semanal',
         description: 'Acesso completo por 7 dias.',
-        price: 'R$29',
+        price: 'R$9,90',
         periodicity: 'semana',
         benefits: [
             'Todos os benefícios do plano gratuito',
@@ -40,7 +40,7 @@ export const PLANS_CONFIG: Record<PlanID, PlanConfig> = {
     monthly: {
         name: 'Mensal',
         description: 'O plano mais flexível. Cancele quando quiser.',
-        price: 'R$97',
+        price: 'R$29,90',
         periodicity: 'mês',
         benefits: [
             'Todos os benefícios do plano semanal',
@@ -52,7 +52,7 @@ export const PLANS_CONFIG: Record<PlanID, PlanConfig> = {
     yearly: {
         name: 'Anual',
         description: 'Economize 75% com o plano anual!',
-        price: 'R$297',
+        price: 'R$297,00',
         periodicity: 'ano',
         benefits: [
             'Todos os benefícios do plano mensal',
