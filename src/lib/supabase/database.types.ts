@@ -474,9 +474,13 @@ export interface Database {
       [_ in never]: never
     }
     Functions: {
-      is_saas_admin: {
-        Args: Record<PropertyKey, never>
-        Returns: boolean
+      admin_grant_store_access: {
+        Args: {
+          p_store_id: string
+          p_plan: string
+          p_duration_months: number
+        }
+        Returns: undefined
       }
       create_new_store: {
         Args: {
@@ -518,6 +522,10 @@ export interface Database {
       get_store_access_status: {
         Args: { p_store_id: string }
         Returns: Json
+      }
+      is_saas_admin: {
+        Args: Record<PropertyKey, never>
+        Returns: boolean
       }
       rpc_register_unique_click: {
         Args: {
