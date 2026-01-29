@@ -32,7 +32,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       return;
     }
     
-    // Paywall logic
+    // Paywall logic: Only redirect if accessStatus is fully loaded and access is not granted.
     if (accessStatus && !accessStatus.acesso_liberado && pathname !== '/billing' && pathname !== '/settings') {
         router.replace('/billing?reason=expired');
     }
@@ -89,11 +89,19 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
 
   if (isRedirecting) {
-    return null; // Render nothing while redirecting
+    return (
+      <div className="flex min-h-screen w-full items-center justify-center">
+        <Skeleton className="h-screen w-screen" />
+      </div>
+    );
   }
   
   if (!store && pathname !== '/onboarding') {
-      return null;
+      return (
+        <div className="flex min-h-screen w-full items-center justify-center">
+          <Skeleton className="h-screen w-screen" />
+        </div>
+      );
   }
 
   return (

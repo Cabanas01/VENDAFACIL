@@ -10,7 +10,7 @@ import {
 } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
-import type { AuthError } from '@supabase/supabase-js';
+import type { AuthError, Session } from '@supabase/supabase-js';
 import type {
   User,
   Store,
@@ -195,46 +195,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [fetchAccessStatus]);
 
-  const handleSession = useCallback(
-    async (session: any) => {
+  const handleSessionChange = useCallback(
+    async (session: Session | null) => {
       const supabaseUser = session?.user;
+      
+      setLoading(true);
+
       if (!supabaseUser) {
         setUser(null);
         setStore(null);
         setStoreStatus('unknown');
         setAccessStatus(null);
-        return;
+      } else {
+        const {data: profile} = await supabase.from('users').select('id, email, name, avatar_url, is_admin').eq('id', supabaseUser.id).single();
+        setUser(profile as User);
+        await fetchStoreData(supabaseUser.id);
       }
 
-      const {data: profile} = await supabase.from('users').select('id, email, name, avatar_url, is_admin').eq('id', supabaseUser.id).single();
-      setUser(profile as User);
-
-      await fetchStoreData(supabaseUser.id);
+      setLoading(false);
     },
     [fetchStoreData]
   );
 
   useEffect(() => {
+    // Proactively get the session on initial load.
     const getInitialSession = async () => {
       const {
         data: { session },
       } = await supabase.auth.getSession();
-      await handleSession(session);
-      setLoading(false);
+      await handleSessionChange(session);
     };
 
     getInitialSession();
 
+    // Then, listen for any auth state changes.
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        await handleSession(session);
+        // We only need to react to SIGNED_IN or SIGNED_OUT events.
+        // Other events like TOKEN_REFRESHED are handled by the middleware.
+        if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'USER_UPDATED') {
+          await handleSessionChange(session);
+        }
       }
     );
 
     return () => {
       authListener.subscription.unsubscribe();
     };
-  }, [handleSession]);
+  }, [handleSessionChange]);
 
   const login = useCallback(
     async (email: string, password: string) =>
@@ -247,11 +255,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { error } = await supabase.auth.signUp({
         email,
         password,
-        options: {
-          emailRedirectTo: process.env.NEXT_PUBLIC_SITE_URL
-            ? `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`
-            : undefined,
-        },
       });
       return { error };
     },
@@ -260,8 +263,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     await supabase.auth.signOut();
+    setUser(null);
+    setStore(null);
     setAccessStatus(null);
-  }, []);
+    setStoreStatus('unknown');
+    router.replace('/login');
+  }, [router]);
 
   const deleteAccount = useCallback(async () => {
     const { error } = await supabase.rpc('delete_user_account');

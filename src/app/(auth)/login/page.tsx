@@ -68,8 +68,6 @@ export default function LoginPage() {
   const [lastSignupEmail, setLastSignupEmail] = useState<string>('');
 
   useEffect(() => {
-    // Se o usuário já está logado, redireciona para o dashboard.
-    // Isso impede que um usuário autenticado veja a página de login.
     if (!authLoading && isAuthenticated) {
       router.replace('/dashboard');
     }
@@ -106,11 +104,9 @@ export default function LoginPage() {
         title: "Erro no login",
         description: result.error.message,
       });
-    } else if (result?.success) {
-      // Redireciona explicitamente para o dashboard.
-      // O AppLayout e o AuthProvider vão garantir que o estado seja carregado corretamente.
-      router.replace('/dashboard');
     }
+    // No explicit navigation here.
+    // The useEffect will handle redirection when isAuthenticated becomes true.
   };
 
   const handleSignup = async (values: z.infer<typeof signupSchema>) => {
