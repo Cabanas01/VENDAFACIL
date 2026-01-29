@@ -22,6 +22,7 @@ async function getStoreForUser(): Promise<{ storeId: string; userId: string } | 
                 },
                 autoRefreshToken: false,
                 persistSession: false,
+                storageKey: 'vendafacil-auth',
             },
         }
     );

@@ -21,6 +21,7 @@ async function verifyAdmin(): Promise<{ userId: string } | { error: string }> {
                 },
                 autoRefreshToken: false,
                 persistSession: false,
+                storageKey: 'vendafacil-auth',
             },
         }
     );
