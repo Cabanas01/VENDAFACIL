@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Venda Fácil Brasil — Planos</title>
+  <meta name="description" content="Venda Fácil Brasil: sistema para organizar estoque, registrar vendas e controlar o caixa. Escolha o plano semanal, mensal ou anual e finalize no checkout PerfectPay." />
+
+  <!-- Favicon -->
+  <link rel="icon" href="/logo.png" />
+
+  <style>
+    :root{
+      --bg:#0b1220;
+      --muted:#a7b0c0;
+      --text:#eef2ff;
+      --brand:#22c55e;
+      --brand2:#06b6d4;
+      --line:rgba(255,255,255,.10);
+      --shadow: 0 12px 40px rgba(0,0,0,.35);
+      --radius:18px;
+      --max:1120px;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      background: radial-gradient(1200px 600px at 20% 0%, rgba(34,197,94,.22), transparent 55%),
+                  radial-gradient(900px 500px at 85% 10%, rgba(6,182,212,.20), transparent 55%),
+                  linear-gradient(180deg, #070b14, var(--bg));
+      color:var(--text);
+      line-height:1.55;
+    }
+    .container{max-width:var(--max); margin:0 auto; padding:0 20px}
+    a{color:inherit}
+
+    .topbar{
+      position:sticky; top:0; z-index:50;
+      backdrop-filter: blur(10px);
+      background: rgba(11,18,32,.6);
+      border-bottom:1px solid var(--line);
+    }
+    .topbar-inner{
+      display:flex; align-items:center; justify-content:space-between;
+      padding:14px 0;
+      gap:14px;
+    }
+    .brand{
+      display:flex; align-items:center; gap:10px;
+      font-weight:900;
+      letter-spacing:.2px;
+      min-width: 260px;
+    }
+    .brand img{
+      width:42px; height:42px;
+      border-radius:12px;
+      object-fit:cover;
+      box-shadow:0 10px 30px rgba(34,197,94,.12);
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.06);
+    }
+
+    .nav{
+      display:flex; gap:16px; align-items:center;
+      color:var(--muted);
+      font-weight:700;
+    }
+    .nav a{ text-decoration:none; opacity:.9 }
+    .nav a:hover{ opacity:1; color:var(--text) }
+
+    .btn{
+      display:inline-flex; align-items:center; justify-content:center;
+      gap:10px;
+      padding:12px 16px;
+      border-radius:14px;
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.06);
+      color:var(--text);
+      text-decoration:none;
+      font-weight:900;
+      box-shadow: 0 10px 30px rgba(0,0,0,.15);
+      cursor:pointer;
+      transition: transform .12s ease, background .12s ease, filter .12s ease;
+      width:100%;
+    }
+    .btn:hover{ transform: translateY(-1px); background: rgba(255,255,255,.09) }
+    .btn.primary{
+      background: linear-gradient(135deg, rgba(34,197,94,.95), rgba(6,182,212,.95));
+      border-color: transparent;
+    }
+    .btn.primary:hover{ filter: brightness(1.03) }
+    .btn.ghost{ width:auto; padding:10px 14px; border-radius:12px; font-weight:900 }
+
+    .hero{ padding:56px 0 18px; }
+    .hero-grid{
+      display:grid;
+      grid-template-columns: 1.05fr .95fr;
+      gap:22px;
+      align-items:start;
+    }
+    h1{
+      font-size: clamp(30px, 3.6vw, 52px);
+      line-height:1.05;
+      margin:0 0 14px;
+      letter-spacing:-.8px;
+    }
+    .sub{
+      color:var(--muted);
+      font-size: clamp(16px, 1.3vw, 18px);
+      margin:0 0 18px;
+      max-width: 62ch;
+    }
+
+    .hero-logo{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      margin-bottom:14px;
+    }
+    .hero-logo img{
+      width:64px; height:64px;
+      border-radius:18px;
+      object-fit:cover;
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.06);
+      box-shadow: 0 16px 50px rgba(0,0,0,.30);
+    }
+    .hero-logo .t1{ font-weight:950; font-size:18px; margin:0 }
+    .hero-logo .t2{ color:var(--muted); font-weight:800; font-size:12px; margin:0 }
+
+    .pill-row{ display:flex; flex-wrap:wrap; gap:10px; margin: 18px 0 8px }
+    .pill{
+      display:inline-flex; align-items:center; gap:8px;
+      padding:10px 12px;
+      border:1px solid var(--line);
+      border-radius:999px;
+      background: rgba(255,255,255,.05);
+      color:var(--muted);
+      font-weight:900;
+      font-size:13px;
+    }
+    .check{
+      width:18px; height:18px; border-radius:6px;
+      background: rgba(34,197,94,.20);
+      border:1px solid rgba(34,197,94,.35);
+      display:inline-block;
+    }
+
+    .card{
+      background: rgba(255,255,255,.04);
+      border:1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: 0 12px 32px rgba(0,0,0,.20);
+      padding:16px;
+    }
+    .section{ padding: 18px 0 34px; }
+    .section h2{
+      margin:0 0 10px;
+      font-size: clamp(22px, 2vw, 30px);
+      letter-spacing:-.4px;
+    }
+    .section p{ margin:0; color:var(--muted) }
+
+    .plans{
+      display:grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap:14px;
+      margin-top:16px;
+    }
+    .plan{
+      position:relative;
+      padding:18px;
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+      min-height: 360px;
+    }
+    .plan h3{ margin:0; font-size:18px; }
+    .price{ display:flex; align-items:baseline; gap:8px; margin-top:2px; }
+    .price strong{ font-size: 36px; letter-spacing:-.6px; }
+    .price span{ color:var(--muted); font-weight:900; font-size:13px; }
+    .tag{
+      display:inline-flex; align-items:center; gap:8px;
+      padding:8px 10px;
+      border-radius:999px;
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.05);
+      color:var(--muted);
+      font-weight:900;
+      font-size:12px;
+      width:fit-content;
+    }
+    .list{
+      margin:0;
+      padding:0;
+      list-style:none;
+      display:grid;
+      gap:10px;
+      color:var(--text);
+      font-weight:800;
+      font-size:14px;
+    }
+    .list li{ display:flex; gap:10px; align-items:flex-start }
+    .dot{
+      width:10px; height:10px; border-radius:999px;
+      background: var(--brand);
+      box-shadow: 0 0 0 4px rgba(34,197,94,.16);
+      margin-top:6px;
+      flex:0 0 auto;
+    }
+    .fine{ color:rgba(167,176,192,.85); font-size:12px; margin-top:8px; }
+    .highlight{
+      border-color: rgba(34,197,94,.35);
+      box-shadow: 0 16px 44px rgba(34,197,94,.10);
+      background: linear-gradient(180deg, rgba(34,197,94,.10), rgba(255,255,255,.03));
+    }
+    .badge-pop{
+      position:absolute;
+      top:14px; right:14px;
+      padding:8px 10px;
+      border-radius:999px;
+      background: rgba(34,197,94,.18);
+      border:1px solid rgba(34,197,94,.35);
+      font-weight:900;
+      font-size:12px;
+    }
+
+    .mock{
+      margin-top:14px;
+      display:grid;
+      grid-template-columns: 1fr;
+      gap:12px;
+    }
+    .mock img{
+      width:100%;
+      height:auto;
+      border-radius: 16px;
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.04);
+      box-shadow: 0 16px 50px rgba(0,0,0,.25);
+    }
+
+    details{
+      background: rgba(255,255,255,.04);
+      border:1px solid var(--line);
+      border-radius: 16px;
+      padding:14px 14px;
+      margin-top:12px;
+    }
+    summary{ cursor:pointer; font-weight:900; color:var(--text) }
+    details p{ margin:10px 0 0; color:var(--muted) }
+
+    .footer{
+      padding: 34px 0 50px;
+      border-top:1px solid var(--line);
+      color:var(--muted);
+    }
+
+    @media (max-width: 960px){
+      .hero-grid{ grid-template-columns: 1fr; }
+      .plans{ grid-template-columns: 1fr; }
+      .nav{ display:none; }
+      .btn{ width:100%; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Checkout PerfectPay por plano -->
+  <script>
+    const PERFECTPAY_SEMANAL = "https://go.perfectpay.com.br/PPU38CQ6LL2";
+    const PERFECTPAY_MENSAL  = "https://go.perfectpay.com.br/PPU38CQ6LL1";
+    const PERFECTPAY_ANUAL   = "https://go.perfectpay.com.br/PPU38CQ6LL3";
+  </script>
+
+  <header class="topbar">
+    <div class="container">
+      <div class="topbar-inner">
+        <div class="brand">
+          <img src="/logo.png" alt="Logo Venda Fácil Brasil" />
+          <div>
+            <div style="font-size:15px; opacity:.95">Venda Fácil Brasil</div>
+            <div style="font-size:12px; color:var(--muted); font-weight:900">Sistema de Vendas • PDV • Controle</div>
+          </div>
+        </div>
+
+        <nav class="nav" aria-label="Navegação">
+          <a href="#planos">Planos</a>
+          <a href="#beneficios">Benefícios</a>
+          <a href="#faq">Dúvidas</a>
+        </nav>
+
+        <a class="btn ghost" href="#planos">Quero assinar</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- HERO -->
+    <section class="hero">
+      <div class="container">
+        <div class="hero-grid">
+          <div>
+            <div class="hero-logo">
+              <img src="/logo.png" alt="Venda Fácil Brasil" />
+              <div>
+                <p class="t1">Venda Fácil Brasil</p>
+                <p class="t2">Organize • Controle • Venda mais</p>
+              </div>
+            </div>
+
+            <h1>Organize suas vendas, controle o caixa e tenha clareza do seu lucro.</h1>
+            <p class="sub">
+              Um sistema simples e profissional para vender com rapidez, controlar estoque e fechar o caixa sem erro.
+            </p>
+
+            <div class="pill-row">
+              <div class="pill"><span class="check"></span> PDV rápido</div>
+              <div class="pill"><span class="check"></span> Estoque organizado</div>
+              <div class="pill"><span class="check"></span> Caixa completo</div>
+              <div class="pill"><span class="check"></span> Histórico de vendas</div>
+            </div>
+
+            <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:14px">
+              <a class="btn primary" href="#planos" style="width:auto">✅ Ver planos</a>
+              <a class="btn" href="https://www.instagram.com/vendafacilbrasil_?igsh=bXo0anB0MnIwN3Ju&utm_source=qr" target="_blank" rel="noopener" style="width:auto">
+                📩 Falar no Instagram
+              </a>
+            </div>
+
+            <p class="fine">*Ao clicar em um plano, você será redirecionado para o checkout da PerfectPay.</p>
+          </div>
+
+          <div class="card" id="beneficios">
+            <h2 style="margin:0 0 8px; font-size:20px">O que você controla</h2>
+            <ul class="list" style="margin-top:12px">
+              <li><span class="dot"></span> Cadastro e gestão de produtos</li>
+              <li><span class="dot"></span> Vendas e itens vendidos</li>
+              <li><span class="dot"></span> Entradas e fechamento do caixa</li>
+              <li><span class="dot"></span> Histórico e relatórios do período</li>
+              <li><span class="dot"></span> Mais organização e menos “achismo”</li>
+            </ul>
+
+            <!-- IMAGEM OPCIONAL DO SISTEMA / MOCKUP -->
+            <div class="mock">
+              <img src="/mockup.png" alt="Prévia do sistema (adicione a imagem em /public/mockup.png)" onerror="this.style.display='none';" />
+              <div class="fine"
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PLANOS -->
+    <section class="section" id="planos">
+      <div class="container">
+        <h2>Escolha seu plano</h2>
+        <p>Ao clicar, você será redirecionado para o <strong>checkout da PerfectPay</strong>.</p>
+
+        <div class="plans">
+          <!-- Semanal -->
+          <div class="card plan">
+            <div>
+              <div class="tag">⚡ Comece agora</div>
+              <h3>Plano Semanal</h3>
+              <div class="price">
+                <strong>R$ 9,90</strong>
+                <span>/ semana</span>
+              </div>
+              <p class="fine">Ideal para testar e começar a organizar as vendas rapidamente.</p>
+            </div>
+
+            <ul class="list">
+              <li><span class="dot"></span> Acesso ao sistema</li>
+              <li><span class="dot"></span> Controle de estoque</li>
+              <li><span class="dot"></span> PDV e vendas</li>
+              <li><span class="dot"></span> Controle de caixa</li>
+            </ul>
+
+            <a class="btn" id="btnSemanal" href="#" target="_blank" rel="noopener">
+              Assinar plano semanal
+            </a>
+            <div class="fine">Checkout seguro pela PerfectPay.</div>
+          </div>
+
+          <!-- Mensal (destaque) -->
+          <div class="card plan highlight">
+            <div class="badge-pop">🔥 Mais escolhido</div>
+            <div>
+              <div class="tag">⭐ Melhor custo-benefício</div>
+              <h3>Plano Mensal</h3>
+              <div class="price">
+                <strong>R$ 29,90</strong>
+                <span>/ mês</span>
+              </div>
+              <p class="fine">Perfeito para quem quer estabilidade e uso contínuo.</p>
+            </div>
+
+            <ul class="list">
+              <li><span class="dot"></span> Acesso total ao sistema</li>
+              <li><span class="dot"></span> Estoque + PDV</li>
+              <li><span class="dot"></span> Caixa: abertura, entradas e fechamento</li>
+              <li><span class="dot"></span> Histórico de vendas e caixa</li>
+            </ul>
+
+            <a class="btn primary" id="btnMensal" href="#" target="_blank" rel="noopener">
+              Assinar plano mensal
+            </a>
+            <div class="fine">Checkout seguro pela PerfectPay.</div>
+          </div>
+
+          <!-- Anual -->
+          <div class="card plan">
+            <div>
+              <div class="tag">💎 Mais economia</div>
+              <h3>Plano Anual</h3>
+              <div class="price">
+                <strong>R$ 297</strong>
+                <span>/ ano</span>
+              </div>
+              <p class="fine">Melhor para quem quer economizar e ter previsibilidade.</p>
+            </div>
+
+            <ul class="list">
+              <li><span class="dot"></span> Acesso total ao sistema</li>
+              <li><span class="dot"></span> Ideal para uso profissional</li>
+              <li><span class="dot"></span> Controle completo de vendas e caixa</li>
+              <li><span class="dot"></span> Organização o ano inteiro</li>
+            </ul>
+
+            <a class="btn" id="btnAnual" href="#" target="_blank" rel="noopener">
+              Assinar plano anual
+            </a>
+            <div class="fine">Checkout seguro pela PerfectPay.</div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:14px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+          <img src="/logo.png" alt="Venda Fácil Brasil" style="width:42px;height:42px;border-radius:14px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06)" />
+          <div>
+            <div style="font-weight:900; color:var(--text)">Suporte</div>
+            <div style="color:var(--muted)">
+              Dúvidas? Fale no Instagram:
+              <a href="https://www.instagram.com/vendafacilbrasil_?igsh=bXo0anB0MnIwN3Ju&utm_source=qr" target="_blank" rel="noopener">
+                @vendafacilbrasil_
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="section" id="faq">
+      <div class="container">
+        <h2>Dúvidas frequentes</h2>
+        <p>Respostas rápidas para as perguntas que mais aparecem.</p>
+
+        <details>
+          <summary>Como funciona o pagamento?</summary>
+          <p>Você finaliza pelo checkout da PerfectPay. Após a confirmação, você recebe as instruções de acesso.</p>
+        </details>
+
+        <details>
+          <summary>Posso mudar de plano depois?</summary>
+          <p>Sim. Você pode cancelar e assinar outro plano a qualquer momento.</p>
+        </details>
+
+        <details>
+          <summary>Tenho suporte se precisar?</summary>
+          <p>Sim — chame no Instagram: @vendafacilbrasil_</p>
+        </details>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <div class="container">
+        <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap">
+          <div>
+            <strong style="color:var(--text)">Venda Fácil Brasil</strong><br/>
+            <span>Estamos prontos para te ajudar a vender mais.</span>
+          </div>
+          <div>
+            <a class="btn ghost" href="#planos" style="width:auto">Planos</a>
+          </div>
+        </div>
+        <div style="margin-top:14px; font-size:12px; color:rgba(167,176,192,.85)">
+          © <span id="year"></span> Venda Fácil Brasil. Todos os direitos reservados.
+        </div>
+      </div>
+    </footer>
+  </main>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+
+    // Setando links nos botões
+    document.getElementById("btnSemanal").href = PERFECTPAY_SEMANAL;
+    document.getElementById("btnMensal").href  = PERFECTPAY_MENSAL;
+    document.getElementById("btnAnual").href   = PERFECTPAY_ANUAL;
+  </script>
+</body>
+</html>
