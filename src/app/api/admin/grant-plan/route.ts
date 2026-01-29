@@ -10,6 +10,7 @@ export const runtime = 'nodejs';
 
 export async function POST(request: Request) {
   console.log('[DEBUG] SERVICE ROLE EXISTS:', !!process.env.SUPABASE_SERVICE_ROLE_KEY);
+  console.log('[DEBUG] SUPABASE URL EXISTS:', !!process.env.NEXT_PUBLIC_SUPABASE_URL);
   try {
     const cookieStore = cookies();
     const supabase = createRouteHandlerClient<Database>({ cookies: () => cookieStore });
