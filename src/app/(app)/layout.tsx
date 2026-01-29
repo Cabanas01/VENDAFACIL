@@ -15,11 +15,10 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => {
-    if (loading || storeStatus === 'loading' || storeStatus === 'unknown') return;
+    if (loading) return;
 
     if (!isAuthenticated) {
-      const redirect = encodeURIComponent(pathname || '/dashboard');
-      router.replace(`/login?redirect=${redirect}`);
+      router.replace('/login');
       return;
     }
 
@@ -28,12 +27,13 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       return;
     }
 
-    if (storeStatus === 'has' && store && pathname === '/onboarding') {
+    if (storeStatus === 'has' && pathname === '/onboarding') {
       router.replace('/dashboard');
+      return;
     }
     
     // Paywall logic
-    if (accessStatus && !accessStatus.acesso_liberado && pathname !== '/billing') {
+    if (accessStatus && !accessStatus.acesso_liberado && pathname !== '/billing' && pathname !== '/settings') {
         router.replace('/billing?reason=expired');
     }
 
@@ -82,12 +82,14 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   }
 
   // While redirecting, don't render children to avoid flashes of wrong content
-  const isRedirecting = !isAuthenticated || 
+  const isRedirecting = !isAuthenticated ||
                         (storeStatus === 'none' && pathname !== '/onboarding') ||
-                        (accessStatus && !accessStatus.acesso_liberado && pathname !== '/billing');
+                        (storeStatus === 'has' && pathname === '/onboarding') ||
+                        (accessStatus && !accessStatus.acesso_liberado && pathname !== '/billing' && pathname !== '/settings');
+
 
   if (isRedirecting) {
-    return null;
+    return null; // Render nothing while redirecting
   }
   
   if (!store && pathname !== '/onboarding') {

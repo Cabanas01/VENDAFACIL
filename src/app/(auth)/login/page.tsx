@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -58,7 +58,6 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 }
 
 export default function LoginPage() {
-  const { isAuthenticated } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
@@ -85,12 +84,6 @@ export default function LoginPage() {
     defaultValues: { email: '' },
   });
 
-  useEffect(() => {
-    if (isAuthenticated && pathname !== '/login') {
-      router.replace(redirectPath);
-    }
-  }, [isAuthenticated, router, redirectPath]);
-
   const handleLogin = async (values: z.infer<typeof loginSchema>) => {
     setLoading(true);
     const formData = new FormData();
@@ -107,7 +100,9 @@ export default function LoginPage() {
         description: result.error.message,
       });
     } else if (result?.success) {
-      router.push(redirectPath);
+      // The AppLayout component will handle the redirection automatically
+      // after the auth state changes. We can just let it do its job.
+      router.refresh(); // Forces a refresh to re-trigger the layout's useEffect
     }
   };
 

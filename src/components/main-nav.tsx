@@ -37,13 +37,13 @@ import {
 import { useAuth } from '@/components/auth-provider';
 
 const navItems = [
-  { href: '/dashboard', label: 'Dashboard', icon: Home },
-  { href: '/sales', label: 'Vendas', icon: ShoppingCart },
-  { href: '/products', label: 'Produtos', icon: Package },
-  { href: '/clients', label: 'Clientes', icon: Users },
-  { href: '/users', label: 'Usuários & Eventos', icon: LineChart },
-  { href: '/cash', label: 'Caixa', icon: Wallet },
-  { href: '/reports', label: 'Relatórios', icon: BarChart3 },
+  { href: '/dashboard', label: 'Dashboard', icon: Home, exact: true },
+  { href: '/sales', label: 'Vendas', icon: ShoppingCart, exact: false },
+  { href: '/products', label: 'Produtos', icon: Package, exact: true },
+  { href: '/clients', label: 'Clientes', icon: Users, exact: true },
+  { href: '/users', label: 'Usuários & Eventos', icon: LineChart, exact: true },
+  { href: '/cash', label: 'Caixa', icon: Wallet, exact: true },
+  { href: '/reports', label: 'Relatórios', icon: BarChart3, exact: true },
 ];
 
 const settingsNav = { href: '/settings', label: 'Configurações', icon: Settings };
@@ -53,6 +53,10 @@ export function MainNav() {
   const pathname = usePathname();
   const { user, store, logout } = useAuth();
   const router = useRouter();
+
+  const isNavItemActive = (href: string, exact: boolean) => {
+    return exact ? pathname === href : pathname.startsWith(href);
+  };
 
   return (
     <Sidebar>
@@ -75,7 +79,7 @@ export function MainNav() {
             <SidebarMenuItem key={item.href}>
               <Link href={item.href} passHref>
                 <SidebarMenuButton
-                  isActive={pathname.startsWith(item.href) && (item.href !== '/sales' || pathname === '/sales')}
+                  isActive={isNavItemActive(item.href, item.exact)}
                   className="justify-start"
                 >
                   <item.icon className="h-5 w-5" />
