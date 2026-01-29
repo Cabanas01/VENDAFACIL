@@ -7,34 +7,34 @@ import { revalidatePath } from 'next/cache';
 import type { Database } from '@/lib/supabase/database.types';
 
 export async function POST(request: Request) {
-  const cookieStore = cookies();
-  const supabase = createRouteHandlerClient<Database>({ cookies: () => cookieStore });
-  const supabaseAdmin = getSupabaseAdmin();
-
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return NextResponse.json({ error: 'Authentication failed' }, { status: 401 });
-  }
-
-  // Verify if the user is an admin
-  const { data: profile, error: profileError } = await supabaseAdmin
-    .from('users')
-    .select('is_admin')
-    .eq('id', user.id)
-    .single();
-
-  if (profileError || !profile?.is_admin) {
-    return NextResponse.json({ error: 'Permission denied. User is not an admin.' }, { status: 403 });
-  }
-
-  const { storeId, planId, durationMonths } = await request.json();
-
-  if (!storeId || !planId || !durationMonths) {
-    return NextResponse.json({ error: 'Invalid input. Missing storeId, planId, or durationMonths.' }, { status: 400 });
-  }
-
   try {
+    const cookieStore = cookies();
+    const supabase = createRouteHandlerClient<Database>({ cookies: () => cookieStore });
+    const supabaseAdmin = getSupabaseAdmin();
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Authentication failed' }, { status: 401 });
+    }
+
+    // Verify if the user is an admin
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('users')
+      .select('is_admin')
+      .eq('id', user.id)
+      .single();
+
+    if (profileError || !profile?.is_admin) {
+      return NextResponse.json({ error: 'Permission denied. User is not an admin.' }, { status: 403 });
+    }
+
+    const { storeId, planId, durationMonths } = await request.json();
+
+    if (!storeId || !planId || !durationMonths) {
+      return NextResponse.json({ error: 'Invalid input. Missing storeId, planId, or durationMonths.' }, { status: 400 });
+    }
+
     const now = new Date();
     const accessEndDate = addMonths(now, durationMonths);
     const planName = planId === 'monthly' ? 'Mensal (Admin)' : 'Anual (Admin)';
