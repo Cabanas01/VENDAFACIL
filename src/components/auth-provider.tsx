@@ -215,20 +215,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
-    const init = async () => {
-      const { data } = await supabase.auth.getSession();
-      await handleSession(data.session);
-      setLoading(false);
-    };
-
-    init();
-
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
-      handleSession(session);
-    });
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        await handleSession(session);
+        setLoading(false);
+      }
+    );
 
     return () => {
-      sub.subscription.unsubscribe();
+      authListener.subscription.unsubscribe();
     };
   }, [handleSession]);
 
@@ -256,8 +251,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     await supabase.auth.signOut();
-    // The onAuthStateChange listener will handle state clearing.
-    // The AppLayout component will handle the redirect.
+    setAccessStatus(null);
   }, []);
 
   const deleteAccount = useCallback(async () => {
