@@ -8,8 +8,9 @@ import {
   Eye,
   MousePointerClick,
   FileText,
+  Wallet,
 } from 'lucide-react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 
 import { DateRangePicker } from '@/components/date-range-picker';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -22,6 +23,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabase/client';
 import type { AnalyticsSummary } from '@/lib/types';
@@ -29,12 +31,15 @@ import {
   SalesOverTimeChart
 } from '@/components/charts';
 import { Input } from '@/components/ui/input';
+import { useAnalytics } from '@/lib/analytics/track';
 
 const ADMIN_ANALYTICS_ENABLED = false;
 
 export default function AdminAnalytics() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const { toast } = useToast();
+  const { registerUniqueClick } = useAnalytics();
   
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: addDays(startOfToday(), -6),
@@ -93,19 +98,38 @@ export default function AdminAnalytics() {
     }));
   }, [summary]);
 
+  const handleGoToBilling = () => {
+      registerUniqueClick('go_billing_from_admin_analytics');
+      router.push('/billing');
+  }
+
   if (!ADMIN_ANALYTICS_ENABLED) {
     return (
-        <Card>
-            <CardHeader>
-                <CardTitle>Análise de Tráfego</CardTitle>
-                <CardDescription>
-                    Esta funcionalidade está em desenvolvimento. Para habilitá-la, altere a flag `ADMIN_ANALYTICS_ENABLED` no código.
-                </CardDescription>
-            </CardHeader>
-            <CardContent className="text-center text-muted-foreground p-8">
-                <p>Funcionalidade em breve.</p>
-            </CardContent>
-        </Card>
+        <div className="space-y-6">
+            <Card>
+                <CardHeader>
+                    <CardTitle>Análise de Tráfego</CardTitle>
+                    <CardDescription>
+                        Esta funcionalidade está em desenvolvimento. Para habilitá-la, altere a flag `ADMIN_ANALYTICS_ENABLED` no código.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="text-center text-muted-foreground p-8">
+                    <p>Funcionalidade em breve.</p>
+                </CardContent>
+            </Card>
+            <Card>
+                <CardHeader>
+                    <CardTitle>Ações Rápidas de Analytics</CardTitle>
+                    <CardDescription>Use estes botões para disparar eventos de teste.</CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-2">
+                    <Button onClick={handleGoToBilling} variant="outline">
+                        <Wallet className="mr-2" />
+                        Ir para Assinaturas (Testar Clique Único)
+                    </Button>
+                </CardContent>
+            </Card>
+        </div>
     );
   }
 
@@ -220,6 +244,19 @@ export default function AdminAnalytics() {
                 </CardContent>
             </Card>
         </div>
+
+         <Card>
+            <CardHeader>
+                <CardTitle>Ações Rápidas de Analytics</CardTitle>
+                <CardDescription>Use estes botões para disparar eventos de teste.</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-2">
+                <Button onClick={handleGoToBilling} variant="outline">
+                    <Wallet className="mr-2" />
+                    Ir para Assinaturas (Testar Clique Único)
+                </Button>
+            </CardContent>
+        </Card>
     </div>
   );
 }

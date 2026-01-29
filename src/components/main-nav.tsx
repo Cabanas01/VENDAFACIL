@@ -41,7 +41,6 @@ const navItems = [
   { href: '/sales', label: 'Vendas', icon: ShoppingCart, exact: false },
   { href: '/products', label: 'Produtos', icon: Package, exact: true },
   { href: '/clients', label: 'Clientes', icon: Users, exact: true },
-  { href: '/users', label: 'Usuários & Eventos', icon: LineChart, exact: true },
   { href: '/cash', label: 'Caixa', icon: Wallet, exact: true },
   { href: '/reports', label: 'Relatórios', icon: BarChart3, exact: true },
 ];
