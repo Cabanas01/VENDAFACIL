@@ -2,6 +2,10 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import type { Database } from '@/lib/supabase/database.types';
 
+// This is the server-side Supabase client.
+// It is used in Server Actions, API Routes, and other server-side functions.
+// It securely reads and writes cookies to manage the user's session.
+
 export function createSupabaseServerClient() {
   const cookieStore = cookies();
   return createServerClient<Database>(
