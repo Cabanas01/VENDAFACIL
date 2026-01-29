@@ -1,4 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { config } from 'dotenv';
+
+config();
 
 // This client is for server-side use only, using the service role key.
 // It should never be exposed to the client.
