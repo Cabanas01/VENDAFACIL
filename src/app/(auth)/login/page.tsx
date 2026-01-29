@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -29,6 +29,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
+import { login, signup } from './actions';
 
 const loginSchema = z.object({
   email: z.string().email({ message: 'Email inválido.' }),
@@ -57,7 +58,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 }
 
 export default function LoginPage() {
-  const { login, signup, isAuthenticated } = useAuth();
+  const { isAuthenticated } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
@@ -91,60 +92,54 @@ export default function LoginPage() {
     }
   }, [isAuthenticated, router, redirectPath, searchParams]);
 
- const handleLogin = async (values: z.infer<typeof loginSchema>) => {
-  setLoading(true);
-  try {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: values.email,
-      password: values.password,
-    });
+  const handleLogin = async (values: z.infer<typeof loginSchema>) => {
+    setLoading(true);
+    const formData = new FormData();
+    formData.append('email', values.email);
+    formData.append('password', values.password);
 
-    console.log("LOGIN RESULT", data, error);
+    const result = await login(formData);
 
-    if (error) {
+    if (result?.error) {
       toast({
         variant: "destructive",
         title: "Erro no login",
-        description: error.message,
+        description: result.error.message,
       });
-      return;
     }
-
-    toast({ title: "Login realizado!" });
-    router.replace("/dashboard");
-  } catch (e) {
-    console.error(e);
-  } finally {
+    // A ação do servidor irá redirecionar em caso de sucesso
     setLoading(false);
-  }
-};
-
+  };
 
   const handleSignup = async (values: z.infer<typeof signupSchema>) => {
     setLoading(true);
+    const formData = new FormData();
+    formData.append('email', values.email);
+    formData.append('password', values.password);
+
     try {
-      const { error } = await withTimeout(signup(values.email, values.password), 15000);
+        const result = await signup(formData);
 
-      if (error) {
-        signupForm.setError('email', {
-          type: 'manual',
-          message: error.message || 'Ocorreu um erro ao criar a conta.',
-        });
-        return;
-      }
+        if (result?.error) {
+            signupForm.setError('email', {
+                type: 'manual',
+                message: result.error.message,
+            });
+            return;
+        }
 
-      setLastSignupEmail(values.email);
-      signupForm.reset();
-      setMode('confirm_email');
+        setLastSignupEmail(values.email);
+        signupForm.reset();
+        setMode('confirm_email');
     } catch (e: any) {
-      toast({
-        variant: 'destructive',
-        title: 'Erro inesperado',
-        description: e?.message || 'Falha ao criar conta.',
-      });
-      console.error('[SIGNUP] error', e);
+        toast({
+            variant: 'destructive',
+            title: 'Erro inesperado',
+            description: e?.message || 'Falha ao criar conta.',
+        });
+        console.error('[SIGNUP] error', e);
     } finally {
-      setLoading(false);
+        setLoading(false);
     }
   };
 

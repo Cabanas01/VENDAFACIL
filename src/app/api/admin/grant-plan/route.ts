@@ -7,15 +7,7 @@ import { addMonths } from 'date-fns'
 export const runtime = 'nodejs'
 
 export async function POST(req: Request) {
-  console.log('[DEBUG] SERVICE ROLE EXISTS:', !!process.env.SUPABASE_SERVICE_ROLE_KEY);
-  console.log('[DEBUG] SUPABASE URL EXISTS:', !!process.env.NEXT_PUBLIC_SUPABASE_URL);
-  
   const cookieStore = cookies()
-
-  // --- ADVANCED DEBUGGING ---
-  const allCookies = cookieStore.getAll();
-  console.log('[DEBUG] All cookies received by server:', allCookies);
-  // --- END ADVANCED DEBUGGING ---
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -30,8 +22,6 @@ export async function POST(req: Request) {
             cookieStore.set({ name, value, ...options })
           } catch (error) {
             // The `set` method was called from a Server Component.
-            // This can be ignored if you have middleware refreshing
-            // user sessions.
           }
         },
         remove(name: string, options: CookieOptions) {
@@ -39,8 +29,6 @@ export async function POST(req: Request) {
             cookieStore.set({ name, value: '', ...options })
           } catch (error) {
             // The `delete` method was called from a Server Component.
-            // This can be ignored if you have middleware refreshing
-            // user sessions.
           }
         },
       },
@@ -49,11 +37,6 @@ export async function POST(req: Request) {
 
   try {
     const { data: { user }, error: authError } = await supabase.auth.getUser()
-
-    // --- ADVANCED DEBUGGING ---
-    console.log('[DEBUG] User object from getUser():', user);
-    console.log('[DEBUG] Auth error from getUser():', authError);
-    // --- END ADVANCED DEBUGGING ---
 
     if (authError || !user) {
       console.error('API grant-plan: Authentication failed', authError);
@@ -112,7 +95,6 @@ export async function POST(req: Request) {
 
   } catch (error: any) {
     console.error('API grant-plan: Unhandled exception', error);
-    // This will catch errors from getSupabaseAdmin() if env vars are missing
     return NextResponse.json({ error: error.message || 'An unexpected error occurred.' }, { status: 500 });
   }
 }
