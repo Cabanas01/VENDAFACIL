@@ -11,10 +11,10 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import type { StoreRow } from './stores'; // Assuming StoreRow is exported from stores.tsx
+import type { StoreRow } from './stores';
 
 const grantPlanSchema = z.object({
-  planId: z.enum(['monthly', 'yearly'], { required_error: 'Selecione um plano.' }),
+  plan: z.enum(['monthly', 'yearly'], { required_error: 'Selecione um plano.' }),
   durationMonths: z.coerce.number().int().min(1, 'Duração deve ser de no mínimo 1 mês.'),
 });
 
@@ -34,7 +34,7 @@ export function GrantPlanDialog({ store, isOpen, onOpenChange, onSuccess }: Gran
   const form = useForm<GrantPlanFormValues>({
     resolver: zodResolver(grantPlanSchema),
     defaultValues: {
-      planId: 'monthly',
+      plan: 'monthly',
       durationMonths: 1,
     },
   });
@@ -42,27 +42,31 @@ export function GrantPlanDialog({ store, isOpen, onOpenChange, onSuccess }: Gran
   const onSubmit = async (values: GrantPlanFormValues) => {
     if (!store) return;
     setIsSubmitting(true);
+
+    const payload = {
+      storeId: store.id,
+      plan: values.plan,
+      durationMonths: Number(values.durationMonths),
+    };
+    console.log('[grant-plan] Sending payload:', payload);
+
     try {
       const response = await fetch('/api/admin/grant-plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          storeId: store.id,
-          planId: values.planId,
-          durationMonths: values.durationMonths,
-        }),
-        credentials: 'include', // Crucial: Instructs the browser to send cookies with the request.
+        body: JSON.stringify(payload),
+        credentials: 'include',
       });
 
-      const result = await response.json();
+      const result = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        throw new Error(result.error || 'Ocorreu um erro desconhecido.');
+        throw new Error(result.error || `Erro desconhecido (${response.status})`);
       }
 
       toast({
         title: 'Plano concedido com sucesso!',
-        description: `A loja "${store.name}" agora tem o plano ${values.planId} por ${values.durationMonths} meses.`,
+        description: `A loja "${store.name}" agora tem o plano ${values.plan} por ${values.durationMonths} meses.`,
       });
       onSuccess();
       onOpenChange(false);
@@ -93,7 +97,7 @@ export function GrantPlanDialog({ store, isOpen, onOpenChange, onSuccess }: Gran
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 py-4">
             <FormField
               control={form.control}
-              name="planId"
+              name="plan"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Plano</FormLabel>

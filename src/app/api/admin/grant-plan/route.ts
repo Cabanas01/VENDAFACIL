@@ -4,51 +4,60 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 export const runtime = 'nodejs';
 
 export async function POST(req: Request) {
-  console.log('[grant-plan] API route invoked.');
-
-  const supabase = createSupabaseServerClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  console.log('UID LOGADO:', user?.id);
-
-  if (authError || !user) {
-    console.warn('[grant-plan] Authentication failed:', authError?.message || 'No user session found in cookie.');
-    return NextResponse.json({ error: 'Authentication failed: No valid user session found.' }, { status: 401 });
-  }
-
-  console.log(`[grant-plan] Authenticated user ${user.id} is attempting to grant a plan.`);
-
   try {
-    const { storeId, planId, durationMonths } = await req.json();
-    if (!storeId || !planId || !durationMonths) {
-      return NextResponse.json({ error: 'Invalid input: storeId, planId, and durationMonths are required.' }, { status: 400 });
-    }
+    const supabase = createSupabaseServerClient();
 
-    // Call the secure RPC function. The user's JWT is automatically passed,
-    // and `auth.uid()` will be available inside the function.
-    const { error: rpcError } = await supabase.rpc('admin_grant_store_access', {
-        p_store_id: storeId,
-        p_plan: planId,
-        p_duration_months: durationMonths,
-    });
+    const body = await req.json().catch(() => null);
+    console.log('[grant-plan] payload received:', body);
 
-    
-    if (rpcError) {
-      console.error(`[grant-plan] RPC failed for user ${user.id}:`, rpcError.message);
-      
-      // Check if the error is the specific permission error from the RPC
-      const isPermissionError = rpcError.message.toLowerCase().includes('not admin');
-      
+    const storeId = body?.storeId;
+    const plan = body?.plan;
+    const durationMonths = Number(body?.durationMonths);
+
+    if (!storeId || !plan || !Number.isFinite(durationMonths) || durationMonths <= 0) {
       return NextResponse.json(
-        { error: isPermissionError ? 'Permission denied: User is not a global admin.' : 'Failed to grant plan in database.' },
-        { status: isPermissionError ? 403 : 500 } // 403 Forbidden for permission denied, 500 for other DB errors
+        { ok: false, error: 'invalid_payload', details: { storeId, plan, durationMonths } },
+        { status: 400 }
       );
     }
 
-    console.log(`[grant-plan] Successfully granted plan '${planId}' to store ${storeId} by admin ${user.id}.`);
-    return NextResponse.json({ success: true });
+    const { data: userData, error: userErr } = await supabase.auth.getUser();
+    if (userErr) {
+      console.error('[grant-plan] getUser error:', userErr);
+    }
+    console.log('[grant-plan] User ID from server:', userData?.user?.id);
+    if (!userData?.user) {
+      return NextResponse.json({ ok: false, error: 'unauthenticated' }, { status: 401 });
+    }
+    
+    const { error: rpcErr } = await supabase.rpc('admin_grant_store_access', {
+      p_store_id: storeId,
+      p_plan: plan, // Nome do parâmetro corrigido para 'p_plan'
+      p_duration_months: durationMonths,
+    });
 
-  } catch (error: any) {
-    console.error('[grant-plan] Unhandled exception in POST handler:', error);
-    return NextResponse.json({ error: error.message || 'An unexpected server error occurred.' }, { status: 500 });
+    if (rpcErr) {
+      console.error('[grant-plan] RPC failed:', {
+        message: rpcErr.message,
+        details: rpcErr.details,
+        hint: rpcErr.hint,
+        code: rpcErr.code,
+      });
+
+      const msg = (rpcErr.message || '').toLowerCase();
+      if (msg.includes('not admin')) {
+        return NextResponse.json({ ok: false, error: 'not_admin' }, { status: 403 });
+      }
+
+      return NextResponse.json(
+        { ok: false, error: 'rpc_failed', message: rpcErr.message, details: rpcErr.details, hint: rpcErr.hint, code: rpcErr.code },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ ok: true }, { status: 200 });
+  } catch (e: any) {
+    console.error('[grant-plan] unexpected error:', e);
+    return NextResponse.json({ ok: false, error: 'server_error', message: e?.message }, { status: 500 });
   }
 }
