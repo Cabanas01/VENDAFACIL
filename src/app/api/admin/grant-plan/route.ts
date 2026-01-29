@@ -8,6 +8,7 @@ export async function POST(req: Request) {
 
   const supabase = createSupabaseServerClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
+  console.log('UID LOGADO:', user?.id);
 
   if (authError || !user) {
     console.warn('[grant-plan] Authentication failed:', authError?.message || 'No user session found in cookie.');
@@ -30,6 +31,7 @@ export async function POST(req: Request) {
         p_duration_months: durationMonths,
     });
 
+    
     if (rpcError) {
       console.error(`[grant-plan] RPC failed for user ${user.id}:`, rpcError.message);
       
