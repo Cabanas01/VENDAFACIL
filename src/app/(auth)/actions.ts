@@ -15,12 +15,10 @@ export async function login(formData: FormData) {
   })
 
   if (error) {
-    return { error: { message: error.message, code: error.code } }
+    return { error: { message: error.message, code: error.code }, success: false }
   }
 
-  // Redirect is managed on the server, ensuring a clean navigation
-  // after the session is set.
-  redirect('/dashboard')
+  return { error: null, success: true };
 }
 
 

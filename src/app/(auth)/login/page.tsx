@@ -86,11 +86,10 @@ export default function LoginPage() {
   });
 
   useEffect(() => {
-    // Só redireciona automaticamente se vier com ?redirect=...
-    if (isAuthenticated && searchParams.get('redirect')) {
+    if (isAuthenticated && pathname !== '/login') {
       router.replace(redirectPath);
     }
-  }, [isAuthenticated, router, redirectPath, searchParams]);
+  }, [isAuthenticated, router, redirectPath]);
 
   const handleLogin = async (values: z.infer<typeof loginSchema>) => {
     setLoading(true);
@@ -99,6 +98,7 @@ export default function LoginPage() {
     formData.append('password', values.password);
 
     const result = await login(formData);
+    setLoading(false);
 
     if (result?.error) {
       toast({
@@ -106,9 +106,9 @@ export default function LoginPage() {
         title: "Erro no login",
         description: result.error.message,
       });
+    } else if (result?.success) {
+      router.push(redirectPath);
     }
-    // A ação do servidor irá redirecionar em caso de sucesso
-    setLoading(false);
   };
 
   const handleSignup = async (values: z.infer<typeof signupSchema>) => {
