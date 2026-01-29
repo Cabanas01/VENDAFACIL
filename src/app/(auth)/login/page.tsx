@@ -105,8 +105,8 @@ export default function LoginPage() {
         description: result.error.message,
       });
     }
-    // No explicit navigation here.
-    // The useEffect will handle redirection when isAuthenticated becomes true.
+    // A navegação agora é reativa e ocorre no `useEffect` acima,
+    // que aguarda a mudança do estado `isAuthenticated`.
   };
 
   const handleSignup = async (values: z.infer<typeof signupSchema>) => {

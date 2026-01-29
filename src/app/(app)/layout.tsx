@@ -39,6 +39,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   }, [loading, isAuthenticated, storeStatus, store, pathname, router, accessStatus]);
 
+  // While waiting for the initial session, show a loading screen.
   if (loading || (isAuthenticated && (storeStatus === 'loading' || storeStatus === 'unknown'))) {
     return (
       <div className="flex min-h-screen w-full">
@@ -55,6 +56,20 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           <Skeleton className="h-12 w-1/3 mb-8" />
           <Skeleton className="h-64 w-full" />
         </div>
+      </div>
+    );
+  }
+  
+  // While redirecting, don't render children to avoid flashes of wrong content
+  const isRedirecting = !isAuthenticated ||
+                        (storeStatus === 'none' && pathname !== '/onboarding') ||
+                        (storeStatus === 'has' && pathname === '/onboarding') ||
+                        (accessStatus && !accessStatus.acesso_liberado && pathname !== '/billing' && pathname !== '/settings');
+
+  if (isRedirecting) {
+    return (
+      <div className="flex min-h-screen w-full items-center justify-center">
+        <Skeleton className="h-screen w-screen" />
       </div>
     );
   }
@@ -77,21 +92,6 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             Voltar ao Login
           </Button>
         </div>
-      </div>
-    );
-  }
-
-  // While redirecting, don't render children to avoid flashes of wrong content
-  const isRedirecting = !isAuthenticated ||
-                        (storeStatus === 'none' && pathname !== '/onboarding') ||
-                        (storeStatus === 'has' && pathname === '/onboarding') ||
-                        (accessStatus && !accessStatus.acesso_liberado && pathname !== '/billing' && pathname !== '/settings');
-
-
-  if (isRedirecting) {
-    return (
-      <div className="flex min-h-screen w-full items-center justify-center">
-        <Skeleton className="h-screen w-screen" />
       </div>
     );
   }
