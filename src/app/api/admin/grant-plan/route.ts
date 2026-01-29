@@ -9,6 +9,7 @@ import type { Database } from '@/lib/supabase/database.types';
 export const runtime = 'nodejs';
 
 export async function POST(request: Request) {
+  console.log('[DEBUG] SERVICE ROLE EXISTS:', !!process.env.SUPABASE_SERVICE_ROLE_KEY);
   try {
     const cookieStore = cookies();
     const supabase = createRouteHandlerClient<Database>({ cookies: () => cookieStore });
