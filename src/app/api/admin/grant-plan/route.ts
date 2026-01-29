@@ -6,6 +6,8 @@ import { addMonths } from 'date-fns';
 import { revalidatePath } from 'next/cache';
 import type { Database } from '@/lib/supabase/database.types';
 
+export const runtime = 'nodejs';
+
 export async function POST(request: Request) {
   try {
     const cookieStore = cookies();
@@ -75,12 +77,12 @@ export async function POST(request: Request) {
       console.warn(`Failed to log ADMIN_GRANTED_PLAN event: ${eventError.message}`);
     }
     
-    revalidatePath('/admin/stores');
+    revalidatePath('/admin');
 
     return NextResponse.json({ success: true });
 
   } catch (error: any) {
-    console.error('Error in grantPlan API route:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('Error in grant-plan API route:', error);
+    return NextResponse.json({ error: error.message || 'An unexpected error occurred.' }, { status: 500 });
   }
 }

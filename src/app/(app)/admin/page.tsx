@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase/client';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 import { PageHeader } from '@/components/page-header';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -24,6 +24,8 @@ export default function AdminPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isVerifiedAdmin, setIsVerifiedAdmin] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const activeTab = searchParams.get('tab') || 'dashboard';
 
   useEffect(() => {
     async function validateAdminSession() {
@@ -64,7 +66,7 @@ export default function AdminPage() {
   }, []);
   
   const handleTabChange = (value: string) => {
-    // This could be used to push state to URL if needed
+    router.push(`/admin?tab=${value}`, { scroll: false });
   };
 
   if (loading) {
@@ -103,7 +105,7 @@ export default function AdminPage() {
     <div className="space-y-6">
       <PageHeader title="Painel Administrativo" subtitle="Gerenciamento geral do sistema e dados." />
 
-      <Tabs defaultValue="dashboard" className="space-y-4" onValueChange={handleTabChange}>
+      <Tabs value={activeTab} className="space-y-4" onValueChange={handleTabChange}>
         <TabsList>
             <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
             <TabsTrigger value="stores">Lojas</TabsTrigger>

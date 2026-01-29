@@ -166,7 +166,7 @@ export default function AdminStores() {
                         <Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                         <DropdownMenuItem onSelect={() => router.push(`/admin/customers?store_id=${s.id}`)}>
+                         <DropdownMenuItem onSelect={() => router.push(`/admin?tab=customers&store_id=${s.id}`)}>
                            <Users className="mr-2 h-4 w-4" /> Ver Clientes
                          </DropdownMenuItem>
                         <DropdownMenuItem>

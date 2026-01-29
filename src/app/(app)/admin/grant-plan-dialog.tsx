@@ -65,6 +65,7 @@ export function GrantPlanDialog({ store, isOpen, onOpenChange, onSuccess }: Gran
       });
       onSuccess();
       onOpenChange(false);
+      form.reset();
     } catch (error: any) {
       toast({
         variant: 'destructive',
@@ -84,7 +85,7 @@ export function GrantPlanDialog({ store, isOpen, onOpenChange, onSuccess }: Gran
         <DialogHeader>
           <DialogTitle>Conceder Plano para "{store.name}"</DialogTitle>
           <DialogDescription>
-            Esta ação concederá um plano pago manually, sem gerar cobrança.
+            Esta ação concederá um plano pago manualmente, sem gerar cobrança.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>

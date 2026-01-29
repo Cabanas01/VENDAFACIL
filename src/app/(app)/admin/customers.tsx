@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -32,7 +32,7 @@ export default function AdminCustomers() {
   const [page, setPage] = useState(0);
   const [count, setCount] = useState(0);
 
-  const [searchQuery, setSearchQuery] = useState(storeIdFilter ? `store:${storeIdFilter}` : '');
+  const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch] = useDebounce(searchQuery, 500);
 
   useEffect(() => {
@@ -49,10 +49,11 @@ export default function AdminCustomers() {
         .range(from, to)
         .order('created_at', { ascending: false });
 
-      const storeFilterId = debouncedSearch.match(/store:([a-fA-F0-9-]+)/);
-      if (storeFilterId) {
-        query = query.eq('store_id', storeFilterId[1]);
-      } else if (debouncedSearch) {
+      if (storeIdFilter) {
+        query = query.eq('store_id', storeIdFilter);
+      }
+
+      if (debouncedSearch) {
         query = query.or(`name.ilike.%${debouncedSearch}%,email.ilike.%${debouncedSearch}%,cpf.ilike.%${debouncedSearch}%`);
       }
 
@@ -69,17 +70,21 @@ export default function AdminCustomers() {
     }
 
     loadCustomers();
-  }, [page, debouncedSearch]);
+  }, [page, debouncedSearch, storeIdFilter]);
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Clientes (Global)</CardTitle>
-        <CardDescription>Visualize todos os clientes cadastrados no sistema. Use 'store:[id]' para filtrar por loja.</CardDescription>
+        <CardDescription>
+          {storeIdFilter
+            ? `Visualizando clientes da loja ${storeIdFilter}.`
+            : "Visualize todos os clientes cadastrados no sistema."}
+        </CardDescription>
         <div className="relative pt-2">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input 
-                placeholder="Buscar por nome, email, CPF ou 'store:[id]'..." 
+                placeholder="Buscar por nome, email ou CPF..." 
                 className="pl-10" 
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
