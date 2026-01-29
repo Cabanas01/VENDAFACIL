@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Suspense } from "react";
+import Script from "next/script";
 import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider } from "@/components/auth-provider";
 import "./globals.css";
@@ -49,6 +50,16 @@ export default function RootLayout({
             <Toaster />
           </AuthProvider>
         </Suspense>
+        <Script src="https://www.googletagmanager.com/gtag/js?id=G-FZGT4B73XF" />
+        <Script id="google-analytics">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+  
+            gtag('config', 'G-FZGT4B73XF');
+          `}
+        </Script>
       </body>
     </html>
   );
