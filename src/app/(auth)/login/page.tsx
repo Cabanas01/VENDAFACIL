@@ -5,7 +5,6 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
-import { useAuth } from '@/components/auth-provider';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -27,7 +26,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { login, signup } from '../actions';
 
@@ -59,10 +58,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 
 export default function LoginPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { toast } = useToast();
-
-  const redirectPath = searchParams.get('redirect') || '/dashboard';
 
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);

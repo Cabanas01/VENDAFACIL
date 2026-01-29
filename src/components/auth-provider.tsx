@@ -202,6 +202,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
         setStore(null);
         setStoreStatus('unknown');
+        setAccessStatus(null);
         return;
       }
 
@@ -255,11 +256,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     await supabase.auth.signOut();
-    setUser(null);
-    setStore(null);
-    setStoreStatus('unknown');
-    router.push('/login');
-  }, [router]);
+    // The onAuthStateChange listener will handle state clearing.
+    // The AppLayout component will handle the redirect.
+  }, []);
 
   const deleteAccount = useCallback(async () => {
     const { error } = await supabase.rpc('delete_user_account');
