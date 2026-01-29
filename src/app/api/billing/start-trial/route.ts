@@ -5,6 +5,9 @@ import { addDays } from 'date-fns';
 
 export const runtime = 'nodejs';
 
+/**
+ * Inicia o período de avaliação gratuita (plano 'free' temporário).
+ */
 export async function POST() {
   try {
     const supabase = createSupabaseServerClient();
@@ -34,7 +37,7 @@ export async function POST() {
     const now = new Date();
     const expirationDate = addDays(now, 7);
 
-    // 1. Atualizar o status da loja para marcar que o trial foi usado
+    // 1. Atualizar o status da loja para marcar que a avaliação foi iniciada
     const { error: updateStoreError } = await supabaseAdmin
       .from('stores')
       .update({ 
@@ -47,13 +50,13 @@ export async function POST() {
       throw new Error(`Erro ao atualizar status da loja: ${updateStoreError.message}`);
     }
 
-    // 2. Conceder o acesso na tabela store_access com os parâmetros exatos solicitados
+    // 2. Conceder o acesso como plano 'free' com validade de 7 dias e origem 'trial'
     const { error: accessError } = await supabaseAdmin
       .from('store_access')
       .upsert({
         store_id: store.id,
         plano_nome: 'Avaliação',
-        plano_tipo: 'free',
+        plano_tipo: 'free', // Avaliação é tecnicamente o plano free com expiração
         data_inicio_acesso: now.toISOString(),
         data_fim_acesso: expirationDate.toISOString(),
         status_acesso: 'ativo',
@@ -67,7 +70,7 @@ export async function POST() {
 
     return NextResponse.json({ success: true, message: 'Período de avaliação ativado com sucesso!' });
   } catch (e: any) {
-    console.error('[START_TRIAL] Unexpected error:', e);
+    console.error('[START_EVALUATION] Unexpected error:', e);
     return NextResponse.json({ error: e.message || 'Erro interno ao iniciar avaliação.' }, { status: 500 });
   }
 }

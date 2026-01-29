@@ -19,8 +19,6 @@ export function getPlanLabel(planoTipo?: string | null): string {
       return 'Semanal';
     case 'free':
       return 'Avaliação';
-    case 'trial':
-      return 'Avaliação';
     default:
       return 'N/A';
   }

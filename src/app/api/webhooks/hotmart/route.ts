@@ -13,7 +13,7 @@ async function logEvent(payload: any, status: string, details: object = {}) {
     await supabaseAdmin.from('subscription_events').insert({
         provider: 'hotmart',
         event_type: event,
-        event_id: payload.id, // Hotmart provides a unique ID for each event
+        event_id: payload.id, 
         store_id: store_id || null,
         plan_id: plan_id || null,
         user_id: user_id || null,
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
   const rawBody = await request.text();
   
   if (HOTMART_WEBHOOK_SECRET) {
-      const hottok = request.headers.get('hottok'); // Hotmart sends header in lowercase
+      const hottok = request.headers.get('hottok'); 
       const hash = crypto
         .createHmac('sha256', HOTMART_WEBHOOK_SECRET)
         .update(rawBody)
@@ -37,21 +37,19 @@ export async function POST(request: Request) {
           console.warn('Hotmart webhook: Invalid signature');
           return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
       }
-  } else {
-      console.warn('Hotmart webhook: HOTMART_WEBHOOK_SECRET is not set. Skipping validation.');
   }
 
   const payload = JSON.parse(rawBody);
 
   try {
-    // Idempotency check
+    // Check if event was already processed
     const { data: existingEvent, error: checkError } = await supabaseAdmin
         .from('subscription_events')
         .select('id')
         .eq('event_id', payload.id)
         .single();
     
-    if (checkError && checkError.code !== 'PGRST116') { // Ignore "no rows found" error
+    if (checkError && checkError.code !== 'PGRST116') {
         throw new Error(`DB idempotency check failed: ${checkError.message}`);
     }
 
@@ -71,6 +69,7 @@ export async function POST(request: Request) {
 
     let durationDays: number;
     let planName: string;
+    let finalPlanType: "semanal" | "mensal" | "anual" | "free";
 
     switch (event) {
       case 'PURCHASE_APPROVED':
@@ -81,10 +80,17 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: true, message: 'Acknowledged, but invalid external_reference' });
         }
         
+        // Normalização dos identificadores da Hotmart para o banco de dados
         switch (plan_id) {
-          case 'weekly': durationDays = 7; planName = 'Semanal'; break;
-          case 'monthly': durationDays = 30; planName = 'Mensal'; break;
-          case 'yearly': durationDays = 365; planName = 'Anual'; break;
+          case 'weekly':
+          case 'semanal': 
+            durationDays = 7; planName = 'Semanal'; finalPlanType = 'semanal'; break;
+          case 'monthly':
+          case 'mensal': 
+            durationDays = 30; planName = 'Mensal'; finalPlanType = 'mensal'; break;
+          case 'yearly':
+          case 'anual': 
+            durationDays = 365; planName = 'Anual'; finalPlanType = 'anual'; break;
           default:
             await logEvent(payload, 'error_unknown_plan');
             return NextResponse.json({ success: true, message: 'Acknowledged, but unknown plan_id' });
@@ -98,7 +104,7 @@ export async function POST(request: Request) {
           .upsert({
               store_id: store_id,
               plano_nome: planName,
-              plano_tipo: plan_id,
+              plano_tipo: finalPlanType,
               data_inicio_acesso: now.toISOString(),
               data_fim_acesso: accessEndDate.toISOString(),
               status_acesso: 'ativo',
@@ -130,7 +136,6 @@ export async function POST(request: Request) {
 
         if (cancelError) {
              await logEvent(payload, 'error_db_update', { db_error: cancelError.message });
-             // Don't throw, just log, as this is a critical notification.
              console.error(`Failed to block access for store ${store_id}:`, cancelError.message);
         }
 
@@ -138,7 +143,6 @@ export async function POST(request: Request) {
         break;
       
       default:
-        // For any other event, we just log it for analytics without changing access.
         await logEvent(payload, 'logged_for_analytics');
         break;
     }
@@ -146,9 +150,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true }, { status: 200 });
 
   } catch (error: any) {
-      console.error('Hotmart webhook: Unhandled exception', error);
+      console.error('Hotmart webhook error:', error);
       await logEvent(payload, 'error_exception', { error: error.message });
-      // Return 200 so Hotmart doesn't keep retrying on a code-level error.
-      return NextResponse.json({ success: true, message: 'Exception handled, see logs.' }, { status: 200 });
+      return NextResponse.json({ success: true, message: 'Exception handled.' }, { status: 200 });
   }
 }

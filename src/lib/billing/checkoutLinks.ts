@@ -1,5 +1,5 @@
 export type CheckoutProvider = 'hotmart';
-export type PlanID = 'free' | 'weekly' | 'monthly' | 'yearly';
+export type PlanID = 'free' | 'semanal' | 'mensal' | 'anual';
 
 export type PlanConfig = {
     name: string;
@@ -10,7 +10,8 @@ export type PlanConfig = {
     isFree?: boolean;
 }
 
-// Configuração central para os planos, usada para construir a UI da página de billing.
+// Configuração central para os planos, usada para construir a UI da página de faturamento.
+// Os PlanIDs correspondem EXATAMENTE aos valores do banco de dados (plano_tipo).
 export const PLANS_CONFIG: Record<PlanID, PlanConfig> = {
     free: {
         name: 'Avaliação Gratuita',
@@ -25,7 +26,7 @@ export const PLANS_CONFIG: Record<PlanID, PlanConfig> = {
         ],
         isFree: true,
     },
-    weekly: {
+    semanal: {
         name: 'Semanal',
         description: 'Acesso completo por 7 dias.',
         price: 'R$9,90',
@@ -37,7 +38,7 @@ export const PLANS_CONFIG: Record<PlanID, PlanConfig> = {
             'Sem anúncios'
         ],
     },
-    monthly: {
+    mensal: {
         name: 'Mensal',
         description: 'O plano mais flexível. Cancele quando quiser.',
         price: 'R$29,90',
@@ -49,7 +50,7 @@ export const PLANS_CONFIG: Record<PlanID, PlanConfig> = {
             'Backup automático'
         ],
     },
-    yearly: {
+    anual: {
         name: 'Anual',
         description: 'Economize 75% com o plano anual!',
         price: 'R$297,00',
@@ -66,8 +67,8 @@ export const PLANS_CONFIG: Record<PlanID, PlanConfig> = {
 // Links de checkout para cada provedor e plano.
 export const CHECKOUT_LINKS: Record<CheckoutProvider, Partial<Record<PlanID, string>>> = {
   hotmart: {
-    weekly: 'https://pay.hotmart.com/A104103229T?off=gczhreyg',
-    monthly: 'https://pay.hotmart.com/A104103229T?off=3py3921r&bid=1769483117758',
-    yearly: 'https://pay.hotmart.com/A104103229T?off=aa1nsl3j',
+    semanal: 'https://pay.hotmart.com/A104103229T?off=gczhreyg',
+    mensal: 'https://pay.hotmart.com/A104103229T?off=3py3921r&bid=1769483117758',
+    anual: 'https://pay.hotmart.com/A104103229T?off=aa1nsl3j',
   },
 };

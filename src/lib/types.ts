@@ -121,11 +121,11 @@ export type StoreStatus = 'unknown' | 'loading' | 'has' | 'none' | 'error';
 export type StoreAccess = {
     store_id: string;
     plano_nome: string;
-    plano_tipo: 'free' | 'weekly' | 'monthly' | 'yearly' | 'vitalicio';
+    plano_tipo: 'free' | 'semanal' | 'mensal' | 'anual';
     data_inicio_acesso: string;
     data_fim_acesso: string;
     status_acesso: 'ativo' | 'expirado' | 'bloqueado' | 'aguardando_liberacao';
-    origem?: 'hotmart' | 'kiwify' | 'perfectpay' | 'admin' | 'onboarding';
+    origem?: 'hotmart' | 'kiwify' | 'perfectpay' | 'admin' | 'onboarding' | 'manual_admin' | 'trial';
     renovavel: boolean;
     updated_at: string;
     limits?: { max_sales: number; max_customers: number; };
