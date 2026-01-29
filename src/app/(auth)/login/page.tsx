@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -29,6 +29,7 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { login, signup } from '../actions';
+import { useAuth } from '@/components/auth-provider';
 
 const loginSchema = z.object({
   email: z.string().email({ message: 'Email inválido.' }),
@@ -59,11 +60,21 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const { isAuthenticated, loading: authLoading } = useAuth();
 
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [mode, setMode] = useState<AuthModeWithConfirm>('login');
   const [lastSignupEmail, setLastSignupEmail] = useState<string>('');
+
+  useEffect(() => {
+    // Se o usuário já está logado, redireciona para o dashboard.
+    // Isso impede que um usuário autenticado veja a página de login.
+    if (!authLoading && isAuthenticated) {
+      router.replace('/dashboard');
+    }
+  }, [isAuthenticated, authLoading, router]);
+
 
   const loginForm = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
@@ -96,9 +107,9 @@ export default function LoginPage() {
         description: result.error.message,
       });
     } else if (result?.success) {
-      // The AppLayout component will handle the redirection automatically
-      // after the auth state changes. We can just let it do its job.
-      router.refresh(); // Forces a refresh to re-trigger the layout's useEffect
+      // Redireciona explicitamente para o dashboard.
+      // O AppLayout e o AuthProvider vão garantir que o estado seja carregado corretamente.
+      router.replace('/dashboard');
     }
   };
 
@@ -230,6 +241,19 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
+  
+  if (authLoading) {
+    return (
+       <Card className="w-full max-w-md shadow-2xl">
+          <CardHeader className="text-center">
+            <CardTitle>Carregando...</CardTitle>
+          </CardHeader>
+          <CardContent className="flex items-center justify-center py-10">
+            <Loader2 className="h-6 w-6 animate-spin" />
+          </CardContent>
+        </Card>
+    )
+  }
 
   return (
     <Card className="w-full max-w-md shadow-2xl">
