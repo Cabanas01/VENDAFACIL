@@ -28,16 +28,14 @@ import { addDays } from 'date-fns';
 
 type AuthContextType = {
   user: User | null;
-  isAuthenticated: boolean;
   store: Store | null;
-  loading: boolean;
+  session: Session | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
   storeStatus: StoreStatus;
   storeError: string | null;
-
   accessStatus: StoreAccessStatus | null;
-
-  login: (email: string, password: string) => Promise<{ error: AuthError | null }>;
-  signup: (email: string, password: string) => Promise<{ error: AuthError | null }>;
+  
   logout: () => Promise<void>;
   deleteAccount: () => Promise<{ error: AuthError | Error | null }>;
 
@@ -67,13 +65,14 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
 
+  const [isLoading, setIsLoading] = useState(true);
+  const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [store, setStore] = useState<Store | null>(null);
   const [accessStatus, setAccessStatus] = useState<StoreAccessStatus | null>(null);
   const [storeStatus, setStoreStatus] = useState<StoreStatus>('loading');
   const [storeError, setStoreError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-
+  
   const [products, setProducts] = useState<Product[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [cashRegisters, setCashRegistersState] = useState<CashRegister[]>([]);
@@ -195,78 +194,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [fetchAccessStatus]);
 
-  const handleSessionChange = useCallback(
-    async (session: Session | null) => {
-      const supabaseUser = session?.user;
-      
-      setLoading(true);
-
-      if (!supabaseUser) {
-        setUser(null);
-        setStore(null);
-        setStoreStatus('unknown');
-        setAccessStatus(null);
-      } else {
-        const {data: profile} = await supabase.from('users').select('id, email, name, avatar_url, is_admin').eq('id', supabaseUser.id).single();
-        setUser(profile as User);
-        await fetchStoreData(supabaseUser.id);
-      }
-
-      setLoading(false);
-    },
-    [fetchStoreData]
-  );
-
   useEffect(() => {
-    // Proactively get the session on initial load.
-    const getInitialSession = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      await handleSessionChange(session);
-    };
-
-    getInitialSession();
-
-    // Then, listen for any auth state changes.
     const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        // We only need to react to SIGNED_IN or SIGNED_OUT events.
-        // Other events like TOKEN_REFRESHED are handled by the middleware.
-        if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'USER_UPDATED') {
-          await handleSessionChange(session);
+      async (_event, session) => {
+        setSession(session);
+        const currentUser = session?.user;
+        
+        if (currentUser) {
+          const { data: profile } = await supabase.from('users').select('id, email, name, avatar_url, is_admin').eq('id', currentUser.id).single();
+          setUser(profile as User);
+          await fetchStoreData(currentUser.id);
+        } else {
+          setUser(null);
+          setStore(null);
+          setAccessStatus(null);
+          setStoreStatus('unknown');
         }
+        
+        setIsLoading(false);
       }
     );
 
     return () => {
       authListener.subscription.unsubscribe();
     };
-  }, [handleSessionChange]);
-
-  const login = useCallback(
-    async (email: string, password: string) =>
-      supabase.auth.signInWithPassword({ email, password }),
-    []
-  );
-
-  const signup = useCallback(
-    async (email: string, password: string) => {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-      });
-      return { error };
-    },
-    []
-  );
+  }, [fetchStoreData]);
 
   const logout = useCallback(async () => {
     await supabase.auth.signOut();
-    setUser(null);
-    setStore(null);
-    setAccessStatus(null);
-    setStoreStatus('unknown');
     router.replace('/login');
   }, [router]);
 
@@ -391,7 +346,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const addSale = useCallback(async (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => {
     if (!store || !user) throw new Error('Sessão inválida');
 
-    // Pre-flight check in the frontend for immediate feedback
     for (const item of cart) {
       const product = products.find(p => p.id === item.product_id);
       if (!product || product.stock_qty < item.quantity) {
@@ -418,9 +372,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
       let createdSaleItems: SaleItem[] = [];
 
-      // Sequentially process each item
       for (const item of cart) {
-          // 1. Insert the sale item
           const { data: saleItemData, error: itemError } = await supabase
               .from('sale_items')
               .insert({
@@ -438,7 +390,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (itemError) throw itemError;
           createdSaleItems.push(saleItemData as SaleItem);
 
-          // 2. Decrement stock
           const { error: stockError } = await supabase.rpc('decrement_stock', {
               p_product_id: item.product_id,
               p_quantity: item.quantity,
@@ -446,14 +397,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (stockError) throw stockError;
       }
 
-      // If all items are processed successfully, finalize by fetching all data
       await fetchStoreData(user.id);
       return { ...saleData, items: createdSaleItems } as Sale;
 
     } catch (error: any) {
         console.error('[SALE] Transaction failed, attempting rollback...', error);
         
-        // If sale record was created, attempt to delete it.
         if (saleData) {
           await supabase.from('sales').delete().eq('id', saleId);
         }
@@ -468,14 +417,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value: AuthContextType = {
     user,
-    isAuthenticated: !!user,
     store,
-    loading,
+    session,
+    isAuthenticated: !!session?.user,
+    isLoading,
     storeStatus,
     storeError,
     accessStatus,
-    login,
-    signup,
     logout,
     deleteAccount,
     createStore,

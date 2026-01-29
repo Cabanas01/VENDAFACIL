@@ -10,12 +10,13 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 
 export default function AppLayout({ children }: { children: ReactNode }) {
-  const { isAuthenticated, store, loading, storeStatus, storeError, logout, accessStatus } = useAuth();
+  const { isAuthenticated, store, isLoading, storeStatus, storeError, logout, accessStatus } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
-    if (loading) return;
+    // Wait until the authentication state is fully loaded before running any logic.
+    if (isLoading) return;
 
     if (!isAuthenticated) {
       router.replace('/login');
@@ -37,10 +38,11 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         router.replace('/billing?reason=expired');
     }
 
-  }, [loading, isAuthenticated, storeStatus, store, pathname, router, accessStatus]);
+  }, [isLoading, isAuthenticated, storeStatus, store, pathname, router, accessStatus]);
 
-  // While waiting for the initial session, show a loading screen.
-  if (loading || (isAuthenticated && (storeStatus === 'loading' || storeStatus === 'unknown'))) {
+  // While the initial session is loading, show a full-page loading screen.
+  // This prevents the "flash" of the login page or other incorrect content.
+  if (isLoading) {
     return (
       <div className="flex min-h-screen w-full">
         <div className="hidden w-64 border-r bg-background p-4 md:block">
@@ -60,20 +62,6 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     );
   }
   
-  // While redirecting, don't render children to avoid flashes of wrong content
-  const isRedirecting = !isAuthenticated ||
-                        (storeStatus === 'none' && pathname !== '/onboarding') ||
-                        (storeStatus === 'has' && pathname === '/onboarding') ||
-                        (accessStatus && !accessStatus.acesso_liberado && pathname !== '/billing' && pathname !== '/settings');
-
-  if (isRedirecting) {
-    return (
-      <div className="flex min-h-screen w-full items-center justify-center">
-        <Skeleton className="h-screen w-screen" />
-      </div>
-    );
-  }
-
   if (storeStatus === 'error') {
     return (
       <div className="mx-auto flex min-h-screen w-full max-w-xl flex-col items-center justify-center gap-4 p-6 text-center">
@@ -96,6 +84,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     );
   }
   
+  // After loading, if the user is authenticated but doesn't have a store (and isn't on onboarding),
+  // they will be redirected by the useEffect. We show a loading state during this brief period.
   if (!store && pathname !== '/onboarding') {
       return (
         <div className="flex min-h-screen w-full items-center justify-center">
@@ -104,6 +94,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       );
   }
 
+  // Once all checks are passed, render the main app layout.
   return (
     <SidebarProvider>
       <div className="flex min-h-screen">

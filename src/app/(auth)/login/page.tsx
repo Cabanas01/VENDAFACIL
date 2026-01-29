@@ -26,7 +26,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { login, signup } from '../actions';
 import { useAuth } from '@/components/auth-provider';
@@ -59,19 +59,22 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
-  const { isAuthenticated, loading: authLoading } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
 
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [mode, setMode] = useState<AuthModeWithConfirm>('login');
   const [lastSignupEmail, setLastSignupEmail] = useState<string>('');
 
+  // If the user is already authenticated (and not loading), redirect them away from the login page.
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
-      router.replace('/dashboard');
+      const next = searchParams.get('next') || '/dashboard';
+      router.replace(next);
     }
-  }, [isAuthenticated, authLoading, router]);
+  }, [isAuthenticated, authLoading, router, searchParams]);
 
 
   const loginForm = useForm<z.infer<typeof loginSchema>>({
@@ -104,9 +107,12 @@ export default function LoginPage() {
         title: "Erro no login",
         description: result.error.message,
       });
+    } else {
+        // On successful login, manually redirect.
+        // The AuthProvider and AppLayout will handle the session state correctly on the new page.
+        const next = searchParams.get('next') || '/dashboard';
+        router.replace(next);
     }
-    // A navegação agora é reativa e ocorre no `useEffect` acima,
-    // que aguarda a mudança do estado `isAuthenticated`.
   };
 
   const handleSignup = async (values: z.infer<typeof signupSchema>) => {
