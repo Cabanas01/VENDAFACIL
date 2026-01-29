@@ -1,7 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { config } from 'dotenv';
 
-// Ensure environment variables are loaded
+// Ensure environment variables are loaded for server-side contexts
 config();
 
 // This client is for server-side use only, using the service role key.

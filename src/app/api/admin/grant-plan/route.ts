@@ -1,49 +1,57 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
-import { NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/lib/supabase/admin';
-import { addMonths } from 'date-fns';
-import { revalidatePath } from 'next/cache';
-import type { Database } from '@/lib/supabase/database.types';
+import { cookies } from 'next/headers'
+import { NextResponse } from 'next/server'
+import { createServerClient } from '@supabase/ssr'
+import { getSupabaseAdmin } from '@/lib/supabase/admin'
+import { addMonths } from 'date-fns'
 
-export const runtime = 'nodejs';
+export const runtime = 'nodejs'
 
-export async function POST(request: Request) {
+export async function POST(req: Request) {
   console.log('[DEBUG] SERVICE ROLE EXISTS:', !!process.env.SUPABASE_SERVICE_ROLE_KEY);
   console.log('[DEBUG] SUPABASE URL EXISTS:', !!process.env.NEXT_PUBLIC_SUPABASE_URL);
-  try {
-    const cookieStore = cookies();
-    const supabase = createRouteHandlerClient<Database>({ cookies: () => cookieStore });
-    const supabaseAdmin = getSupabaseAdmin();
+  
+  const cookieStore = cookies()
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        },
+      },
+    }
+  )
+
+  try {
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
 
     if (authError || !user) {
+      console.error('API grant-plan: Authentication failed', authError);
       return NextResponse.json({ error: 'Authentication failed' }, { status: 401 });
     }
 
-    // Verify if the user is an admin
-    const { data: profile, error: profileError } = await supabaseAdmin
-      .from('users')
-      .select('is_admin')
-      .eq('id', user.id)
-      .single();
+    const { data: isAdmin, error: adminError } = await supabase.rpc('is_saas_admin');
 
-    if (profileError || !profile?.is_admin) {
+    if (adminError || !isAdmin) {
+      console.error('API grant-plan: Permission denied', adminError);
       return NextResponse.json({ error: 'Permission denied. User is not an admin.' }, { status: 403 });
     }
 
-    const { storeId, planId, durationMonths } = await request.json();
+    const { storeId, planId, durationMonths } = await req.json();
 
     if (!storeId || !planId || !durationMonths) {
-      return NextResponse.json({ error: 'Invalid input. Missing storeId, planId, or durationMonths.' }, { status: 400 });
+      return NextResponse.json({ error: 'Invalid input: storeId, planId, and durationMonths are required.' }, { status: 400 });
     }
 
+    const supabaseAdmin = getSupabaseAdmin();
+
     const now = new Date();
-    const accessEndDate = addMonths(now, durationMonths);
+    const endDate = addMonths(now, durationMonths);
+
     const planName = planId === 'monthly' ? 'Mensal (Admin)' : 'Anual (Admin)';
 
-    // Grant access
     const { error: accessError } = await supabaseAdmin
       .from('store_access')
       .upsert({
@@ -51,40 +59,32 @@ export async function POST(request: Request) {
         plano_nome: planName,
         plano_tipo: planId,
         data_inicio_acesso: now.toISOString(),
-        data_fim_acesso: accessEndDate.toISOString(),
+        data_fim_acesso: endDate.toISOString(),
         status_acesso: 'ativo',
-        origem: 'admin',
+        origem: 'manual_admin',
         renovavel: false,
       }, { onConflict: 'store_id' });
 
-    if (accessError) throw new Error(`DB access upsert error: ${accessError.message}`);
+    if (accessError) {
+      console.error('API grant-plan: DB access upsert failed', accessError);
+      return NextResponse.json({ error: 'Failed to grant plan in database.' }, { status: 500 });
+    }
 
-    // Log the event
-    const eventPayload = {
-      admin_id: user.id,
-      granted_plan: planId,
-      duration_months: durationMonths,
-    };
-    const { error: eventError } = await supabaseAdmin.from('subscription_events').insert({
+    await supabaseAdmin.from('subscription_events').insert({
       provider: 'admin',
       event_type: 'ADMIN_GRANTED_PLAN',
-      event_id: `admin_grant_${storeId}_${Date.now()}`,
+      event_id: `admin_${storeId}_${Date.now()}`,
       store_id: storeId,
       user_id: user.id,
       plan_id: planId,
-      raw_payload: eventPayload,
+      raw_payload: { durationMonths },
     });
-
-    if (eventError) {
-      console.warn(`Failed to log ADMIN_GRANTED_PLAN event: ${eventError.message}`);
-    }
-    
-    revalidatePath('/admin');
 
     return NextResponse.json({ success: true });
 
   } catch (error: any) {
-    console.error('Error in grant-plan API route:', error);
+    console.error('API grant-plan: Unhandled exception', error);
+    // This will catch errors from getSupabaseAdmin() if env vars are missing
     return NextResponse.json({ error: error.message || 'An unexpected error occurred.' }, { status: 500 });
   }
 }
