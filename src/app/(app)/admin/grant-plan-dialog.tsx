@@ -13,8 +13,14 @@ import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import type { StoreRow } from './stores';
 
+const PLAN_OPTIONS = [
+  { label: 'Mensal', value: 'mensal' },
+  { label: 'Anual', value: 'anual' },
+] as const;
+
+// Zod schema now uses the exact lowercase values required by the database check constraint.
 const grantPlanSchema = z.object({
-  plan: z.enum(['monthly', 'yearly'], { required_error: 'Selecione um plano.' }),
+  plan: z.enum(['mensal', 'anual'], { required_error: 'Selecione um plano.' }),
   durationMonths: z.coerce.number().int().min(1, 'Duração deve ser de no mínimo 1 mês.'),
 });
 
@@ -34,7 +40,7 @@ export function GrantPlanDialog({ store, isOpen, onOpenChange, onSuccess }: Gran
   const form = useForm<GrantPlanFormValues>({
     resolver: zodResolver(grantPlanSchema),
     defaultValues: {
-      plan: 'monthly',
+      plan: 'mensal',
       durationMonths: 1,
     },
   });
@@ -43,11 +49,11 @@ export function GrantPlanDialog({ store, isOpen, onOpenChange, onSuccess }: Gran
     if (!store) return;
     setIsSubmitting(true);
 
+    // The payload now matches the exact format and values required by the API and RPC.
     const payload = {
       storeId: store.id,
-      planoTipo: values.plan,
-      // A simple conversion for days. For more precision, a library could be used, but this is a common approach.
-      duracaoDias: Number(values.durationMonths) * 30,
+      planoTipo: values.plan, // Sends 'mensal' or 'anual'
+      duracaoDias: Number(values.durationMonths) * 30, // Simplified conversion
       origem: 'manual_admin',
       renovavel: true
     };
@@ -64,7 +70,7 @@ export function GrantPlanDialog({ store, isOpen, onOpenChange, onSuccess }: Gran
       const result = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        // Now displays the detailed error message from the API
+        // Improved error handling to display the detailed message from the API.
         throw new Error(result.message || result.error || `Erro desconhecido (${response.status})`);
       }
 
@@ -79,7 +85,8 @@ export function GrantPlanDialog({ store, isOpen, onOpenChange, onSuccess }: Gran
       toast({
         variant: 'destructive',
         title: 'Erro ao conceder plano',
-        description: error.message, // Display the actual, detailed error
+        // This will now display the specific error from the backend (e.g., 'not admin').
+        description: error.message,
       });
     } finally {
       setIsSubmitting(false);
@@ -112,8 +119,11 @@ export function GrantPlanDialog({ store, isOpen, onOpenChange, onSuccess }: Gran
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="monthly">Mensal</SelectItem>
-                      <SelectItem value="yearly">Anual</SelectItem>
+                      {PLAN_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <FormMessage />
