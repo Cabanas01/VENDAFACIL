@@ -12,6 +12,11 @@ export async function POST(req: Request) {
   
   const cookieStore = cookies()
 
+  // --- ADVANCED DEBUGGING ---
+  const allCookies = cookieStore.getAll();
+  console.log('[DEBUG] All cookies received by server:', allCookies);
+  // --- END ADVANCED DEBUGGING ---
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -26,6 +31,11 @@ export async function POST(req: Request) {
 
   try {
     const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+    // --- ADVANCED DEBUGGING ---
+    console.log('[DEBUG] User object from getUser():', user);
+    console.log('[DEBUG] Auth error from getUser():', authError);
+    // --- END ADVANCED DEBUGGING ---
 
     if (authError || !user) {
       console.error('API grant-plan: Authentication failed', authError);
