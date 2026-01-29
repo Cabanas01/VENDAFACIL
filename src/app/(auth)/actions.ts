@@ -1,5 +1,6 @@
 'use server'
 
+import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
@@ -27,12 +28,11 @@ export async function signup(formData: FormData) {
   const password = String(formData.get('password'))
   
   const supabase = createSupabaseServerClient();
-
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
-  if (!siteUrl) {
-    return { error: { message: 'Missing NEXT_PUBLIC_SITE_URL environment variable.' } }
-  }
-
+  
+  const headersList = headers();
+  const host = headersList.get('host');
+  const protocol = headersList.get('x-forwarded-proto') ?? 'http';
+  const siteUrl = `${protocol}://${host}`;
 
   const { data, error } = await supabase.auth.signUp({
     email,
