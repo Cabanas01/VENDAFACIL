@@ -39,7 +39,7 @@ type AuthContextType = {
   login: (email: string, password: string) => Promise<{ error: AuthError | null }>;
   signup: (email: string, password: string) => Promise<{ error: AuthError | null }>;
   logout: () => Promise<void>;
-  deleteAccount: () => Promise<{ error: AuthError | null }>;
+  deleteAccount: () => Promise<{ error: AuthError | Error | null }>;
 
   createStore: (storeData: any) => Promise<Store | null>;
   updateStore: (storeData: Partial<Omit<Store, 'id' | 'user_id' | 'members'>>) => Promise<void>;
@@ -70,7 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [store, setStore] = useState<Store | null>(null);
   const [accessStatus, setAccessStatus] = useState<StoreAccessStatus | null>(null);
-  const [storeStatus, setStoreStatus] = useState<StoreStatus>('unknown');
+  const [storeStatus, setStoreStatus] = useState<StoreStatus>('loading');
   const [storeError, setStoreError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -215,10 +215,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
+    const getInitialSession = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      await handleSession(session);
+      setLoading(false);
+    };
+
+    getInitialSession();
+
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         await handleSession(session);
-        setLoading(false);
       }
     );
 
