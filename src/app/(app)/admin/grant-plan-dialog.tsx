@@ -45,8 +45,11 @@ export function GrantPlanDialog({ store, isOpen, onOpenChange, onSuccess }: Gran
 
     const payload = {
       storeId: store.id,
-      plan: values.plan,
-      durationMonths: Number(values.durationMonths),
+      planoTipo: values.plan,
+      // A simple conversion for days. For more precision, a library could be used, but this is a common approach.
+      duracaoDias: Number(values.durationMonths) * 30,
+      origem: 'manual_admin',
+      renovavel: true
     };
     console.log('[grant-plan] Sending payload:', payload);
 
@@ -61,7 +64,8 @@ export function GrantPlanDialog({ store, isOpen, onOpenChange, onSuccess }: Gran
       const result = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        throw new Error(result.error || `Erro desconhecido (${response.status})`);
+        // Now displays the detailed error message from the API
+        throw new Error(result.message || result.error || `Erro desconhecido (${response.status})`);
       }
 
       toast({
@@ -75,7 +79,7 @@ export function GrantPlanDialog({ store, isOpen, onOpenChange, onSuccess }: Gran
       toast({
         variant: 'destructive',
         title: 'Erro ao conceder plano',
-        description: error.message,
+        description: error.message, // Display the actual, detailed error
       });
     } finally {
       setIsSubmitting(false);
@@ -100,11 +104,11 @@ export function GrantPlanDialog({ store, isOpen, onOpenChange, onSuccess }: Gran
               name="plan"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Plano</FormLabel>
+                  <FormLabel>Tipo de Plano</FormLabel>
                   <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder="Selecione o plano" />
+                        <SelectValue placeholder="Selecione o tipo de plano" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>

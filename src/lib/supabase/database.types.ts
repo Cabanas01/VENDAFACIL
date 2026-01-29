@@ -477,8 +477,10 @@ export interface Database {
       admin_grant_store_access: {
         Args: {
           p_store_id: string
-          p_plan: string
-          p_duration_months: number
+          p_plano_tipo: string
+          p_duracao_dias: number
+          p_origem: string
+          p_renovavel: boolean
         }
         Returns: undefined
       }
