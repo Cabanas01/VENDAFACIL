@@ -1,15 +1,13 @@
 'use server'
 
-import { createServerActionClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 export async function login(formData: FormData) {
   const email = String(formData.get('email'))
   const password = String(formData.get('password'))
   
-  const cookieStore = cookies()
-  const supabase = createServerActionClient({ cookies: () => cookieStore })
+  const supabase = createSupabaseServerClient();
 
   const { error } = await supabase.auth.signInWithPassword({
     email,
@@ -30,8 +28,7 @@ export async function signup(formData: FormData) {
   const email = String(formData.get('email'))
   const password = String(formData.get('password'))
   
-  const cookieStore = cookies()
-  const supabase = createServerActionClient({ cookies: () => cookieStore })
+  const supabase = createSupabaseServerClient();
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
   if (!siteUrl) {
