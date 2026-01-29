@@ -51,6 +51,7 @@ export function GrantPlanDialog({ store, isOpen, onOpenChange, onSuccess }: Gran
           planId: values.planId,
           durationMonths: values.durationMonths,
         }),
+        credentials: 'include', // Crucial: Instructs the browser to send cookies with the request.
       });
 
       const result = await response.json();
