@@ -11,7 +11,6 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { grantPlan } from '@/app/actions/admin-actions';
 import type { StoreRow } from './stores'; // Assuming StoreRow is exported from stores.tsx
 
 const grantPlanSchema = z.object({
@@ -44,14 +43,20 @@ export function GrantPlanDialog({ store, isOpen, onOpenChange, onSuccess }: Gran
     if (!store) return;
     setIsSubmitting(true);
     try {
-      const result = await grantPlan({
-        storeId: store.id,
-        planId: values.planId,
-        durationMonths: values.durationMonths,
+      const response = await fetch('/api/admin/grant-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          storeId: store.id,
+          planId: values.planId,
+          durationMonths: values.durationMonths,
+        }),
       });
 
-      if (result.error) {
-        throw new Error(result.error);
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Ocorreu um erro desconhecido.');
       }
 
       toast({
@@ -79,7 +84,7 @@ export function GrantPlanDialog({ store, isOpen, onOpenChange, onSuccess }: Gran
         <DialogHeader>
           <DialogTitle>Conceder Plano para "{store.name}"</DialogTitle>
           <DialogDescription>
-            Esta ação concederá um plano pago manualmente, sem gerar cobrança.
+            Esta ação concederá um plano pago manually, sem gerar cobrança.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
