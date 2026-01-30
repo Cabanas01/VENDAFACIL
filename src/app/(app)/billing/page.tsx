@@ -142,7 +142,7 @@ export default function BillingPage() {
 
         toast({
             title: 'Avaliação iniciada!',
-            description: 'Você agora tem 7 dias de acesso gratuito.',
+            description: 'Você agora have 7 dias de acesso gratuito.',
         });
         if(user) {
             await fetchStoreData(user.id);
