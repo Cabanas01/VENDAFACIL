@@ -54,7 +54,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [storeError, setStoreError] = useState<string | null>(null);
   const [accessStatus, setAccessStatus] = useState<StoreAccessStatus | null>(null);
   
-  // Explicitly type arrays to avoid 'never[]' issues
   const [products, setProducts] = useState<Product[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [cashRegisters, setCashRegistersState] = useState<CashRegister[]>([]);
@@ -126,7 +125,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setCashRegistersState((cashRes.data as CashRegister[]) ?? []);
       setStoreStatus('has');
     } catch (err: any) {
-      console.error('[AUTH] Erro ao carregar dados da loja:', err);
+      console.error('[AUTH] Erro ao carregar dados:', err);
       setStoreStatus('error');
       setStoreError(err.message);
     }
@@ -140,12 +139,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { data: { session } } = await supabase.auth.getSession();
         if (!mounted) return;
 
-        const sessionUser = session?.user ?? null;
-        setUser(sessionUser);
-        setLoading(false); // SINAL VERDE INSTANTÂNEO
+        setUser(session?.user ?? null);
+        setLoading(false);
 
-        if (sessionUser) {
-          fetchStoreData(sessionUser.id);
+        if (session?.user) {
+          fetchStoreData(session.user.id);
         }
       } catch (error) {
         if (mounted) setLoading(false);
@@ -266,11 +264,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const addSale = async (cart: CartItem[], paymentMethod: any) => {
     if (!store || !user) return null;
     const total = cart.reduce((s, i) => s + i.subtotal_cents, 0);
-    const { data: sale } = await supabase.from('sales').insert({ store_id: store.id, total_cents: total, payment_method: paymentMethod }).select().single();
+    
+    // Casting explicitamente para any para evitar erro de overload do TypeScript com 'never'
+    const { data: sale } = await (supabase as any).from('sales').insert({ 
+      store_id: store.id, 
+      total_cents: total, 
+      payment_method: paymentMethod 
+    }).select().single();
+
     if (sale) {
       const typedSale = sale as Sale;
       for (const item of cart) {
-        await supabase.from('sale_items').insert({
+        await (supabase as any).from('sale_items').insert({
           sale_id: typedSale.id,
           product_id: item.product_id,
           product_name_snapshot: item.product_name_snapshot,

@@ -14,13 +14,12 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 
 /**
  * LoginPage (Componente Burro)
- * Apenas executa a ação de login. 
- * A navegação é decidida pelo AppLayout reativamente assim que o AuthProvider atualiza o estado.
+ * Apenas executa a ação de login. A navegação é gerida pelo AppLayout.
  */
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -37,19 +36,12 @@ export default function LoginPage() {
 
     try {
       if (mode === 'login') {
-        const { error: authError } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
+        const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
         if (authError) throw authError;
-        // Sucesso: O AppLayout detectará o novo estado de 'user' e redirecionará.
       } else {
-        const { error: authError } = await supabase.auth.signUp({
-          email,
-          password,
-        });
+        const { error: authError } = await supabase.auth.signUp({ email, password });
         if (authError) throw authError;
-        setError("Verifique seu e-mail para confirmar o cadastro.");
+        setError("Cadastro realizado! Verifique seu e-mail para ativar a conta.");
       }
     } catch (err: any) {
       setError(err.message || 'Falha na autenticação.');
@@ -63,7 +55,7 @@ export default function LoginPage() {
       <CardHeader className="text-center">
         <div className="mx-auto mb-4">
           <Avatar className="h-16 w-16 rounded-lg shadow-sm">
-            <AvatarImage src="/logo.png" alt="VendaFacil Logo" />
+            <AvatarImage src="/logo.png" alt="Logo" />
             <AvatarFallback className="bg-primary text-primary-foreground font-bold">VF</AvatarFallback>
           </Avatar>
         </div>
@@ -81,44 +73,20 @@ export default function LoginPage() {
           <form onSubmit={handleAuth} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input 
-                id="email"
-                placeholder="seu@email.com" 
-                type="email" 
-                required
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-              />
+              <Input id="email" type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="seu@email.com" />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="password">Senha</Label>
               <div className="relative">
-                <Input 
-                  id="password"
-                  type={showPassword ? 'text' : 'password'} 
-                  placeholder="••••••••" 
-                  required
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                />
-                <Button 
-                  type="button" 
-                  variant="ghost" 
-                  size="icon" 
-                  className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7" 
-                  onClick={() => setShowPassword(!showPassword)}
-                >
+                <Input id="password" type={showPassword ? 'text' : 'password'} required value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" />
+                <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7" onClick={() => setShowPassword(!showPassword)}>
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
               </div>
             </div>
 
-            {error && (
-              <p className={`text-sm font-medium p-2 rounded ${error.includes('Verifique') ? 'bg-blue-50 text-blue-600' : 'bg-destructive/10 text-destructive'}`}>
-                {error}
-              </p>
-            )}
+            {error && <p className={`text-sm font-medium p-2 rounded ${error.includes('Verifique') ? 'bg-blue-50 text-blue-600' : 'bg-destructive/10 text-destructive'}`}>{error}</p>}
 
             <Button type="submit" className="w-full font-bold py-6 text-lg" disabled={loading}>
               {loading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : mode === 'login' ? 'Acessar Sistema' : 'Criar Minha Conta'}
@@ -128,9 +96,7 @@ export default function LoginPage() {
       </CardContent>
 
       <CardFooter className="flex justify-center border-t bg-muted/30 pt-4">
-        <Button variant="link" size="sm" className="text-muted-foreground hover:text-primary">
-          Esqueceu sua senha?
-        </Button>
+        <Button variant="link" size="sm" className="text-muted-foreground hover:text-primary">Esqueceu sua senha?</Button>
       </CardFooter>
     </Card>
   );
