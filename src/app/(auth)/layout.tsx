@@ -1,40 +1,20 @@
 'use client';
 
 /**
- * @fileOverview AuthLayout (Guardião de Entrada)
+ * @fileOverview AuthLayout (Passivo)
  * 
- * Garante que usuários logados nunca vejam as páginas de login/signup.
+ * Este layout é puramente visual. Ele não decide navegação nem protege rotas.
+ * Sua função é apenas centralizar e estilizar as páginas de login e signup.
  */
 
-import { useAuth } from '@/components/auth-provider';
-import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
-import { Loader2 } from 'lucide-react';
+import type { ReactNode } from 'react';
 
-export default function AuthLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
-  const router = useRouter();
-
-  useEffect(() => {
-    // Se o usuário logar enquanto está nesta página, o AuthLayout o detecta 
-    // e o joga para o dashboard. O AppLayout lá cuidará da lógica de loja.
-    if (!loading && user) {
-      router.replace('/dashboard');
-    }
-  }, [user, loading, router]);
-
-  // Enquanto estiver autenticando ou se já estiver logado (em transição), mostrar loader.
-  if (loading || user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
+export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
-    <main className="min-h-screen flex items-center justify-center bg-background p-4">
-      {children}
+    <main className="min-h-screen flex items-center justify-center bg-background p-4 sm:p-8">
+      <div className="w-full max-w-md animate-in fade-in zoom-in duration-300">
+        {children}
+      </div>
     </main>
   );
 }

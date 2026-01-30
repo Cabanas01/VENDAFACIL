@@ -1,9 +1,9 @@
 'use client';
 
 /**
- * @fileOverview LoginPage (Dumb Form)
+ * @fileOverview SignupPage (Dumb Form)
  * 
- * Apenas dispara o signIn do Supabase. 
+ * Apenas dispara o signUp do Supabase. 
  * NÃO redireciona após o sucesso. O AppLayout decidirá o fluxo.
  */
 
@@ -11,56 +11,78 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Loader2, Eye, EyeOff, LogIn } from 'lucide-react';
+import { Loader2, UserPlus, CheckCircle2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import Link from 'next/link';
 
-const loginSchema = z.object({
+const signupSchema = z.object({
   email: z.string().email('E-mail inválido'),
-  password: z.string().min(1, 'Senha é obrigatória'),
+  password: z.string().min(6, 'A senha deve ter pelo menos 6 caracteres'),
+  confirmPassword: z.string()
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "As senhas não coincidem",
+  path: ["confirmPassword"],
 });
 
-type LoginFormValues = z.infer<typeof loginSchema>;
+type SignupFormValues = z.infer<typeof signupSchema>;
 
-export default function LoginPage() {
+export default function SignupPage() {
   const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
+  const [success, setSuccess] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const form = useForm<LoginFormValues>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: { email: '', password: '' },
+  const form = useForm<SignupFormValues>({
+    resolver: zodResolver(signupSchema),
+    defaultValues: { email: '', password: '', confirmPassword: '' },
   });
 
-  const onSubmit = async (values: LoginFormValues) => {
+  const onSubmit = async (values: SignupFormValues) => {
     setLoading(true);
     setErrorMsg(null);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { error } = await supabase.auth.signUp({
         email: values.email,
         password: values.password,
       });
 
       if (error) {
-        setErrorMsg(error.message === 'Invalid login credentials' 
-          ? 'E-mail ou senha incorretos.' 
-          : error.message);
+        setErrorMsg(error.message);
+      } else {
+        setSuccess(true);
       }
-      // Sucesso: Não fazemos router.push. O AuthProvider detectará a sessão
-      // e o Guardião (AppLayout) redirecionará.
     } catch (err) {
-      setErrorMsg('Ocorreu um erro inesperado ao tentar entrar.');
+      setErrorMsg('Ocorreu um erro inesperado ao criar sua conta.');
     } finally {
       setLoading(false);
     }
   };
+
+  if (success) {
+    return (
+      <Card className="shadow-2xl border-border/50 text-center py-8">
+        <CardContent className="space-y-6">
+          <div className="flex justify-center">
+            <CheckCircle2 className="h-16 w-16 text-green-500" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-2xl font-bold">Verifique seu e-mail</h2>
+            <p className="text-muted-foreground">
+              Enviamos um link de confirmação para o seu e-mail. Por favor, ative sua conta para começar.
+            </p>
+          </div>
+          <Button variant="outline" className="w-full" asChild>
+            <Link href="/login">Ir para o Login</Link>
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="shadow-2xl border-border/50">
@@ -72,8 +94,8 @@ export default function LoginPage() {
           </Avatar>
         </div>
         <div className="space-y-1">
-          <CardTitle className="text-3xl font-headline font-bold">Bem-vindo de volta</CardTitle>
-          <CardDescription>Acesse seu painel administrativo para gerenciar suas vendas.</CardDescription>
+          <CardTitle className="text-3xl font-headline font-bold">Criar conta</CardTitle>
+          <CardDescription>Comece agora e transforme a gestão do seu negócio.</CardDescription>
         </div>
       </CardHeader>
       <CardContent>
@@ -86,7 +108,7 @@ export default function LoginPage() {
                 <FormItem>
                   <FormLabel>E-mail</FormLabel>
                   <FormControl>
-                    <Input placeholder="seu@email.com" autoComplete="username" {...field} />
+                    <Input placeholder="seu@email.com" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -99,22 +121,20 @@ export default function LoginPage() {
                 <FormItem>
                   <FormLabel>Senha</FormLabel>
                   <FormControl>
-                    <div className="relative">
-                      <Input 
-                        type={showPassword ? 'text' : 'password'} 
-                        autoComplete="current-password" 
-                        {...field} 
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 text-muted-foreground"
-                        onClick={() => setShowPassword(!showPassword)}
-                      >
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </Button>
-                    </div>
+                    <Input type="password" placeholder="Mínimo 6 caracteres" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="confirmPassword"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Confirmar Senha</FormLabel>
+                  <FormControl>
+                    <Input type="password" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -131,23 +151,18 @@ export default function LoginPage() {
               {loading ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
-                <LogIn className="mr-2 h-4 w-4" />
+                <UserPlus className="mr-2 h-4 w-4" />
               )}
-              Entrar na conta
+              Criar minha conta
             </Button>
           </form>
         </Form>
       </CardContent>
-      <CardFooter className="flex flex-col space-y-4">
-        <div className="text-center text-sm text-muted-foreground">
-          Ainda não tem uma conta?{' '}
-          <Link href="/signup" className="text-primary hover:underline font-medium">
-            Criar conta gratuita
-          </Link>
-        </div>
-        <div className="text-center">
-          <Link href="/reset-password" title="Não implementado neste fluxo" className="text-xs text-muted-foreground hover:text-foreground">
-            Esqueci minha senha
+      <CardFooter>
+        <div className="w-full text-center text-sm text-muted-foreground">
+          Já tem uma conta?{' '}
+          <Link href="/login" className="text-primary hover:underline font-medium">
+            Entrar agora
           </Link>
         </div>
       </CardFooter>
