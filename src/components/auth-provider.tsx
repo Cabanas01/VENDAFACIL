@@ -57,13 +57,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [cashRegisters, setCashRegistersState] = useState<CashRegister[]>([]);
 
   const fetchAccessStatus = useCallback(async (storeId: string) => {
-    // Cast to any to bypass TS error if database.types is mismatched with the call
-    const { data, error } = await (supabase.rpc as any)('get_store_access_status', { p_store_id: storeId });
-    if (error) {
-      setAccessStatus({ acesso_liberado: false, data_fim_acesso: null, plano_nome: 'Erro', mensagem: 'Erro de acesso' });
-      return;
+    try {
+      const { data, error } = await (supabase.rpc as any)('get_store_access_status', { p_store_id: storeId });
+      if (error) throw error;
+      if (Array.isArray(data) && data.length > 0) {
+        setAccessStatus(data[0]);
+      } else {
+        setAccessStatus({ acesso_liberado: false, data_fim_acesso: null, plano_nome: 'Nenhum', plano_tipo: null, mensagem: 'Sem plano ativo' });
+      }
+    } catch (err) {
+      setAccessStatus({ acesso_liberado: false, data_fim_acesso: null, plano_nome: 'Erro', plano_tipo: null, mensagem: 'Erro ao verificar acesso' });
     }
-    if (Array.isArray(data) && data.length > 0) setAccessStatus(data[0]);
   }, []);
 
   const fetchStoreData = useCallback(async (userId: string) => {
@@ -114,10 +118,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         const sessionUser = session?.user ?? null;
         setUser(sessionUser);
-        if (sessionUser) {
-          await fetchStoreData(sessionUser.id);
-        }
+        
+        // Finaliza o loading principal da autenticação assim que sabemos se há sessão ou não.
+        // Isso permite que o AppLayout decida o redirecionamento instantaneamente.
         setLoading(false);
+
+        // Dispara o carregamento dos dados da loja em segundo plano se houver usuário.
+        if (sessionUser) {
+          fetchStoreData(sessionUser.id);
+        }
       } catch (error) {
         console.error('[AUTH] Erro ao iniciar:', error);
         if (mounted) setLoading(false);
@@ -133,7 +142,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(newUser);
         
         if (newUser) {
-          await fetchStoreData(newUser.id);
+          fetchStoreData(newUser.id);
         } else {
           setStore(null);
           setStoreStatus('unknown');
@@ -162,7 +171,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const createStore = async (data: any) => {
-    const { data: newStore } = await supabase.rpc('create_new_store', data).select().single();
+    const { data: newStore } = await (supabase.rpc as any)('create_new_store', data).select().single();
     if (newStore && user) await fetchStoreData(user.id);
     return newStore as Store;
   };
@@ -249,7 +258,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           unit_price_cents: item.unit_price_cents,
           subtotal_cents: item.subtotal_cents,
         });
-        await supabase.rpc('decrement_stock', { p_product_id: item.product_id, p_quantity: item.quantity });
+        await (supabase.rpc as any)('decrement_stock', { p_product_id: item.product_id, p_quantity: item.quantity });
       }
       await fetchStoreData(user.id);
       return sale as Sale;

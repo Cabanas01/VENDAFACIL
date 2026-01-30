@@ -18,9 +18,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 
 /**
- * LoginPage (Dumb Component)
+ * LoginPage (Burra / Dumb Component)
  * Apenas executa a ação de login. 
- * A navegação é decidida pelo AppLayout reativamente.
+ * A navegação é decidida pelo AppLayout reativamente assim que o estado global muda.
  */
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -42,6 +42,7 @@ export default function LoginPage() {
           password,
         });
         if (authError) throw authError;
+        // Sucesso: Não navegamos aqui. O AppLayout detectará o 'user' e mudará a rota.
       } else {
         const { error: authError } = await supabase.auth.signUp({
           email,

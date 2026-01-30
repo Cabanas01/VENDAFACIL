@@ -121,7 +121,7 @@ export type StoreStatus = 'unknown' | 'loading' | 'has' | 'none' | 'error';
 export type StoreAccess = {
     store_id: string;
     plano_nome: string;
-    plano_tipo: 'free' | 'semanal' | 'mensal' | 'anual';
+    plano_tipo: 'free' | 'semanal' | 'mensal' | 'anual' | 'vitalicio';
     data_inicio_acesso: string;
     data_fim_acesso: string;
     status_acesso: 'ativo' | 'expirado' | 'bloqueado' | 'aguardando_liberacao';
@@ -136,7 +136,7 @@ export type StoreAccessStatus = {
     acesso_liberado: boolean;
     data_fim_acesso: string | null;
     plano_nome: string;
-    plano_tipo: 'free' | 'semanal' | 'mensal' | 'anual' | 'vitalicio';
+    plano_tipo: 'free' | 'semanal' | 'mensal' | 'anual' | 'vitalicio' | null;
     mensagem: string;
 }
 

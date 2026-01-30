@@ -10,7 +10,7 @@ import { Loader2 } from 'lucide-react';
 
 /**
  * AppLayout (Guardião Único)
- * Centraliza 100% da lógica de proteção de rotas e navegação.
+ * Centraliza 100% da lógica de proteção de rotas e navegação reativa.
  */
 export default function AppLayout({ children }: { children: ReactNode }) {
   const { user, loading, storeStatus, accessStatus } = useAuth();
@@ -18,28 +18,28 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => {
-    // 1. Aguarda carregar sessão
+    // 1. Aguarda resolver a autenticação básica
     if (loading) return;
 
-    // 2. Se não estiver logado, vai para login
+    // 2. Se não houver usuário, vai para o login
     if (!user) {
       router.replace('/login');
       return;
     }
 
-    // 3. Se logado mas sem loja, vai para onboarding
+    // 3. Logado mas sem loja configurada? Vai para Onboarding
     if (storeStatus === 'none' && pathname !== '/onboarding') {
       router.replace('/onboarding');
       return;
     }
 
-    // 4. Se já tem loja, não pode ficar no onboarding
+    // 4. Já tem loja? Não pode ficar no onboarding
     if (storeStatus === 'has' && pathname === '/onboarding') {
       router.replace('/dashboard');
       return;
     }
 
-    // 5. Paywall: se acesso bloqueado, vai para billing (exceto se já estiver lá ou em settings)
+    // 5. Verificação de Paywall (somente se não estiver em Billing ou Settings)
     if (accessStatus && !accessStatus.acesso_liberado && pathname !== '/billing' && pathname !== '/settings') {
       router.replace('/billing?reason=expired');
       return;
@@ -47,25 +47,25 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   }, [user, loading, storeStatus, accessStatus, pathname, router]);
 
-  // Exibe loading enquanto resolve a identidade
+  // Tela de carregamento enquanto a sessão inicial é verificada
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background">
         <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
-        <p className="text-sm text-muted-foreground animate-pulse">Sincronizando...</p>
+        <p className="text-sm text-muted-foreground animate-pulse">Autenticando...</p>
       </div>
     );
   }
 
-  // Se não houver usuário, bloqueia renderização (o useEffect redirecionará)
+  // Se não houver usuário, o useEffect cuidará do redirecionamento
   if (!user) return null;
 
-  // Renderiza Onboarding sem Sidebar
+  // Onboarding renderiza sem Sidebar para foco total
   if (pathname === '/onboarding') {
-    return <main className="min-h-screen p-4 flex items-center justify-center">{children}</main>;
+    return <main className="min-h-screen p-4 flex items-center justify-center bg-background">{children}</main>;
   }
 
-  // Renderiza aplicação padrão
+  // Layout padrão da aplicação com Sidebar
   return (
     <SidebarProvider>
       <div className="flex min-h-screen">
