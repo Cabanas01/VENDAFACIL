@@ -5,47 +5,50 @@
  * 
  * Este componente é o único autorizado a executar redirecionamentos.
  * Ele observa a máquina de estados do AuthProvider e decide o destino do usuário.
+ * Também gerencia o Header Global com indicadores de CMV e Plano.
  */
 
 import { useAuth } from '@/components/auth-provider';
 import { useRouter, usePathname } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { MainNav } from '@/components/main-nav';
-import { Loader2, AlertTriangle, RefreshCcw } from 'lucide-react';
+import { Loader2, AlertTriangle, RefreshCcw, TrendingUp, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { getPlanLabel } from '@/lib/plan-label';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading, storeStatus, accessStatus, fetchStoreData } = useAuth();
+  const { user, loading, storeStatus, store, accessStatus, products, sales, fetchStoreData } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
-    // 1. Aguardar autenticação inicial
     if (loading) return;
 
-    // 2. Sem user -> Login
+    // 1. Sem user -> Login
     if (!user) {
       router.replace('/login');
       return;
     }
 
-    // 3. Aguardar estados conclusivos da loja
+    // 2. Aguardar estados conclusivos da loja
     if (storeStatus === 'loading_auth' || storeStatus === 'loading_store') return;
 
-    // 4. Sem loja -> Onboarding
+    // 3. Sem loja -> Onboarding
     if (storeStatus === 'no_store' && pathname !== '/onboarding') {
       router.replace('/onboarding');
       return;
     }
 
-    // 5. Com loja mas no onboarding -> Dashboard
+    // 4. Com loja mas no onboarding -> Dashboard
     if (storeStatus === 'has_store' && pathname === '/onboarding') {
       router.replace('/dashboard');
       return;
     }
 
-    // 6. Paywall (Se liberado === false e não for rota segura)
+    // 5. Paywall (Se liberado === false e não for rota segura)
     const isLiberado = accessStatus?.acesso_liberado ?? false;
     const isSafePath = pathname === '/billing' || pathname === '/settings' || pathname === '/onboarding';
 
@@ -55,6 +58,26 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
 
   }, [user, loading, storeStatus, accessStatus, pathname, router]);
+
+  /**
+   * Cálculo Global do CMV %
+   * Baseado no custo atual dos produtos vs faturamento total histórico (conforme dados em cache)
+   */
+  const cmvPercentage = useMemo(() => {
+    if (!sales || sales.length === 0) return 0;
+    let totalRevenue = 0;
+    let totalCost = 0;
+
+    sales.forEach(sale => {
+      totalRevenue += sale.total_cents;
+      sale.items?.forEach(item => {
+        const product = products.find(p => p.id === item.product_id);
+        totalCost += (product?.cost_cents ?? 0) * item.quantity;
+      });
+    });
+
+    return totalRevenue > 0 ? (totalCost / totalRevenue) * 100 : 0;
+  }, [sales, products]);
 
   /**
    * ESTADOS DE RENDERIZAÇÃO
@@ -80,7 +103,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   // Estado 4: Aplicação Principal (Com Sidebar)
-  // Só renderiza se tiver loja. Se estiver redirecionando, o Loader acima já segurou.
   if (storeStatus !== 'has_store') {
     return <LoaderScreen message="Aguardando confirmação do sistema..." />;
   }
@@ -90,7 +112,41 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <div className="flex min-h-screen">
         <MainNav />
         <SidebarInset>
-          <div className="flex-1 p-4 sm:p-6 lg:p-8">{children}</div>
+          {/* Header Global do Dashboard */}
+          <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b bg-background px-6">
+            <div className="flex items-center gap-4">
+              <div>
+                <h1 className="text-lg font-bold font-headline truncate max-w-[200px] md:max-w-md">
+                  {store?.name}
+                </h1>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-[10px] h-5 py-0 px-2 font-medium bg-muted/50 border-primary/20">
+                    <ShieldCheck className="h-3 w-3 mr-1 text-primary" />
+                    Plano {getPlanLabel(accessStatus?.plano_tipo)}
+                  </Badge>
+                  <Badge variant={accessStatus?.acesso_liberado ? "default" : "destructive"} className="text-[10px] h-5 py-0 px-2">
+                    {accessStatus?.acesso_liberado ? 'Acesso Ativo' : 'Acesso Bloqueado'}
+                  </Badge>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-6">
+              <Separator orientation="vertical" className="h-8 hidden sm:block" />
+              <div className="hidden sm:flex flex-col items-end">
+                <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Saúde Financeira</span>
+                <div className="flex items-center gap-1.5">
+                  <TrendingUp className={`h-4 w-4 ${cmvPercentage > 40 ? 'text-destructive' : 'text-green-500'}`} />
+                  <span className="text-sm font-bold">CMV {cmvPercentage.toFixed(1)}%</span>
+                </div>
+              </div>
+            </div>
+          </header>
+
+          {/* Conteúdo da Página */}
+          <div className="flex-1 p-4 sm:p-6 lg:p-8 bg-muted/5">
+            {children}
+          </div>
         </SidebarInset>
       </div>
     </SidebarProvider>
@@ -98,7 +154,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * Componentes de Feedback (Sênior)
+ * Componentes de Feedback
  */
 
 function LoaderScreen({ message }: { message: string }) {
