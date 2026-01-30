@@ -1,4 +1,3 @@
-
 'use client';
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -54,6 +53,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [storeStatus, setStoreStatus] = useState<StoreStatus>('unknown');
   const [storeError, setStoreError] = useState<string | null>(null);
   const [accessStatus, setAccessStatus] = useState<StoreAccessStatus | null>(null);
+  
+  // Explicitly type arrays to avoid 'never[]' issues
   const [products, setProducts] = useState<Product[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [cashRegisters, setCashRegistersState] = useState<CashRegister[]>([]);
@@ -76,7 +77,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setStoreStatus('loading');
     try {
       let storeId: string | null = null;
-      
       const { data: ownerStore } = await supabase.from('stores').select('id').eq('user_id', userId).maybeSingle();
       
       if (ownerStore) {
@@ -118,7 +118,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             avatar_url: profilesMap.get(m.user_id)?.avatar_url ?? null,
           })) as StoreMember[];
         }
-        
         setStore({ ...storeData, members });
       }
 
@@ -138,25 +137,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const initAuth = async () => {
       try {
-        const res = await supabase.auth.getSession();
+        const { data: { session } } = await supabase.auth.getSession();
         if (!mounted) return;
 
-        const sessionUser = res.data.session?.user ?? null;
+        const sessionUser = session?.user ?? null;
         setUser(sessionUser);
-        setLoading(false);
+        setLoading(false); // SINAL VERDE INSTANTÂNEO
 
         if (sessionUser) {
           fetchStoreData(sessionUser.id);
         }
       } catch (error) {
-        console.error('[AUTH] Erro na inicialização:', error);
         if (mounted) setLoading(false);
       }
     };
 
     initAuth();
 
-    const authListener = supabase.auth.onAuthStateChange(
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (!mounted) return;
         const newUser = session?.user ?? null;
@@ -177,7 +175,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       mounted = false;
-      authListener.data.subscription.unsubscribe();
+      subscription.unsubscribe();
     };
   }, [fetchStoreData]);
 
