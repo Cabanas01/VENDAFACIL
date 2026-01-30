@@ -3,7 +3,7 @@
 /**
  * @fileOverview AppLayout (O Guardião Único)
  * 
- * Este componente é o único autorizado a executar redirecionamentos.
+ * Este componente é o único autorizado a executar redirecionamentos (REGRA DE OURO).
  * Ele observa a máquina de estados do AuthProvider e decide o destino do usuário.
  * Também gerencia a alternância entre a Sidebar da Loja e a Sidebar do Admin.
  */
@@ -27,34 +27,37 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const isAdminPath = pathname.startsWith('/admin');
 
+  /**
+   * MECANISMO DE GUARDIÃO ÚNICO
+   * Decisões de navegação centralizadas e determinísticas.
+   */
   useEffect(() => {
     if (loading) return;
 
-    // 1. Sem user -> Login
+    // 1. Bloqueio por falta de sessão
     if (!user) {
       router.replace('/login');
       return;
     }
 
-    // 2. Aguardar estados conclusivos da loja
+    // 2. Aguardar estados terminais conclusivos
     if (storeStatus === 'loading_auth' || storeStatus === 'loading_store') return;
 
-    // 3. Sem loja e não é admin -> Onboarding
-    // Se for admin, permitimos acesso sem loja vinculada para gestão do SaaS
-    const isActuallyAdmin = user?.is_admin === true;
-    
+    // 3. Gestão de Tenant (Onboarding)
+    // Administradores podem acessar rotas /admin mesmo sem loja vinculada
     if (storeStatus === 'no_store' && pathname !== '/onboarding' && !isAdminPath) {
       router.replace('/onboarding');
       return;
     }
 
-    // 4. Com loja mas no onboarding -> Dashboard
+    // 4. Impedir Onboarding se a loja já existe
     if (storeStatus === 'has_store' && pathname === '/onboarding') {
       router.replace('/dashboard');
       return;
     }
 
-    // 5. Paywall (Se liberado === false e não for rota segura nem admin)
+    // 5. Paywall (Acesso Liberado)
+    // Bloqueia acesso operacional se acesso_liberado for falso
     const isLiberado = accessStatus?.acesso_liberado ?? false;
     const isSafePath = pathname === '/billing' || pathname === '/settings' || pathname === '/onboarding' || isAdminPath;
 
@@ -66,7 +69,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [user, loading, storeStatus, accessStatus, pathname, router, isAdminPath]);
 
   /**
-   * Cálculo Global do CMV % para o Header da Loja
+   * Cálculo Reativo de CMV % (Saúde Financeira)
    */
   const cmvPercentage = useMemo(() => {
     if (!sales || sales.length === 0) return 0;
@@ -85,15 +88,42 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [sales, products]);
 
   /**
-   * ESTADOS DE RENDERIZAÇÃO
+   * RENDERS DE ESTADO (BLOQUEADORES)
    */
 
+  // Estado: Sincronizando
   if (loading || storeStatus === 'loading_auth' || storeStatus === 'loading_store') {
-    return <LoaderScreen message={storeStatus === 'loading_store' ? 'Sincronizando dados da sua loja...' : 'Validando sua sessão...'} />;
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground animate-pulse font-medium">
+          {storeStatus === 'loading_store' ? 'Sincronizando dados da sua loja...' : 'Validando sua sessão...'}
+        </p>
+      </div>
+    );
   }
 
+  // Estado: Erro Técnico (RLS/Rede)
   if (storeStatus === 'error') {
-    return <ErrorScreen onRetry={() => user && fetchStoreData(user.id)} />;
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background p-6 text-center">
+        <div className="bg-destructive/10 p-4 rounded-full mb-4">
+          <AlertTriangle className="h-12 w-12 text-destructive" />
+        </div>
+        <h1 className="text-2xl font-bold mb-2">Erro de Sincronização</h1>
+        <p className="text-muted-foreground max-w-md mb-6">
+          Não conseguimos carregar os dados. Isso pode ser instabilidade de rede ou erro de permissão (RLS).
+        </p>
+        <div className="flex gap-3">
+          <Button onClick={() => user && fetchStoreData(user.id)} variant="default">
+            <RefreshCcw className="mr-2 h-4 w-4" /> Tentar Novamente
+          </Button>
+          <Button onClick={() => window.location.reload()} variant="outline">
+            Recarregar Página
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   // Estado: Onboarding (Sem Sidebar)
@@ -105,13 +135,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Estado: Aplicação Principal ou Admin
+  /**
+   * RENDER DA APLICAÇÃO (DASHBOARD / ADMIN)
+   */
   return (
     <SidebarProvider>
       <div className="flex min-h-screen">
         {isAdminPath ? <AdminSidebar /> : <MainNav />}
         <SidebarInset>
-          {/* Header Global Dinâmico */}
+          {/* Header Global Unificado */}
           <header className={`sticky top-0 z-30 flex h-16 items-center justify-between border-b px-6 ${isAdminPath ? 'bg-primary/5 border-primary/10' : 'bg-background'}`}>
             <div className="flex items-center gap-4">
               <div>
@@ -121,18 +153,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 
                 <div className="flex items-center gap-2">
                   {isAdminPath ? (
-                    <Badge variant="default" className="text-[10px] h-5 py-0 px-2 font-bold bg-primary text-primary-foreground">
-                      <ShieldCheck className="h-3 w-3 mr-1" />
-                      SaaS ROOT
+                    <Badge variant="default" className="text-[10px] h-5 py-0 px-2 font-bold bg-primary">
+                      <ShieldCheck className="h-3 w-3 mr-1" /> SaaS ROOT
                     </Badge>
                   ) : (
                     <>
-                      <Badge variant="outline" className="text-[10px] h-5 py-0 px-2 font-medium bg-muted/50 border-primary/20">
+                      <Badge variant="outline" className="text-[10px] h-5 py-0 px-2 font-medium bg-muted/50">
                         <ShieldCheck className="h-3 w-3 mr-1 text-primary" />
                         Plano {getPlanLabel(accessStatus?.plano_tipo)}
                       </Badge>
                       <Badge variant={accessStatus?.acesso_liberado ? "default" : "destructive"} className="text-[10px] h-5 py-0 px-2">
-                        {accessStatus?.acesso_liberado ? 'Acesso Ativo' : 'Acesso Bloqueado'}
+                        {accessStatus?.acesso_liberado ? 'Ativo' : 'Acesso Bloqueado'}
                       </Badge>
                     </>
                   )}
@@ -145,10 +176,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               
               {isAdminPath ? (
                 <div className="hidden sm:flex flex-col items-end">
-                  <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Monitoramento SaaS</span>
-                  <div className="flex items-center gap-1.5">
-                    <Activity className="h-4 w-4 text-primary" />
-                    <span className="text-sm font-bold">Sistema Operacional</span>
+                  <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">SaaS Monitor</span>
+                  <div className="flex items-center gap-1.5 text-primary">
+                    <Activity className="h-4 w-4" />
+                    <span className="text-sm font-bold">Online</span>
                   </div>
                 </div>
               ) : (
@@ -169,36 +200,5 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </SidebarInset>
       </div>
     </SidebarProvider>
-  );
-}
-
-function LoaderScreen({ message }: { message: string }) {
-  return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
-      <Loader2 className="h-10 w-10 animate-spin text-primary" />
-      <p className="text-sm text-muted-foreground animate-pulse font-medium">{message}</p>
-    </div>
-  );
-}
-
-function ErrorScreen({ onRetry }: { onRetry: () => void }) {
-  return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-background p-6 text-center">
-      <div className="bg-destructive/10 p-4 rounded-full mb-4">
-        <AlertTriangle className="h-12 w-12 text-destructive" />
-      </div>
-      <h1 className="text-2xl font-bold mb-2">Erro de Sincronização</h1>
-      <p className="text-muted-foreground max-w-md mb-6">
-        Não conseguimos validar os dados da sua loja. Isso pode ser instabilidade de rede ou erro de permissão (RLS).
-      </p>
-      <div className="flex gap-3">
-        <Button onClick={onRetry} variant="default">
-          <RefreshCcw className="mr-2 h-4 w-4" /> Tentar Novamente
-        </Button>
-        <Button onClick={() => window.location.reload()} variant="outline">
-          Recarregar Página
-        </Button>
-      </div>
-    </div>
   );
 }

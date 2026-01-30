@@ -115,15 +115,14 @@ export type Customer = {
 };
 
 /**
- * Máquina de Estados do SaaS (Guardião Único)
- * 
- * loading_auth: Verificando se existe sessão no Supabase.
- * loading_store: Usuário autenticado, consultando o banco de dados.
- * has_store: Loja encontrada e dados carregados com sucesso.
- * no_store: CERTEZA ABSOLUTA de que o usuário não tem loja (buscas owner/staff vazias SEM erro).
- * error: Falha técnica crítica (RLS bloqueando, rede fora, timeout).
+ * Máquina de Estados Oficial do SaaS
  */
-export type StoreStatus = 'loading_auth' | 'loading_store' | 'has_store' | 'no_store' | 'error';
+export type StoreStatus = 
+  | 'loading_auth'     // Resolvendo sessão inicial
+  | 'loading_store'    // Buscando dados no banco
+  | 'has_store'        // Loja encontrada e carregada
+  | 'no_store'         // Certeza absoluta que não existe loja vinculada
+  | 'error';           // Erro técnico crítico (RLS, Rede, Timeout)
 
 
 // Types for Time-based Access Control
@@ -145,7 +144,7 @@ export type StoreAccessStatus = {
     acesso_liberado: boolean;
     data_fim_acesso: string | null;
     plano_nome: string;
-    plano_tipo: 'free' | 'semanal' | 'mensal' | 'anual' | 'vitalicio' | null;
+    plano_tipo: string | null;
     mensagem: string;
 }
 
@@ -155,11 +154,11 @@ export type SubscriptionEvent = {
     created_at: string;
     provider: 'hotmart' | 'kiwify' | 'perfectpay' | 'admin';
     event_type: string;
-    event_id: string; // Unique ID from the provider
+    event_id: string; 
     store_id?: string;
     user_id?: string;
     plan_id?: string;
-    status: 'processed_access_granted' | 'processed_access_revoked' | 'logged_for_analytics' | 'error_missing_ref' | 'error_invalid_ref' | 'error_unknown_plan' | 'error_db_update' | 'error_exception';
+    status: string;
     raw_payload: Record<string, any>;
 };
 

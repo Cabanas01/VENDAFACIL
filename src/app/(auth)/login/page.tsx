@@ -4,7 +4,8 @@
  * @fileOverview LoginPage (Dumb Form)
  * 
  * Apenas dispara o signIn do Supabase. 
- * NÃO redireciona após o sucesso. O AppLayout decidirá o fluxo.
+ * NÃO executa redirecionamentos (REGRA DE OURO).
+ * O AppLayout redirecionará automaticamente após o AuthProvider detectar a sessão.
  */
 
 import { useState } from 'react';
@@ -49,14 +50,15 @@ export default function LoginPage() {
       });
 
       if (error) {
-        setErrorMsg(error.message === 'Invalid login credentials' 
-          ? 'E-mail ou senha incorretos.' 
-          : error.message);
+        if (error.message === 'Email not confirmed') {
+          setErrorMsg('Por favor, confirme seu e-mail antes de entrar.');
+        } else {
+          setErrorMsg('E-mail ou senha incorretos.');
+        }
       }
-      // Sucesso: Não fazemos router.push. O AuthProvider detectará a sessão
-      // e o Guardião (AppLayout) redirecionará.
+      // SUCESSO: Não fazemos nada. O AuthProvider e o AppLayout cuidam do resto.
     } catch (err) {
-      setErrorMsg('Ocorreu um erro inesperado ao tentar entrar.');
+      setErrorMsg('Ocorreu um erro inesperado.');
     } finally {
       setLoading(false);
     }
@@ -67,13 +69,13 @@ export default function LoginPage() {
       <CardHeader className="text-center space-y-4">
         <div className="mx-auto">
           <Avatar className="h-16 w-16 rounded-xl">
-            <AvatarImage src="/logo.png" alt="VendaFacil Logo" />
+            <AvatarImage src="/logo.png" alt="VendaFacil" />
             <AvatarFallback className="bg-primary text-primary-foreground font-bold">VF</AvatarFallback>
           </Avatar>
         </div>
         <div className="space-y-1">
-          <CardTitle className="text-3xl font-headline font-bold">Bem-vindo de volta</CardTitle>
-          <CardDescription>Acesse seu painel administrativo para gerenciar suas vendas.</CardDescription>
+          <CardTitle className="text-3xl font-headline font-bold">Bem-vindo</CardTitle>
+          <CardDescription>Gerencie suas vendas com inteligência.</CardDescription>
         </div>
       </CardHeader>
       <CardContent>
@@ -86,7 +88,7 @@ export default function LoginPage() {
                 <FormItem>
                   <FormLabel>E-mail</FormLabel>
                   <FormControl>
-                    <Input placeholder="seu@email.com" autoComplete="username" {...field} />
+                    <Input placeholder="seu@email.com" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -100,16 +102,12 @@ export default function LoginPage() {
                   <FormLabel>Senha</FormLabel>
                   <FormControl>
                     <div className="relative">
-                      <Input 
-                        type={showPassword ? 'text' : 'password'} 
-                        autoComplete="current-password" 
-                        {...field} 
-                      />
+                      <Input type={showPassword ? 'text' : 'password'} {...field} />
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 text-muted-foreground"
+                        className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
                         onClick={() => setShowPassword(!showPassword)}
                       >
                         {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -127,29 +125,18 @@ export default function LoginPage() {
               </div>
             )}
 
-            <Button type="submit" className="w-full" disabled={loading} size="lg">
-              {loading ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <LogIn className="mr-2 h-4 w-4" />
-              )}
+            <Button type="submit" className="w-full h-12" disabled={loading}>
+              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LogIn className="mr-2 h-4 w-4" />}
               Entrar na conta
             </Button>
           </form>
         </Form>
       </CardContent>
-      <CardFooter className="flex flex-col space-y-4">
-        <div className="text-center text-sm text-muted-foreground">
-          Ainda não tem uma conta?{' '}
-          <Link href="/signup" className="text-primary hover:underline font-medium">
-            Criar conta gratuita
-          </Link>
-        </div>
-        <div className="text-center">
-          <Link href="/reset-password" title="Não implementado neste fluxo" className="text-xs text-muted-foreground hover:text-foreground">
-            Esqueci minha senha
-          </Link>
-        </div>
+      <CardFooter className="flex flex-col space-y-2 text-sm text-center">
+        <p className="text-muted-foreground">
+          Ainda não tem conta?{' '}
+          <Link href="/signup" className="text-primary hover:underline font-bold">Criar conta</Link>
+        </p>
       </CardFooter>
     </Card>
   );
