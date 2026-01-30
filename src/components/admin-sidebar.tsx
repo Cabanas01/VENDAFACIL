@@ -1,3 +1,4 @@
+
 'use client';
 
 import Link from 'next/link';
@@ -32,7 +33,6 @@ import {
   BarChart,
   FileText,
   AlertTriangle,
-  Bot,
   ChevronDown,
   LogOut,
   ShieldCheck,
@@ -50,11 +50,7 @@ const adminNavItems = [
 const systemNavItems = [
   { href: '/admin/analytics', label: 'Analytics', icon: BarChart, exact: true },
   { href: '/admin/logs', label: 'Logs de Auditoria', icon: FileText, exact: true },
-  { href: '/admin/errors', label: 'Erros e Falhas', icon: AlertTriangle, exact: true },
-];
-
-const aiNavItems = [
-  { href: '/admin/ai', label: 'IA Admin', icon: Bot, exact: true },
+  { href: '/admin/billing', label: 'Eventos de Faturamento', icon: AlertTriangle, exact: true },
 ];
 
 export function AdminSidebar() {
@@ -104,24 +100,6 @@ export function AdminSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {systemNavItems.map((item) => (
-                <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton asChild isActive={isActive(item.href, item.exact)}>
-                    <Link href={item.href}>
-                      <item.icon />
-                      <span>{item.label}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup>
-          <SidebarGroupLabel>Inteligência</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {aiNavItems.map((item) => (
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton asChild isActive={isActive(item.href, item.exact)}>
                     <Link href={item.href}>

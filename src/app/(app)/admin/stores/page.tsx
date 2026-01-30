@@ -1,11 +1,5 @@
-'use client';
 
-/**
- * @fileOverview Listagem Global de Lojas (Tenants)
- * 
- * Permite ao administrador visualizar todas as lojas cadastradas no sistema,
- * seus donos, planos atuais e status de operação.
- */
+'use client';
 
 import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase/client';
@@ -33,7 +27,7 @@ export default function AdminStoresPage() {
         .from('stores')
         .select(`
           *,
-          store_access (plano_tipo, status_acesso, data_fim_acesso),
+          store_access (plano_tipo, status_acesso),
           users (email)
         `)
         .order('created_at', { ascending: false });
@@ -51,20 +45,19 @@ export default function AdminStoresPage() {
   }, []);
 
   const filteredStores = useMemo(() => {
-    const term = (search || '').toLowerCase();
-    return stores.filter(s => {
-      const storeName = (s?.name || '').toLowerCase();
-      const storeCnpj = (s?.cnpj || '').toLowerCase();
-      const ownerEmail = (s?.users?.email || '').toLowerCase();
-      return storeName.includes(term) || storeCnpj.includes(term) || ownerEmail.includes(term);
-    });
+    const term = search.toLowerCase();
+    return stores.filter(s => 
+      (s.name || '').toLowerCase().includes(term) || 
+      (s.cnpj || '').includes(term) ||
+      (s.users?.email || '').toLowerCase().includes(term)
+    );
   }, [stores, search]);
 
   return (
     <div className="space-y-6">
       <PageHeader 
-        title="Gestão de Lojas" 
-        subtitle="Controle central de todos os tenants e licenciamentos do SaaS." 
+        title="Gestão de Tenants" 
+        subtitle="Visualize e gerencie todas as lojas ativas no ecossistema VendaFácil." 
       />
 
       <Card>
@@ -73,46 +66,45 @@ export default function AdminStoresPage() {
             <div className="relative w-full max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input 
-                placeholder="Buscar por nome, CNPJ ou email do dono..." 
+                placeholder="Buscar por nome, CNPJ ou e-mail..." 
                 className="pl-10"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground font-medium">
-              <Store className="h-4 w-4" />
-              {filteredStores.length} lojas registradas
-            </div>
+            <Badge variant="outline" className="h-8">
+              {filteredStores.length} Lojas Encontradas
+            </Badge>
           </div>
 
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Loja / ID</TableHead>
+                <TableHead>Loja</TableHead>
                 <TableHead>Proprietário</TableHead>
                 <TableHead>Plano</TableHead>
-                <TableHead>Status Acesso</TableHead>
-                <TableHead>Cadastro</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Criada em</TableHead>
+                <TableHead className="text-right">Gestão</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={6} className="text-center py-10">Carregando lojas...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={6} className="text-center py-10">Sincronizando tenants...</TableCell></TableRow>
               ) : filteredStores.map(s => {
-                const access = Array.isArray(s?.store_access) ? s.store_access[0] : s?.store_access;
+                const access = Array.isArray(s.store_access) ? s.store_access[0] : s.store_access;
                 return (
-                  <TableRow key={s?.id} className="group hover:bg-muted/50 transition-colors">
+                  <TableRow key={s.id} className="group">
                     <TableCell>
                       <div className="flex flex-col">
-                        <span className="font-bold text-sm">{s?.name || 'Sem Nome'}</span>
-                        <span className="text-[10px] font-mono text-muted-foreground uppercase">{s?.id}</span>
+                        <span className="font-bold text-sm">{s.name || 'Sem Nome'}</span>
+                        <span className="text-[10px] font-mono text-muted-foreground uppercase">{s.id}</span>
                       </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2 text-xs">
                         <Mail className="h-3 w-3 text-muted-foreground" />
-                        {s?.users?.email || 'N/A'}
+                        {s.users?.email || 'N/A'}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -125,33 +117,24 @@ export default function AdminStoresPage() {
                         variant={access?.status_acesso === 'ativo' ? 'default' : 'destructive'}
                         className="text-[10px] capitalize"
                       >
-                        {access?.status_acesso || 'Sem Acesso'}
+                        {access?.status_acesso || 'Pendente'}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
-                      {s?.created_at ? format(new Date(s.created_at), 'dd/MM/yyyy') : '-'}
+                      {s.created_at ? format(new Date(s.created_at), 'dd/MM/yyyy') : '-'}
                     </TableCell>
                     <TableCell className="text-right">
                       <Button 
                         variant="ghost" 
                         size="sm" 
-                        className="gap-2"
-                        onClick={() => router.push(`/admin/stores/${s?.id}`)}
+                        onClick={() => router.push(`/admin/stores/${s.id}`)}
                       >
-                        Detalhes
-                        <ExternalLink className="h-3 w-3" />
+                        Gerenciar <ExternalLink className="h-3 w-3 ml-2" />
                       </Button>
                     </TableCell>
                   </TableRow>
                 );
               })}
-              {!loading && filteredStores.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-10 text-muted-foreground">
-                    Nenhuma loja encontrada para esta busca.
-                  </TableCell>
-                </TableRow>
-              )}
             </TableBody>
           </Table>
         </CardContent>
