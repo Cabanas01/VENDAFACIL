@@ -70,7 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [store, setStore] = useState<Store | null>(null);
   const [accessStatus, setAccessStatus] = useState<StoreAccessStatus | null>(null);
-  const [storeStatus, setStoreStatus] = useState<StoreStatus>('loading');
+  const [storeStatus, setStoreStatus] = useState<StoreStatus>('unknown');
   const [storeError, setStoreError] = useState<string | null>(null);
   
   const [products, setProducts] = useState<Product[]>([]);
@@ -86,7 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             acesso_liberado: false,
             data_fim_acesso: null,
             plano_nome: 'Erro',
-            mensagem: 'Não foi possível verificar seu acesso. Tente novamente mais tarde.'
+            mensagem: 'Não foi possível verificar seu acesso.'
         });
         return;
     }
@@ -94,79 +94,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (Array.isArray(data) && data.length > 0) {
         setAccessStatus(data[0]);
     } else {
-        const fallbackStatus = {
+        setAccessStatus({
             acesso_liberado: false,
             data_fim_acesso: null,
             plano_nome: 'Sem Plano',
-            mensagem: 'Sua loja não possui um plano de acesso. Escolha um plano para começar.'
-        };
-        setAccessStatus(fallbackStatus);
+            mensagem: 'Sua loja não possui um plano de acesso.'
+        });
     }
   }, []);
 
   const fetchStoreData = useCallback(async (userId: string) => {
     setStoreStatus('loading');
-    setStoreError(null);
-    setAccessStatus(null);
-
     try {
       let storeId: string | null = null;
 
-      const { data: ownerStore, error: ownerError } = await supabase
+      const { data: ownerStore } = await supabase
         .from('stores')
         .select('id')
         .eq('user_id', userId)
         .maybeSingle();
 
-      if (ownerError) throw ownerError;
-
       if (ownerStore) {
         storeId = ownerStore.id;
       } else {
-        const { data: memberEntry, error: memberError } = await supabase
+        const { data: memberEntry } = await supabase
           .from('store_members')
           .select('store_id')
           .eq('user_id', userId)
           .maybeSingle();
-
-        if (memberError) throw memberError;
         if (memberEntry) storeId = memberEntry.store_id;
       }
 
       if (!storeId) {
         setStore(null);
         setStoreStatus('none');
-        setProducts([]);
-        setSales([]);
-        setCashRegistersState([]);
         return;
       }
 
       await fetchAccessStatus(storeId);
 
-      const { data: storeDetails, error: storeErr } = await supabase
+      const { data: storeDetails } = await supabase
         .from('stores')
         .select('*, trial_used, trial_started_at')
         .eq('id', storeId)
         .single();
 
-      if (storeErr || !storeDetails) throw storeErr;
-
-      const [
-        productsRes,
-        salesRes,
-        cashRes,
-        membersRes,
-      ] = await Promise.all([
+      const [productsRes, salesRes, cashRes, membersRes] = await Promise.all([
         supabase.from('products').select('*').eq('store_id', storeId).order('name'),
         supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeId).order('created_at', { ascending: false }),
         supabase.from('cash_registers').select('*').eq('store_id', storeId).order('opened_at', { ascending: false }),
         supabase.from('store_members').select('*').eq('store_id', storeId),
       ]);
-
-      if (productsRes.error || salesRes.error || cashRes.error || membersRes.error) {
-        throw productsRes.error || salesRes.error || cashRes.error || membersRes.error;
-      }
 
       let members: StoreMember[] = [];
       if (membersRes.data?.length) {
@@ -181,47 +159,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }));
       }
 
-      setStore({ ...storeDetails, members });
+      setStore({ ...storeDetails, members } as Store);
       setProducts(productsRes.data ?? []);
       setSales(salesRes.data ?? []);
       setCashRegistersState(cashRes.data ?? []);
       setStoreStatus('has');
     } catch (err: any) {
       console.error('[STORE] fetch error', err);
-      setStore(null);
       setStoreStatus('error');
-      setStoreError(err.message ?? 'Erro desconhecido');
+      setStoreError(err.message);
     }
   }, [fetchAccessStatus]);
 
+  const refreshSession = useCallback(async () => {
+    const { data: { session: currentSession } } = await supabase.auth.getSession();
+    setSession(currentSession);
+    const currentUser = currentSession?.user;
+    
+    if (currentUser) {
+      const { data: profile } = await supabase.from('users').select('id, email, name, avatar_url, is_admin').eq('id', currentUser.id).single();
+      setUser(profile as User);
+      await fetchStoreData(currentUser.id);
+    } else {
+      setUser(null);
+      setStore(null);
+      setAccessStatus(null);
+      setStoreStatus('unknown');
+    }
+    setIsLoading(false);
+  }, [fetchStoreData]);
+
   useEffect(() => {
+    // Inicialização proativa
+    refreshSession();
+
     const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        setSession(session);
-        const currentUser = session?.user;
-        
-        if (currentUser) {
-          const { data: profile } = await supabase.from('users').select('id, email, name, avatar_url, is_admin').eq('id', currentUser.id).single();
-          setUser(profile as User);
-          await fetchStoreData(currentUser.id);
-        } else {
-          setUser(null);
-          setStore(null);
-          setAccessStatus(null);
-          setStoreStatus('unknown');
+      async (_event, newSession) => {
+        if (newSession?.access_token !== session?.access_token) {
+          refreshSession();
         }
-        
-        setIsLoading(false);
       }
     );
 
     return () => {
       authListener.subscription.unsubscribe();
     };
-  }, [fetchStoreData]);
+  }, [refreshSession, session?.access_token]);
 
   const logout = useCallback(async () => {
+    setIsLoading(true);
     await supabase.auth.signOut();
+    setSession(null);
+    setUser(null);
+    setStore(null);
+    setStoreStatus('unknown');
+    setIsLoading(false);
     router.replace('/login');
   }, [router]);
 
@@ -233,7 +225,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const createStore = useCallback(async (storeData: any) => {
     if (!user) return null;
-    
     const { data: newStore, error } = await supabase.rpc('create_new_store', {
       p_name: storeData.name,
       p_legal_name: storeData.legal_name,
@@ -243,11 +234,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       p_timezone: storeData.timezone,
     }).select().single();
 
-    if (error || !newStore) {
-      setStoreError(error?.message || 'Failed to create store.');
+    if (error) {
+      setStoreError(error.message);
       return null;
     }
-    
     await fetchStoreData(user.id);
     return newStore as Store;
   }, [user, fetchStoreData]);
@@ -265,15 +255,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const removeStoreMember = useCallback(async (userId: string) => {
-    if (!store || !user || userId === store.user_id) {
-      return { error: new Error('Operação inválida') };
-    }
-    const { error } = await supabase
-      .from('store_members')
-      .delete()
-      .eq('user_id', userId)
-      .eq('store_id', store.id);
-
+    if (!store || !user || userId === store.user_id) return { error: new Error('Inválido') };
+    const { error } = await supabase.from('store_members').delete().eq('user_id', userId).eq('store_id', store.id);
     if (!error) await fetchStoreData(user.id);
     return { error };
   }, [store, user, fetchStoreData]);
@@ -284,54 +267,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await fetchStoreData(user.id);
   }, [store, user, fetchStoreData]);
   
-  const addCustomer = useCallback(async (customer: Omit<Customer, 'id' | 'store_id' | 'created_at'>) => {
+  const addCustomer = useCallback(async (customer: any) => {
     if (!store || !user) throw new Error('Sessão inválida');
-
-    try {
-      const { error: insertError } = await supabase.from('customers').insert({ ...customer, store_id: store.id });
-      if (insertError) throw insertError;
-    } catch (error: any) {
-        if (error.message.includes('trial_customer_limit')) {
-            throw new Error('Limite de 10 clientes do plano de avaliação foi atingido. Faça o upgrade para continuar.');
-        }
-        throw error;
+    const { error } = await supabase.from('customers').insert({ ...customer, store_id: store.id });
+    if (error) {
+      if (error.message.includes('trial_customer_limit')) throw new Error('Limite de clientes atingido.');
+      throw error;
     }
-  }, [store, user]);
-
+    await fetchStoreData(user.id);
+  }, [store, user, fetchStoreData]);
 
   const updateProduct = useCallback(async (id: string, product: any) => {
     if (!store || !user) return;
-    await supabase.from('products').update({ ...product, barcode: product.barcode || null }).eq('id', id).eq('store_id', store.id);
+    await supabase.from('products').update({ ...product, barcode: product.barcode || null }).eq('id', id);
     await fetchStoreData(user.id);
   }, [store, user, fetchStoreData]);
 
   const updateProductStock = useCallback(async (id: string, qty: number) => {
     if (!store || !user) return;
-    await supabase.from('products').update({ stock_qty: qty }).eq('id', id).eq('store_id', store.id);
+    await supabase.from('products').update({ stock_qty: qty }).eq('id', id);
     await fetchStoreData(user.id);
   }, [store, user, fetchStoreData]);
 
   const removeProduct = useCallback(async (id: string) => {
     if (!store || !user) return;
-    await supabase.from('products').delete().eq('id', id).eq('store_id', store.id);
+    await supabase.from('products').delete().eq('id', id);
     await fetchStoreData(user.id);
   }, [store, user, fetchStoreData]);
 
   const findProductByBarcode = useCallback(async (barcode: string) => {
     if (!store) return null;
-    const { data } = await supabase
-      .from('products')
-      .select('*')
-      .eq('store_id', store.id)
-      .eq('barcode', barcode)
-      .maybeSingle();
+    const { data } = await supabase.from('products').select('*').eq('store_id', store.id).eq('barcode', barcode).maybeSingle();
     return data ?? null;
   }, [store]);
 
   const setCashRegisters = useCallback(async (action: any) => {
     if (!store || !user) return;
     const next = typeof action === 'function' ? action(cashRegisters) : action;
-
     for (const cr of next) {
       if (cashRegisters.find(c => c.id === cr.id)) {
         const { id, ...data } = cr;
@@ -343,77 +315,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await fetchStoreData(user.id);
   }, [store, user, cashRegisters, fetchStoreData]);
 
-  const addSale = useCallback(async (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => {
+  const addSale = useCallback(async (cart: CartItem[], paymentMethod: any) => {
     if (!store || !user) throw new Error('Sessão inválida');
-
-    for (const item of cart) {
-      const product = products.find(p => p.id === item.product_id);
-      if (!product || product.stock_qty < item.quantity) {
-        throw new Error(`Estoque insuficiente para ${item.product_name_snapshot}`);
-      }
-    }
-
     const saleId = crypto.randomUUID();
     const total = cart.reduce((s, i) => s + i.subtotal_cents, 0);
-
-    let saleData, saleError;
-
     try {
-      const saleInsertResult = await supabase
-          .from('sales')
-          .insert({ id: saleId, store_id: store.id, total_cents: total, payment_method: paymentMethod })
-          .select()
-          .single();
-      saleData = saleInsertResult.data;
-      saleError = saleInsertResult.error;
-
+      const { data: saleData, error: saleError } = await supabase.from('sales').insert({ id: saleId, store_id: store.id, total_cents: total, payment_method: paymentMethod }).select().single();
       if (saleError) throw saleError;
-      if (!saleData) throw new Error('Falha ao criar o registro da venda.');
-    
-      let createdSaleItems: SaleItem[] = [];
-
       for (const item of cart) {
-          const { data: saleItemData, error: itemError } = await supabase
-              .from('sale_items')
-              .insert({
-                  sale_id: saleId,
-                  product_id: item.product_id,
-                  quantity: item.quantity,
-                  unit_price_cents: item.unit_price_cents,
-                  subtotal_cents: item.subtotal_cents,
-                  product_name_snapshot: item.product_name_snapshot,
-                  product_barcode_snapshot: item.product_barcode_snapshot,
-              })
-              .select()
-              .single();
-
-          if (itemError) throw itemError;
-          createdSaleItems.push(saleItemData as SaleItem);
-
-          const { error: stockError } = await supabase.rpc('decrement_stock', {
-              p_product_id: item.product_id,
-              p_quantity: item.quantity,
-          });
-          if (stockError) throw stockError;
+        await supabase.from('sale_items').insert({
+          sale_id: saleId,
+          product_id: item.product_id,
+          quantity: item.quantity,
+          unit_price_cents: item.unit_price_cents,
+          subtotal_cents: item.subtotal_cents,
+          product_name_snapshot: item.product_name_snapshot,
+        });
+        await supabase.rpc('decrement_stock', { p_product_id: item.product_id, p_quantity: item.quantity });
       }
-
       await fetchStoreData(user.id);
-      return { ...saleData, items: createdSaleItems } as Sale;
-
+      return saleData as Sale;
     } catch (error: any) {
-        console.error('[SALE] Transaction failed, attempting rollback...', error);
-        
-        if (saleData) {
-          await supabase.from('sales').delete().eq('id', saleId);
-        }
-
-        if (error.message.includes('trial_sales_limit')) {
-            throw new Error('Limite de 5 vendas do plano de avaliação foi atingido. Faça o upgrade para continuar.');
-        }
-
-        throw new Error(error.message || 'Falha ao processar a venda. A transação foi revertida.');
+      if (error.message.includes('trial_sales_limit')) throw new Error('Limite de vendas atingido.');
+      throw error;
     }
-  }, [store, user, products, fetchStoreData]);
+  }, [store, user, fetchStoreData]);
 
   const value: AuthContextType = {
     user,

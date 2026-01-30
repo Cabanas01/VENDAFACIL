@@ -15,7 +15,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => {
-    // Wait until the authentication state is fully loaded before running any logic.
+    // Só age após o carregamento inicial da sessão
     if (isLoading) return;
 
     if (!isAuthenticated) {
@@ -33,29 +33,19 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       return;
     }
     
-    // Paywall logic: Only redirect if accessStatus is fully loaded and access is not granted.
+    // Lógica de Paywall
     if (accessStatus && !accessStatus.acesso_liberado && pathname !== '/billing' && pathname !== '/settings') {
         router.replace('/billing?reason=expired');
     }
 
-  }, [isLoading, isAuthenticated, storeStatus, store, pathname, router, accessStatus]);
+  }, [isLoading, isAuthenticated, storeStatus, pathname, router, accessStatus]);
 
-  // While the initial session is loading, show a full-page loading screen.
-  // This prevents the "flash" of the login page or other incorrect content.
+  // Enquanto carrega a sessão inicial, mostra skeleton total
   if (isLoading) {
     return (
-      <div className="flex min-h-screen w-full">
-        <div className="hidden w-64 border-r bg-background p-4 md:block">
-          <Skeleton className="h-12 w-full mb-8" />
-          <div className="space-y-2">
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
-          </div>
-        </div>
-        <div className="flex-1 p-4 sm:p-6 lg:p-8">
-          <Skeleton className="h-12 w-1/3 mb-8" />
+      <div className="flex min-h-screen w-full items-center justify-center p-8">
+        <div className="w-full max-w-4xl space-y-4">
+          <Skeleton className="h-12 w-1/3" />
           <Skeleton className="h-64 w-full" />
         </div>
       </div>
@@ -65,36 +55,20 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   if (storeStatus === 'error') {
     return (
       <div className="mx-auto flex min-h-screen w-full max-w-xl flex-col items-center justify-center gap-4 p-6 text-center">
-        <h1 className="text-2xl font-semibold">Ocorreu um erro na aplicação</h1>
-        <p className="text-sm text-muted-foreground">
-          Sua sessão está ativa, mas o app não conseguiu carregar os dados da loja. Isso pode ser um problema com as permissões no Supabase (RLS/policies) ou de conexão.
-        </p>
-        {storeError ? (
-          <pre className="w-full overflow-auto rounded-md border bg-muted p-3 text-left text-xs">{storeError}</pre>
-        ) : null}
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <Button onClick={() => router.push('/onboarding')}>
-            Tentar ir para Onboarding
-          </Button>
-          <Button variant="outline" onClick={() => logout()}>
-            Voltar ao Login
-          </Button>
+        <h1 className="text-2xl font-semibold">Erro ao carregar dados</h1>
+        <p className="text-sm text-muted-foreground">{storeError || 'Não foi possível conectar ao servidor.'}</p>
+        <div className="flex gap-2">
+          <Button onClick={() => window.location.reload()}>Tentar Novamente</Button>
+          <Button variant="outline" onClick={logout}>Sair</Button>
         </div>
       </div>
     );
   }
   
-  // After loading, if the user is authenticated but doesn't have a store (and isn't on onboarding),
-  // they will be redirected by the useEffect. We show a loading state during this brief period.
-  if (!store && pathname !== '/onboarding') {
-      return (
-        <div className="flex min-h-screen w-full items-center justify-center">
-          <Skeleton className="h-screen w-screen" />
-        </div>
-      );
-  }
+  // Evita flash de conteúdo antes do redirecionamento
+  if (!isAuthenticated) return null;
+  if (!store && pathname !== '/onboarding') return null;
 
-  // Once all checks are passed, render the main app layout.
   return (
     <SidebarProvider>
       <div className="flex min-h-screen">
