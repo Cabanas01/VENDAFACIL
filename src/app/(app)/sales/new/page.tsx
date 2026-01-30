@@ -93,7 +93,7 @@ export default function NewSalePage() {
       setCart([...cart, {
         product_id: product.id,
         product_name_snapshot: product.name,
-        product_barcode_snapshot: product.barcode,
+        product_barcode_snapshot: product.barcode || null,
         quantity: 1,
         unit_price_cents: product.price_cents,
         subtotal_cents: product.price_cents,
@@ -123,21 +123,31 @@ export default function NewSalePage() {
   };
 
   /**
-   * Finaliza a venda no banco de dados
+   * Finaliza a venda chamando addSale do contexto.
+   * addSale agora lida internamente com a criação segura de Sales e SaleItems.
    */
   const handleFinalize = async (method: 'cash' | 'pix' | 'card') => {
+    if (cart.length === 0) return;
+    
     setIsSubmitting(true);
     try {
-      await addSale(cart, method);
-      toast({ title: 'Venda realizada!', description: 'O estoque foi atualizado com sucesso.' });
-      setCart([]);
-      setIsFinalizing(false);
-      router.push('/sales');
+      // addSale agora retorna o objeto Sale real após criar cabeçalho e itens
+      const sale = await addSale(cart, method);
+      
+      if (sale && sale.id) {
+        toast({ 
+          title: 'Venda realizada!', 
+          description: `Venda #${sale.id.substring(0, 8)} registrada com sucesso.` 
+        });
+        setCart([]);
+        setIsFinalizing(false);
+        router.push('/sales');
+      }
     } catch (error: any) {
       toast({
         variant: 'destructive',
         title: 'Erro ao processar venda',
-        description: error.message
+        description: error.message || 'Falha técnica ao salvar venda.'
       });
     } finally {
       setIsSubmitting(false);

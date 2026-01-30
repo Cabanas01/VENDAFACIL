@@ -233,22 +233,69 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return data as Product || null;
   }, [store]);
 
+  /**
+   * Finaliza a venda seguindo o fluxo de integridade do banco:
+   * 1. Criar Registro de Venda (Sales) e capturar o ID (UUID)
+   * 2. Inserir itens vinculados ao ID real da venda
+   * 3. Atualizar estoque atômico
+   */
   const addSale = useCallback(async (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => {
-    if (!store || !user) return null;
+    if (!store || !user) throw new Error('Sessão ou Loja inválida para registrar venda.');
+    
     const total = cart.reduce((sum, item) => sum + item.subtotal_cents, 0);
+
+    // ETAPA 1: Inserir a venda e obter o ID real (gerado pelo banco)
+    const { data: sale, error: saleError } = await supabase
+      .from('sales')
+      .insert({ 
+        store_id: store.id, 
+        total_cents: total, 
+        payment_method: paymentMethod 
+      })
+      .select()
+      .single();
+
+    if (saleError || !sale) {
+      console.error('[SALE_ERROR] Falha ao criar cabeçalho da venda:', saleError);
+      throw new Error('Não foi possível registrar a venda no sistema.');
+    }
+
     try {
-      const { data: sale } = await supabase.from('sales').insert({ store_id: store.id, total_cents: total, payment_method: paymentMethod }).select().single();
+      // ETAPA 2: Preparar e inserir itens vinculados ao sale.id capturado
+      const itemsToInsert = cart.map(item => ({
+        sale_id: sale.id, // UUID real gerado pelo banco
+        product_id: item.product_id,
+        product_name_snapshot: item.product_name_snapshot,
+        product_barcode_snapshot: item.product_barcode_snapshot || null,
+        quantity: item.quantity,
+        unit_price_cents: item.unit_price_cents,
+        subtotal_cents: item.subtotal_cents
+      }));
+
+      const { error: itemsError } = await supabase
+        .from('sale_items')
+        .insert(itemsToInsert);
+
+      if (itemsError) throw itemsError;
+
+      // ETAPA 3: Atualizar estoque via RPC atômico para cada produto
       for (const item of cart) {
-        await supabase.from('sale_items').insert({
-          sale_id: sale.id, product_id: item.product_id, product_name_snapshot: item.product_name_snapshot,
-          product_barcode_snapshot: item.product_barcode_snapshot, quantity: item.quantity,
-          unit_price_cents: item.unit_price_cents, subtotal_cents: item.subtotal_cents
+        const { error: stockError } = await supabase.rpc('decrement_stock', { 
+          p_product_id: item.product_id, 
+          p_quantity: item.quantity 
         });
-        await supabase.rpc('decrement_stock', { p_product_id: item.product_id, p_quantity: item.quantity });
+        if (stockError) console.error(`[STOCK_ERROR] Falha ao atualizar produto ${item.product_id}:`, stockError);
       }
+
+      // Sincronizar dados globais após sucesso total
       await fetchStoreData(user.id);
       return sale as Sale;
-    } catch (err) { throw err; }
+
+    } catch (err: any) {
+      console.error('[SALE_TRANSACTION_ERROR] Erro na inserção de itens ou estoque. A venda foi registrada mas está incompleta.', err);
+      // Aqui poderíamos implementar um rollback manual se necessário, deletando sale.id
+      throw new Error('A venda foi registrada, mas ocorreu um erro ao salvar os itens ou atualizar o estoque.');
+    }
   }, [store, user, fetchStoreData]);
 
   const setCashRegisters = useCallback(async (action: any) => {
