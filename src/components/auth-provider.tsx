@@ -24,14 +24,13 @@ import type {
   StoreAccessStatus,
   Customer,
 } from '@/lib/types';
-import { addDays } from 'date-fns';
 
 type AuthContextType = {
   user: User | null;
   store: Store | null;
   session: Session | null;
   isAuthenticated: boolean;
-  isLoading: boolean;
+  isLoading: boolean; // Initial auth check
   storeStatus: StoreStatus;
   storeError: string | null;
   accessStatus: StoreAccessStatus | null;
@@ -86,6 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             acesso_liberado: false,
             data_fim_acesso: null,
             plano_nome: 'Erro',
+            plano_tipo: 'free',
             mensagem: 'Não foi possível verificar seu acesso.'
         });
         return;
@@ -98,6 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             acesso_liberado: false,
             data_fim_acesso: null,
             plano_nome: 'Sem Plano',
+            plano_tipo: 'free',
             mensagem: 'Sua loja não possui um plano de acesso.'
         });
     }
@@ -171,8 +172,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [fetchAccessStatus]);
 
-  const refreshSession = useCallback(async () => {
-    const { data: { session: currentSession } } = await supabase.auth.getSession();
+  const handleAuthStateChange = useCallback(async (currentSession: Session | null) => {
     setSession(currentSession);
     const currentUser = currentSession?.user;
     
@@ -190,30 +190,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [fetchStoreData]);
 
   useEffect(() => {
-    // Inicialização proativa
-    refreshSession();
+    let mounted = true;
 
+    // Check initial session
+    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
+      if (mounted) {
+        handleAuthStateChange(initialSession);
+      }
+    });
+
+    // Listen for changes
     const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (_event, newSession) => {
-        if (newSession?.access_token !== session?.access_token) {
-          refreshSession();
+      async (event, newSession) => {
+        if (mounted) {
+          if (event === 'SIGNED_OUT') {
+            handleAuthStateChange(null);
+          } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+            handleAuthStateChange(newSession);
+          }
         }
       }
     );
 
     return () => {
+      mounted = false;
       authListener.subscription.unsubscribe();
     };
-  }, [refreshSession, session?.access_token]);
+  }, [handleAuthStateChange]);
 
   const logout = useCallback(async () => {
     setIsLoading(true);
     await supabase.auth.signOut();
-    setSession(null);
-    setUser(null);
-    setStore(null);
-    setStoreStatus('unknown');
-    setIsLoading(false);
     router.replace('/login');
   }, [router]);
 

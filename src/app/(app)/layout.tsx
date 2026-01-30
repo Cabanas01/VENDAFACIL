@@ -15,14 +15,15 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => {
-    // Só age após o carregamento inicial da sessão
     if (isLoading) return;
 
+    // Protection: Redirect to login if not authenticated
     if (!isAuthenticated) {
       router.replace('/login');
       return;
     }
 
+    // Protection: Onboarding flow
     if (storeStatus === 'none' && pathname !== '/onboarding') {
       router.replace('/onboarding');
       return;
@@ -33,19 +34,28 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       return;
     }
     
-    // Lógica de Paywall
+    // Paywall Protection
     if (accessStatus && !accessStatus.acesso_liberado && pathname !== '/billing' && pathname !== '/settings') {
         router.replace('/billing?reason=expired');
     }
 
   }, [isLoading, isAuthenticated, storeStatus, pathname, router, accessStatus]);
 
-  // Enquanto carrega a sessão inicial, mostra skeleton total
-  if (isLoading) {
+  // Show skeleton during initial authentication or store loading
+  if (isLoading || (isAuthenticated && (storeStatus === 'loading' || storeStatus === 'unknown'))) {
     return (
-      <div className="flex min-h-screen w-full items-center justify-center p-8">
-        <div className="w-full max-w-4xl space-y-4">
-          <Skeleton className="h-12 w-1/3" />
+      <div className="flex min-h-screen w-full">
+        <div className="hidden w-64 border-r bg-background p-4 md:block">
+          <Skeleton className="h-12 w-full mb-8" />
+          <div className="space-y-2">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        </div>
+        <div className="flex-1 p-4 sm:p-6 lg:p-8">
+          <Skeleton className="h-12 w-1/3 mb-8" />
           <Skeleton className="h-64 w-full" />
         </div>
       </div>
@@ -65,7 +75,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     );
   }
   
-  // Evita flash de conteúdo antes do redirecionamento
+  // Final safeguard to avoid rendering content while redirecting
   if (!isAuthenticated) return null;
   if (!store && pathname !== '/onboarding') return null;
 

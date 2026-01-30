@@ -59,7 +59,7 @@ export default function LoginPage() {
   const [mode, setMode] = useState<AuthModeWithConfirm>('login');
   const [lastSignupEmail, setLastSignupEmail] = useState<string>('');
 
-  // Redirecionamento reativo se já estiver logado
+  // Reactive Navigation: Let the AuthProvider update the state and then redirect
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
       const next = searchParams.get('next') || '/dashboard';
@@ -97,11 +97,8 @@ export default function LoginPage() {
         title: "Erro no login",
         description: result.error.message,
       });
-    } else {
-      // Redirecionamento manual após sucesso
-      const next = searchParams.get('next') || '/dashboard';
-      router.replace(next);
     }
+    // Success is handled by the useEffect watching isAuthenticated
   };
 
   const handleSignup = async (values: z.infer<typeof signupSchema>) => {
