@@ -1,405 +1,326 @@
+
 'use client';
 
+/**
+ * @fileOverview OnboardingPage (Dumb Form)
+ * 
+ * Coleta os dados comerciais para a criação da primeira loja.
+ * NÃO executa redirecionamentos após o sucesso. Confia no AppLayout (Guardião Único).
+ */
+
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Store, MapPin, Phone, Clock, ArrowRight } from 'lucide-react';
 import { useAuth } from '@/components/auth-provider';
+import { useToast } from '@/hooks/use-toast';
+import { isValidCnpj } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
-import { useToast } from '@/hooks/use-toast';
-import { PageHeader } from '@/components/page-header';
-import { isValidCnpj } from '@/lib/utils';
 
-const states = [
-  'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'
-];
-
-const companySchema = z.object({
-  cnpj: z.string().refine(isValidCnpj, { message: 'CNPJ inválido.' }),
-  legal_name: z.string().min(1, { message: 'Razão Social é obrigatória.' }),
-  name: z.string().min(1, { message: 'Nome Fantasia é obrigatório.' }),
-  isMei: z.boolean().default(false),
-  stateRegistration: z.string().optional(),
-  municipalRegistration: z.string().optional(),
-});
-
-const addressSchema = z.object({
-  cep: z.string().length(9, { message: 'CEP deve ter 8 dígitos.' }),
-  street: z.string().min(1, { message: 'Rua é obrigatória.' }),
-  number: z.string().min(1, { message: 'Número é obrigatório.' }),
-  complement: z.string().optional(),
-  neighborhood: z.string().min(1, { message: 'Bairro é obrigatório.' }),
-  city: z.string().min(1, { message: 'Cidade é obrigatória.' }),
-  state: z.string().min(2, { message: 'Estado é obrigatório.' }),
-});
-
-const preferencesSchema = z.object({
-  phone: z.string().optional(),
+const onboardingSchema = z.object({
+  name: z.string().min(3, 'O nome fantasia deve ter pelo menos 3 caracteres'),
+  legal_name: z.string().min(3, 'A razão social deve ter pelo menos 3 caracteres'),
+  cnpj: z.string().refine(isValidCnpj, 'CNPJ inválido'),
+  phone: z.string().min(10, 'Telefone inválido'),
   timezone: z.string().default('America/Sao_Paulo'),
-  businessType: z.string().optional(),
+  cep: z.string().length(9, 'CEP inválido'),
+  street: z.string().min(1, 'Rua é obrigatória'),
+  number: z.string().min(1, 'Número é obrigatório'),
+  neighborhood: z.string().min(1, 'Bairro é obrigatório'),
+  city: z.string().min(1, 'Cidade é obrigatória'),
+  state: z.string().length(2, 'Estado inválido'),
 });
-
-const onboardingSchema = companySchema.merge(addressSchema).merge(preferencesSchema);
 
 type OnboardingValues = z.infer<typeof onboardingSchema>;
 
-const steps = [
-  { id: 'empresa', title: 'Identificação da Empresa', fields: ['cnpj', 'legal_name', 'name', 'isMei', 'stateRegistration', 'municipalRegistration'] as const, schema: companySchema },
-  { id: 'endereco', title: 'Endereço Comercial', fields: ['cep', 'street', 'number', 'complement', 'neighborhood', 'city', 'state'] as const, schema: addressSchema },
-  { id: 'preferencias', title: 'Contato e Preferências', fields: ['phone', 'timezone', 'businessType'] as const, schema: preferencesSchema },
-];
-
 export default function OnboardingPage() {
-  const router = useRouter();
-  const { createStore, storeError } = useAuth();
+  const { createStore } = useAuth();
   const { toast } = useToast();
-  const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [step, setStep] = useState(1);
 
   const form = useForm<OnboardingValues>({
     resolver: zodResolver(onboardingSchema),
     defaultValues: {
-      isMei: false,
       timezone: 'America/Sao_Paulo',
-      stateRegistration: '',
-      municipalRegistration: '',
-      complement: '',
-      phone: '',
-      businessType: '',
-      cnpj: '',
-      legal_name: '',
-      name: '',
-      cep: '',
-      street: '',
-      number: '',
-      neighborhood: '',
-      city: '',
-      state: '',
+      state: 'SP'
     },
   });
-
-  const { trigger } = form;
-
-  const nextStep = async () => {
-    const isValid = await trigger(steps[currentStep].fields);
-    if (isValid) {
-      setCurrentStep((prev) => Math.min(prev + 1, steps.length - 1));
-    }
-  };
-
-  const prevStep = () => {
-    setCurrentStep((prev) => Math.max(prev - 1, 0));
-  };
-  
-  const handleCepChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    let cep = e.target.value.replace(/\D/g, '');
-    if (cep.length > 5) {
-      cep = cep.slice(0, 5) + '-' + cep.slice(5, 8);
-    }
-    form.setValue('cep', cep);
-
-    if (cep.replace('-', '').length === 8) {
-      try {
-        const response = await fetch(`https://viacep.com.br/ws/${cep.replace('-', '')}/json/`);
-        const data = await response.json();
-        if (!data.erro) {
-          form.setValue('street', data.logradouro, { shouldValidate: true });
-          form.setValue('neighborhood', data.bairro, { shouldValidate: true });
-          form.setValue('city', data.localidade, { shouldValidate: true });
-          form.setValue('state', data.uf, { shouldValidate: true });
-        }
-      } catch (error) {
-        console.error("Failed to fetch CEP:", error);
-      }
-    }
-  }
-
-  const handleCnpjChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    let value = e.target.value.replace(/\D/g, '');
-    value = value.slice(0, 14);
-    
-    // Apply mask
-    let maskedValue = value;
-    maskedValue = maskedValue.replace(/^(\d{2})(\d)/, '$1.$2');
-    maskedValue = maskedValue.replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3');
-    maskedValue = maskedValue.replace(/\.(\d{3})(\d)/, '.$1/$2');
-    maskedValue = maskedValue.replace(/(\d{4})(\d)/, '$1-$2');
-    form.setValue('cnpj', maskedValue);
-
-    // Fetch data if CNPJ is complete
-    if (value.length === 14 && isValidCnpj(maskedValue)) {
-      try {
-        const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${value}`);
-        if(response.ok) {
-            const data = await response.json();
-            form.setValue('legal_name', data.razao_social, { shouldValidate: true });
-            form.setValue('name', data.nome_fantasia || data.razao_social, { shouldValidate: true });
-            form.setValue('cep', data.cep, { shouldValidate: true });
-            form.setValue('street', data.logradouro, { shouldValidate: true });
-            form.setValue('number', data.numero, { shouldValidate: true });
-            form.setValue('neighborhood', data.bairro, { shouldValidate: true });
-            form.setValue('city', data.municipio, { shouldValidate: true });
-            form.setValue('state', data.uf, { shouldValidate: true });
-            form.setValue('phone', data.ddd_telefone_1, { shouldValidate: true });
-            toast({ title: 'Dados do CNPJ preenchidos automaticamente!' });
-        }
-      } catch (error) {
-        console.error("Failed to fetch CNPJ data:", error);
-      }
-    }
-  }
 
   const onSubmit = async (values: OnboardingValues) => {
     setIsSubmitting(true);
     try {
-      toast({
-        title: 'Criando sua loja...',
-        description: 'Aguarde um momento.',
-      });
-
-      const storeData = {
+      await createStore({
         name: values.name,
-        cnpj: values.cnpj,
         legal_name: values.legal_name,
+        cnpj: values.cnpj,
+        phone: values.phone,
+        timezone: values.timezone,
         address: {
           cep: values.cep,
           street: values.street,
           number: values.number,
-          complement: values.complement,
           neighborhood: values.neighborhood,
           city: values.city,
-          state: values.state,
-        },
-        phone: values.phone,
-        timezone: values.timezone,
-      };
-
-      const newStore = await createStore(storeData);
-
-      if (!newStore) {
-        toast({
-          variant: 'destructive',
-          title: 'Erro ao criar loja',
-          description: storeError || 'Não foi possível criar sua loja. Verifique no Supabase se as funções/policies foram aplicadas.',
-        });
-      } else {
-        toast({
-          title: 'Loja criada com sucesso!',
-          description: 'Redirecionando para o painel...',
-        });
-        // Navigation is now handled by the layout component reactively
-      }
-    } catch (e: any) {
-      console.error('[ONBOARDING] create store exception', e);
+          state: values.state
+        }
+      });
+      // Sucesso: O AppLayout detectará 'has_store' e levará ao Dashboard automaticamente.
+    } catch (error: any) {
       toast({
         variant: 'destructive',
-        title: 'Erro inesperado',
-        description: e?.message || 'Falha ao criar loja.',
+        title: 'Erro ao criar loja',
+        description: error.message || 'Verifique os dados e tente novamente.'
       });
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const progress = ((currentStep + 1) / steps.length) * 100;
+  const handleCepChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    let val = e.target.value.replace(/\D/g, '');
+    if (val.length > 5) val = val.slice(0, 5) + '-' + val.slice(5, 8);
+    form.setValue('cep', val);
+
+    if (val.replace('-', '').length === 8) {
+      try {
+        const res = await fetch(`https://viacep.com.br/ws/${val.replace('-', '')}/json/`);
+        const data = await res.json();
+        if (!data.erro) {
+          form.setValue('street', data.logradouro);
+          form.setValue('neighborhood', data.bairro);
+          form.setValue('city', data.localidade);
+          form.setValue('state', data.uf);
+        }
+      } catch (err) {
+        console.error('Falha ao buscar CEP');
+      }
+    }
+  };
 
   return (
-    <div className="w-full max-w-4xl mx-auto">
-      <PageHeader title="Configuração da sua loja" subtitle="Precisamos de algumas informações para começar." />
+    <Card className="shadow-2xl border-border/50">
+      <CardHeader className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            <CardTitle className="text-2xl font-headline font-bold">Configuração da Loja</CardTitle>
+            <CardDescription>Precisamos de alguns dados para ativar seu painel.</CardDescription>
+          </div>
+          <Store className="h-8 w-8 text-primary" />
+        </div>
+        <Progress value={step === 1 ? 50 : 100} className="h-2" />
+      </CardHeader>
 
-      <Card className="shadow-lg">
-        <CardHeader>
-          <Progress value={progress} className="mb-4" />
-          <CardTitle>{steps[currentStep].title}</CardTitle>
-          <CardDescription>Passo {currentStep + 1} de {steps.length}</CardDescription>
-        </CardHeader>
-
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)}>
-            <CardContent className="space-y-6">
-              {currentStep === 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <FormField control={form.control} name="cnpj" render={({ field }) => (
-                    <FormItem className="md:col-span-1">
-                      <FormLabel>CNPJ</FormLabel>
-                      <FormControl>
-                        <Input placeholder="00.000.000/0000-00" {...field} onChange={handleCnpjChange} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={form.control} name="legal_name" render={({ field }) => (
-                    <FormItem className="md:col-span-1">
-                      <FormLabel>Razão Social</FormLabel>
-                      <FormControl><Input placeholder="Padaria X LTDA" {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={form.control} name="name" render={({ field }) => (
-                    <FormItem className="md:col-span-2">
-                      <FormLabel>Nome Fantasia</FormLabel>
-                      <FormControl><Input placeholder="Padaria do João" {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={form.control} name="stateRegistration" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Inscrição Estadual (opcional)</FormLabel>
-                      <FormControl><Input {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={form.control} name="municipalRegistration" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Inscrição Municipal (opcional)</FormLabel>
-                      <FormControl><Input {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={form.control} name="isMei" render={({ field }) => (
-                    <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 md:col-span-2">
-                      <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl>
-                      <div className="space-y-1 leading-none">
-                        <FormLabel>Sou MEI</FormLabel>
-                      </div>
-                    </FormItem>
-                  )} />
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)}>
+          <CardContent className="space-y-6">
+            {step === 1 && (
+              <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
+                <div className="flex items-center gap-2 text-sm font-semibold text-primary mb-2">
+                  <Store className="h-4 w-4" /> Dados Comerciais
                 </div>
-              )}
-
-              {currentStep === 1 && (
-                <div className="grid grid-cols-1 md:grid-cols-6 gap-6">
-                   <FormField control={form.control} name="cep" render={({ field }) => (
-                    <FormItem className="md:col-span-2">
-                      <FormLabel>CEP</FormLabel>
-                      <FormControl><Input placeholder="00000-000" {...field} onChange={handleCepChange} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={form.control} name="street" render={({ field }) => (
-                    <FormItem className="md:col-span-4">
-                      <FormLabel>Rua/Logradouro</FormLabel>
-                      <FormControl><Input {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                   <FormField control={form.control} name="number" render={({ field }) => (
-                    <FormItem className="md:col-span-2">
-                      <FormLabel>Número</FormLabel>
-                      <FormControl><Input {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={form.control} name="complement" render={({ field }) => (
-                    <FormItem className="md:col-span-4">
-                      <FormLabel>Complemento (opcional)</FormLabel>
-                      <FormControl><Input {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={form.control} name="neighborhood" render={({ field }) => (
-                    <FormItem className="md:col-span-2">
-                      <FormLabel>Bairro</FormLabel>
-                      <FormControl><Input {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={form.control} name="city" render={({ field }) => (
-                    <FormItem className="md:col-span-2">
-                      <FormLabel>Cidade</FormLabel>
-                      <FormControl><Input {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={form.control} name="state" render={({ field }) => (
-                    <FormItem className="md:col-span-2">
-                      <FormLabel>Estado</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione o estado" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {states.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                </div>
-              )}
-
-              {currentStep === 2 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <FormField control={form.control} name="phone" render={({ field }) => (
-                        <FormItem>
-                        <FormLabel>Telefone/WhatsApp (opcional)</FormLabel>
-                        <FormControl><Input placeholder="(11) 99999-9999" {...field} /></FormControl>
+                <div className="grid gap-4">
+                  <FormField
+                    control={form.control}
+                    name="cnpj"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>CNPJ</FormLabel>
+                        <FormControl><Input placeholder="00.000.000/0000-00" {...field} /></FormControl>
                         <FormMessage />
-                        </FormItem>
-                    )} />
-                    <FormField control={form.control} name="businessType" render={({ field }) => (
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Nome Fantasia</FormLabel>
+                        <FormControl><Input placeholder="Ex: Padaria do João" {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="legal_name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Razão Social</FormLabel>
+                        <FormControl><Input placeholder="Ex: João Silva Alimentos LTDA" {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="phone"
+                      render={({ field }) => (
                         <FormItem>
-                        <FormLabel>Tipo de negócio (opcional)</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormLabel>Telefone</FormLabel>
+                          <FormControl><Input placeholder="(11) 99999-9999" {...field} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="timezone"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Fuso Horário</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
                             <FormControl>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Selecione o tipo" />
-                            </SelectTrigger>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Selecione" />
+                              </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                                <SelectItem value="restaurante_lanchonete">Restaurante/Lanchonete</SelectItem>
-                                <SelectItem value="mercearia_mercado">Mercearia/Mercado</SelectItem>
-                                <SelectItem value="padaria_confeitaria">Padaria/Confeitaria</SelectItem>
-                                <SelectItem value="roupas_acessorios">Loja de Roupas e Acessórios</SelectItem>
-                                <SelectItem value="salao_beleza_barbearia">Salão de Beleza/Barbearia</SelectItem>
-                                <SelectItem value="farmacia_drogaria">Farmácia/Drogaria</SelectItem>
-                                <SelectItem value="pet_shop">Pet Shop</SelectItem>
-                                <SelectItem value="oficina_mecanica">Oficina Mecânica</SelectItem>
-                                <SelectItem value="construcao_reforma">Material de Construção</SelectItem>
-                                <SelectItem value="informatica_eletronicos">Informática e Eletrônicos</SelectItem>
-                                <SelectItem value="papelaria_livraria">Papelaria e Livraria</SelectItem>
-                                <SelectItem value="servicos_gerais">Prestação de Serviços</SelectItem>
-                                <SelectItem value="outros">Outros</SelectItem>
+                              <SelectItem value="America/Sao_Paulo">Brasília (GMT-3)</SelectItem>
+                              <SelectItem value="America/Manaus">Manaus (GMT-4)</SelectItem>
                             </SelectContent>
-                        </Select>
-                        <FormMessage />
+                          </Select>
+                          <FormMessage />
                         </FormItem>
-                    )} />
+                      )}
+                    />
+                  </div>
                 </div>
-              )}
-            </CardContent>
+              </div>
+            )}
 
-            <CardFooter className="flex justify-between">
-              {currentStep > 0 && (
-                <Button type="button" variant="outline" onClick={prevStep}>
-                  Voltar
-                </Button>
-              )}
-              {currentStep < steps.length - 1 && (
-                 <Button type="button" onClick={nextStep} className="ml-auto">
-                    Avançar
-                </Button>
-              )}
-              {currentStep === steps.length - 1 && (
-                <Button type="submit" disabled={isSubmitting} className="ml-auto">
-                  {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Criar minha loja
-                </Button>
-              )}
-            </CardFooter>
-          </form>
-        </Form>
-      </Card>
-    </div>
+            {step === 2 && (
+              <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
+                <div className="flex items-center gap-2 text-sm font-semibold text-primary mb-2">
+                  <MapPin className="h-4 w-4" /> Localização
+                </div>
+                <div className="grid gap-4">
+                  <FormField
+                    control={form.control}
+                    name="cep"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>CEP</FormLabel>
+                        <FormControl><Input placeholder="00000-000" {...field} onChange={handleCepChange} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <div className="grid grid-cols-4 gap-4">
+                    <div className="col-span-3">
+                      <FormField
+                        control={form.control}
+                        name="street"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Rua</FormLabel>
+                            <FormControl><Input {...field} /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                    <div className="col-span-1">
+                      <FormField
+                        control={form.control}
+                        name="number"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Nº</FormLabel>
+                            <FormControl><Input {...field} /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </div>
+                  <FormField
+                    control={form.control}
+                    name="neighborhood"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Bairro</FormLabel>
+                        <FormControl><Input {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="col-span-2">
+                      <FormField
+                        control={form.control}
+                        name="city"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Cidade</FormLabel>
+                            <FormControl><Input {...field} /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                    <div className="col-span-1">
+                      <FormField
+                        control={form.control}
+                        name="state"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>UF</FormLabel>
+                            <FormControl><Input {...field} maxLength={2} className="uppercase" /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </CardContent>
+
+          <CardFooter className="flex justify-between border-t pt-6 bg-muted/20">
+            {step === 2 && (
+              <Button type="button" variant="ghost" onClick={() => setStep(1)} disabled={isSubmitting}>
+                Voltar
+              </Button>
+            )}
+            
+            {step === 1 ? (
+              <Button 
+                type="button" 
+                className="ml-auto group" 
+                onClick={() => setStep(2)}
+              >
+                Próximo passo
+                <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
+              </Button>
+            ) : (
+              <Button 
+                type="submit" 
+                className="ml-auto" 
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Finalizando...
+                  </>
+                ) : (
+                  'Concluir Onboarding'
+                )}
+              </Button>
+            )}
+          </CardFooter>
+        </form>
+      </Form>
+    </Card>
   );
 }

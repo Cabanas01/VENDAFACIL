@@ -1,3 +1,4 @@
+
 'use client';
 
 /**
@@ -65,7 +66,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setStoreStatus('loading_store');
     
     try {
-      // 1. Tentar buscar como Proprietário (Owner)
       const { data: ownerStore, error: ownerError } = await supabase
         .from('stores')
         .select('id')
@@ -80,7 +80,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       let storeId = ownerStore?.id;
 
-      // 2. Se não encontrou como owner, tentar como Staff
       if (!storeId) {
         const { data: memberEntry, error: memberError } = await supabase
           .from('store_members')
@@ -96,14 +95,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         storeId = memberEntry?.store_id;
       }
 
-      // 3. DECISÃO FINAL: Só admitimos 'no_store' se ambas as buscas forem null SEM erro técnico.
       if (!storeId) {
         setStoreStatus('no_store');
         setStore(null);
         return;
       }
 
-      // 4. Carregamento atômico de dados
       const [statusRes, storeRes, productsRes, salesRes, cashRes, membersRes] = await Promise.all([
         (supabase.rpc as any)('get_store_access_status', { p_store_id: storeId }),
         supabase.from('stores').select('*').eq('id', storeId).single(),
@@ -119,7 +116,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // Processamento de membros para UI de configuração
       let members: StoreMember[] = [];
       if (membersRes.data && membersRes.data.length > 0) {
         const memberUserIds = membersRes.data.map(m => m.user_id);
@@ -133,7 +129,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         })) as StoreMember[];
       }
 
-      // Commit Final
       setAccessStatus(statusRes.data?.[0] || null);
       setStore({ ...storeRes.data, members } as Store);
       setProducts(productsRes.data as Product[] || []);
@@ -196,6 +191,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const createStore = useCallback(async (storeData: any) => {
     if (!user) return null;
+    
+    // Respeitando a assinatura exata exigida pela RPC conforme logs de erro anteriores
     const { data, error } = await (supabase.rpc as any)('create_new_store', {
       p_name: storeData.name,
       p_legal_name: storeData.legal_name,
@@ -204,7 +201,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       p_phone: storeData.phone,
       p_timezone: storeData.timezone,
     });
-    if (error) throw error;
+
+    if (error) {
+      console.error('[AUTH] Falha ao criar loja via RPC:', error);
+      throw error;
+    }
+
+    // Após o sucesso da RPC, sincronizamos os dados
     await fetchStoreData(user.id);
     return data as Store;
   }, [user, fetchStoreData]);
