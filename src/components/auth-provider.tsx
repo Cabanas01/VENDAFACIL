@@ -1,3 +1,4 @@
+
 'use client';
 
 /**
@@ -236,18 +237,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [store]);
 
   const addSale = useCallback(async (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => {
-    // 1. Garantia de Sessão Fresca (Evita erro de RLS por JWT expirado)
-    const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser();
+    // 1. Sincronização Ativa de Sessão (Evita expiração silenciosa)
+    const { data: sessionData } = await supabase.auth.getSession();
+    const currentUser = sessionData.session?.user;
     const currentStore = store;
 
-    if (authError || !currentUser || !currentStore) {
-      console.error('[SALE_ABORTED] Sessão ou Loja inválida.', { authError, currentUser, currentStore });
-      throw new Error('Sua sessão expirou. Por favor, recarregue a página e entre novamente.');
+    if (!currentUser || !currentStore) {
+      console.error('[SALE_ABORTED] Sessão ou Loja ausente.');
+      throw new Error('Sua sessão expirou. Por favor, entre novamente para continuar.');
     }
     
     const total = cart.reduce((sum, item) => sum + item.subtotal_cents, 0);
 
-    // ETAPA 1: Inserir o cabeçalho da venda e capturar o ID real gerado pelo banco
+    // ETAPA 1: Inserir o cabeçalho da venda
     const { data: createdSale, error: saleError } = await supabase
       .from('sales')
       .insert({ 
@@ -260,14 +262,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (saleError || !createdSale) {
       console.error('[SALE_DB_ERROR]', saleError);
-      const errorMsg = saleError?.message || '';
-      if (errorMsg.includes('security policy') || errorMsg.includes('RLS')) {
-        throw new Error('Acesso negado pelo banco de dados. Verifique se seu plano está ativo.');
+      const msg = saleError?.message || '';
+      
+      // Detecção específica de limites de plano antes da mensagem genérica de RLS
+      if (msg.includes('trial_sales_limit')) {
+        throw new Error('Limite de 5 vendas do plano de avaliação atingido. Faça o upgrade para continuar.');
       }
-      if (errorMsg.includes('trial_sales_limit')) {
-        throw new Error('Limite de vendas do plano de avaliação atingido.');
+      
+      if (msg.includes('security policy') || msg.includes('RLS')) {
+        throw new Error('Acesso negado pelo banco de dados. Verifique se seu plano está ativo ou se você tem permissão nesta loja.');
       }
-      throw new Error(saleError?.message || 'Falha técnica ao registrar a venda.');
+      
+      throw new Error(msg || 'Falha técnica ao registrar a venda no servidor.');
     }
 
     try {
@@ -288,7 +294,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (itemsError) throw itemsError;
 
-      // ETAPA 3: Baixa de estoque via RPC
+      // ETAPA 3: Baixa de estoque
       for (const item of cart) {
         await supabase.rpc('decrement_stock', { 
           p_product_id: item.product_id, 
@@ -296,16 +302,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
       }
 
-      // Sincronização silenciosa
-      fetchStoreData(currentUser.id, true).catch(err => console.warn('[SYNC_AFTER_SALE_WARN]', err));
+      // Sincronização Silenciosa
+      fetchStoreData(currentUser.id, true).catch(err => console.warn('[POST_SALE_SYNC_WARN]', err));
       
       return createdSale as Sale;
 
     } catch (err: any) {
-      console.error('[SALE_FINALIZE_CRITICAL_ERROR]', err);
-      // Tentativa de Rollback do cabeçalho caso os itens falhem
+      console.error('[SALE_CRITICAL_FAILURE]', err);
+      // Rollback manual do cabeçalho caso os itens falhem (transação atômica simulada)
       await supabase.from('sales').delete().eq('id', createdSale.id);
-      throw new Error('Erro ao processar itens da venda. A transação foi cancelada.');
+      throw new Error('Erro ao processar os itens da venda. A operação foi cancelada para sua segurança.');
     }
   }, [store, fetchStoreData]);
 

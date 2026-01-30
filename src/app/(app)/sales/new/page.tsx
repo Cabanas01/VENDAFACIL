@@ -1,3 +1,4 @@
+
 'use client';
 
 /**
@@ -127,7 +128,7 @@ export default function NewSalePage() {
       if (sale && sale.id) {
         toast({ 
           title: 'Venda realizada!', 
-          description: `Venda registrada com sucesso.` 
+          description: `Comprovante gerado com sucesso.` 
         });
         setCart([]);
         setIsFinalizing(false);
@@ -138,7 +139,7 @@ export default function NewSalePage() {
       toast({
         variant: 'destructive',
         title: 'Erro ao processar venda',
-        description: error.message || 'Ocorreu uma falha técnica ao salvar a venda.'
+        description: error.message || 'Verifique se seu plano está ativo e tente novamente.'
       });
     } finally {
       setIsSubmitting(false);
@@ -336,7 +337,7 @@ export default function NewSalePage() {
           {isSubmitting && (
             <div className="absolute inset-0 bg-background/90 flex flex-col items-center justify-center rounded-lg z-50 animate-in fade-in duration-200">
               <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-              <p className="font-black text-sm uppercase tracking-widest">Sincronizando...</p>
+              <p className="font-black text-sm uppercase tracking-widest">Processando Transação...</p>
             </div>
           )}
 
