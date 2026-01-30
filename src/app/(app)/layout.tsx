@@ -15,15 +15,15 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => {
+    // Só redireciona se tivermos certeza do estado de autenticação
     if (isLoading) return;
 
-    // Protection: Redirect to login if not authenticated
     if (!isAuthenticated) {
       router.replace('/login');
       return;
     }
 
-    // Protection: Onboarding flow
+    // Fluxo de Onboarding
     if (storeStatus === 'none' && pathname !== '/onboarding') {
       router.replace('/onboarding');
       return;
@@ -34,21 +34,33 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       return;
     }
     
-    // Paywall Protection
-    if (accessStatus && !accessStatus.acesso_liberado && pathname !== '/billing' && pathname !== '/settings') {
+    // Verificação de Pagamento/Plano
+    // Aguardamos o accessStatus carregar antes de redirecionar para o billing
+    if (storeStatus === 'has' && accessStatus && !accessStatus.acesso_liberado && pathname !== '/billing' && pathname !== '/settings') {
         router.replace('/billing?reason=expired');
     }
 
   }, [isLoading, isAuthenticated, storeStatus, pathname, router, accessStatus]);
 
-  // Show skeleton during initial authentication or store loading
-  if (isLoading || (isAuthenticated && (storeStatus === 'loading' || storeStatus === 'unknown'))) {
+  // Enquanto verifica a identidade (Supabase Auth)
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen w-full items-center justify-center">
+        <Skeleton className="h-12 w-12 rounded-full" />
+      </div>
+    );
+  }
+
+  // Se não estiver logado, não renderiza nada (o useEffect redirecionará)
+  if (!isAuthenticated) return null;
+
+  // Se estiver carregando os dados da loja, mostra o esqueleto do dashboard
+  if (storeStatus === 'loading' || storeStatus === 'unknown') {
     return (
       <div className="flex min-h-screen w-full">
         <div className="hidden w-64 border-r bg-background p-4 md:block">
           <Skeleton className="h-12 w-full mb-8" />
           <div className="space-y-2">
-            <Skeleton className="h-10 w-full" />
             <Skeleton className="h-10 w-full" />
             <Skeleton className="h-10 w-full" />
             <Skeleton className="h-10 w-full" />
@@ -65,19 +77,23 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   if (storeStatus === 'error') {
     return (
       <div className="mx-auto flex min-h-screen w-full max-w-xl flex-col items-center justify-center gap-4 p-6 text-center">
-        <h1 className="text-2xl font-semibold">Erro ao carregar dados</h1>
-        <p className="text-sm text-muted-foreground">{storeError || 'Não foi possível conectar ao servidor.'}</p>
+        <h1 className="text-2xl font-semibold text-destructive">Erro de Conexão</h1>
+        <p className="text-sm text-muted-foreground">{storeError || 'Não foi possível carregar os dados da sua loja.'}</p>
         <div className="flex gap-2">
-          <Button onClick={() => window.location.reload()}>Tentar Novamente</Button>
+          <Button onClick={() => window.location.reload()}>Recarregar Página</Button>
           <Button variant="outline" onClick={logout}>Sair</Button>
         </div>
       </div>
     );
   }
   
-  // Final safeguard to avoid rendering content while redirecting
-  if (!isAuthenticated) return null;
-  if (!store && pathname !== '/onboarding') return null;
+  // Caso esteja em onboarding, renderiza sem a sidebar
+  if (pathname === '/onboarding') {
+    return <div className="min-h-screen bg-background p-4 sm:p-6 lg:p-8">{children}</div>;
+  }
+
+  // Previne renderizar conteúdo protegido se a loja ainda não estiver carregada
+  if (!store && storeStatus === 'has') return null;
 
   return (
     <SidebarProvider>

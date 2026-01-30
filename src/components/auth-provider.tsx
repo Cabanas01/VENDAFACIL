@@ -7,6 +7,7 @@ import {
   useState,
   useCallback,
   useEffect,
+  useMemo,
 } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
@@ -30,7 +31,7 @@ type AuthContextType = {
   store: Store | null;
   session: Session | null;
   isAuthenticated: boolean;
-  isLoading: boolean; // Initial auth check
+  isLoading: boolean; // Inicial check de autenticação (rápido)
   storeStatus: StoreStatus;
   storeError: string | null;
   accessStatus: StoreAccessStatus | null;
@@ -132,38 +133,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      await fetchAccessStatus(storeId);
+      // Rodar verificação de acesso e carregamento de detalhes em paralelo para ganhar tempo
+      await Promise.all([
+        fetchAccessStatus(storeId),
+        (async () => {
+          const { data: storeDetails } = await supabase
+            .from('stores')
+            .select('*, trial_used, trial_started_at')
+            .eq('id', storeId)
+            .single();
 
-      const { data: storeDetails } = await supabase
-        .from('stores')
-        .select('*, trial_used, trial_started_at')
-        .eq('id', storeId)
-        .single();
+          const [productsRes, salesRes, cashRes, membersRes] = await Promise.all([
+            supabase.from('products').select('*').eq('store_id', storeId).order('name'),
+            supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeId).order('created_at', { ascending: false }),
+            supabase.from('cash_registers').select('*').eq('store_id', storeId).order('opened_at', { ascending: false }),
+            supabase.from('store_members').select('*').eq('store_id', storeId),
+          ]);
 
-      const [productsRes, salesRes, cashRes, membersRes] = await Promise.all([
-        supabase.from('products').select('*').eq('store_id', storeId).order('name'),
-        supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeId).order('created_at', { ascending: false }),
-        supabase.from('cash_registers').select('*').eq('store_id', storeId).order('opened_at', { ascending: false }),
-        supabase.from('store_members').select('*').eq('store_id', storeId),
+          let members: StoreMember[] = [];
+          if (membersRes.data?.length) {
+            const userIds = membersRes.data.map(m => m.user_id);
+            const { data: profiles } = await supabase.from('users').select('*').in('id', userIds);
+            const map = new Map((profiles ?? []).map(p => [p.id, p]));
+            members = membersRes.data.map(m => ({
+              ...m,
+              name: map.get(m.user_id)?.name ?? null,
+              email: map.get(m.user_id)?.email ?? null,
+              avatar_url: map.get(m.user_id)?.avatar_url ?? null,
+            }));
+          }
+
+          setStore({ ...storeDetails, members } as Store);
+          setProducts(productsRes.data ?? []);
+          setSales(salesRes.data ?? []);
+          setCashRegistersState(cashRes.data ?? []);
+        })()
       ]);
 
-      let members: StoreMember[] = [];
-      if (membersRes.data?.length) {
-        const userIds = membersRes.data.map(m => m.user_id);
-        const { data: profiles } = await supabase.from('users').select('*').in('id', userIds);
-        const map = new Map((profiles ?? []).map(p => [p.id, p]));
-        members = membersRes.data.map(m => ({
-          ...m,
-          name: map.get(m.user_id)?.name ?? null,
-          email: map.get(m.user_id)?.email ?? null,
-          avatar_url: map.get(m.user_id)?.avatar_url ?? null,
-        }));
-      }
-
-      setStore({ ...storeDetails, members } as Store);
-      setProducts(productsRes.data ?? []);
-      setSales(salesRes.data ?? []);
-      setCashRegistersState(cashRes.data ?? []);
       setStoreStatus('has');
     } catch (err: any) {
       console.error('[STORE] fetch error', err);
@@ -172,42 +178,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [fetchAccessStatus]);
 
-  const handleAuthStateChange = useCallback(async (currentSession: Session | null) => {
-    setSession(currentSession);
-    const currentUser = currentSession?.user;
-    
-    if (currentUser) {
-      const { data: profile } = await supabase.from('users').select('id, email, name, avatar_url, is_admin').eq('id', currentUser.id).single();
-      setUser(profile as User);
-      await fetchStoreData(currentUser.id);
-    } else {
-      setUser(null);
-      setStore(null);
-      setAccessStatus(null);
-      setStoreStatus('unknown');
-    }
-    setIsLoading(false);
-  }, [fetchStoreData]);
-
   useEffect(() => {
     let mounted = true;
 
-    // Check initial session
+    // 1. Check initial session proativamente
     supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
       if (mounted) {
-        handleAuthStateChange(initialSession);
+        setSession(initialSession);
+        if (initialSession?.user) {
+          // Busca perfil rápido
+          supabase.from('users').select('id, email, name, avatar_url, is_admin').eq('id', initialSession.user.id).single()
+            .then(({ data: profile }) => {
+              if (mounted && profile) setUser(profile as User);
+            });
+          // Busca dados da loja em background
+          fetchStoreData(initialSession.user.id);
+        }
+        setIsLoading(false); // Libera o layout principal assim que a sessão é confirmada
       }
     });
 
-    // Listen for changes
+    // 2. Listen for auth changes
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, newSession) => {
-        if (mounted) {
-          if (event === 'SIGNED_OUT') {
-            handleAuthStateChange(null);
-          } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-            handleAuthStateChange(newSession);
+        if (!mounted) return;
+
+        if (event === 'SIGNED_OUT') {
+          setSession(null);
+          setUser(null);
+          setStore(null);
+          setAccessStatus(null);
+          setStoreStatus('unknown');
+          setIsLoading(false);
+        } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          setSession(newSession);
+          if (newSession?.user) {
+            const { data: profile } = await supabase.from('users').select('id, email, name, avatar_url, is_admin').eq('id', newSession.user.id).single();
+            if (mounted) setUser(profile as User);
+            fetchStoreData(newSession.user.id);
           }
+          setIsLoading(false);
         }
       }
     );
@@ -216,7 +226,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       mounted = false;
       authListener.subscription.unsubscribe();
     };
-  }, [handleAuthStateChange]);
+  }, [fetchStoreData]);
 
   const logout = useCallback(async () => {
     setIsLoading(true);
@@ -348,11 +358,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [store, user, fetchStoreData]);
 
+  const isAuthenticated = useMemo(() => !!session?.user, [session]);
+
   const value: AuthContextType = {
     user,
     store,
     session,
-    isAuthenticated: !!session?.user,
+    isAuthenticated,
     isLoading,
     storeStatus,
     storeError,

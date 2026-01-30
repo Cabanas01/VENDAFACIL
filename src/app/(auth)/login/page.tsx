@@ -59,7 +59,7 @@ export default function LoginPage() {
   const [mode, setMode] = useState<AuthModeWithConfirm>('login');
   const [lastSignupEmail, setLastSignupEmail] = useState<string>('');
 
-  // Reactive Navigation: Let the AuthProvider update the state and then redirect
+  // Redirecionamento reativo (backup caso o manual falhe)
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
       const next = searchParams.get('next') || '/dashboard';
@@ -88,17 +88,25 @@ export default function LoginPage() {
     formData.append('email', values.email);
     formData.append('password', values.password);
 
-    const result = await login(formData);
-    
-    if (result?.error) {
+    try {
+      const result = await login(formData);
+      
+      if (result?.error) {
+        setLoading(false);
+        toast({
+          variant: "destructive",
+          title: "Erro no login",
+          description: result.error.message,
+        });
+      } else if (result?.success) {
+        // Redirecionamento imperativo imediato para performance máxima
+        const next = searchParams.get('next') || '/dashboard';
+        router.replace(next);
+      }
+    } catch (e) {
       setLoading(false);
-      toast({
-        variant: "destructive",
-        title: "Erro no login",
-        description: result.error.message,
-      });
+      toast({ variant: 'destructive', title: 'Erro inesperado' });
     }
-    // Success is handled by the useEffect watching isAuthenticated
   };
 
   const handleSignup = async (values: z.infer<typeof signupSchema>) => {
@@ -141,22 +149,25 @@ export default function LoginPage() {
   
   if (authLoading) {
     return (
-       <div className="min-h-screen flex items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+       <div className="min-h-screen flex items-center justify-center bg-background">
+          <div className="flex flex-col items-center gap-4">
+            <Loader2 className="h-10 w-10 animate-spin text-primary" />
+            <p className="text-sm text-muted-foreground animate-pulse">Autenticando...</p>
+          </div>
        </div>
     );
   }
 
   return (
-    <Card className="w-full max-w-md shadow-2xl">
+    <Card className="w-full max-w-md shadow-2xl border-primary/10">
       <CardHeader className="text-center">
-        <div className="mx-auto mb-4">
-          <Avatar className="h-16 w-16 rounded-lg">
+        <div className="mx-auto mb-4 scale-110">
+          <Avatar className="h-16 w-16 rounded-lg shadow-sm">
             <AvatarImage src="/logo.png" alt="VendaFacil Logo" />
-            <AvatarFallback>VF</AvatarFallback>
+            <AvatarFallback className="bg-primary text-primary-foreground font-bold">VF</AvatarFallback>
           </Avatar>
         </div>
-        <CardTitle className="text-3xl font-headline">VendaFácil</CardTitle>
+        <CardTitle className="text-3xl font-headline font-bold text-primary">VendaFácil</CardTitle>
         <CardDescription>
           {
             {
@@ -171,17 +182,19 @@ export default function LoginPage() {
 
       <CardContent>
         {mode === 'confirm_email' ? (
-          <div className="space-y-4 text-center">
-            <p className="text-sm text-muted-foreground">
-              Enviamos um link de confirmação. Após confirmar, você poderá fazer o login.
-            </p>
+          <div className="space-y-4 text-center py-4">
+            <div className="bg-primary/5 p-4 rounded-lg border border-primary/10">
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Enviamos um link de confirmação para o seu e-mail. Por favor, clique no link para ativar sua conta e então retorne aqui para fazer o login.
+              </p>
+            </div>
             <Button variant="outline" className="w-full" onClick={() => setMode('login')}>
-              Ir para o Login
+              Voltar para o Login
             </Button>
           </div>
         ) : (
           <Tabs defaultValue="login" className="w-full" value={mode} onValueChange={(val) => setMode(val as AuthMode)}>
-            <TabsList className="grid w-full grid-cols-2 mb-4">
+            <TabsList className="grid w-full grid-cols-2 mb-6">
               <TabsTrigger value="login">Entrar</TabsTrigger>
               <TabsTrigger value="signup">Criar conta</TabsTrigger>
             </TabsList>
@@ -192,7 +205,7 @@ export default function LoginPage() {
                   <FormField control={loginForm.control} name="email" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Email</FormLabel>
-                      <FormControl><Input placeholder="seu@email.com" {...field} /></FormControl>
+                      <FormControl><Input placeholder="seu@email.com" type="email" autoComplete="email" {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )} />
@@ -210,9 +223,8 @@ export default function LoginPage() {
                       <FormMessage />
                     </FormItem>
                   )} />
-                  <Button type="submit" className="w-full" disabled={loading}>
-                    {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Entrar
+                  <Button type="submit" className="w-full font-bold py-6" disabled={loading}>
+                    {loading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : 'Entrar no Sistema'}
                   </Button>
                 </form>
               </Form>
@@ -224,7 +236,7 @@ export default function LoginPage() {
                   <FormField control={signupForm.control} name="email" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Email</FormLabel>
-                      <FormControl><Input placeholder="seu@email.com" {...field} /></FormControl>
+                      <FormControl><Input placeholder="seu@email.com" type="email" {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )} />
@@ -235,9 +247,8 @@ export default function LoginPage() {
                       <FormMessage />
                     </FormItem>
                   )} />
-                  <Button type="submit" className="w-full" disabled={loading}>
-                    {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Criar conta
+                  <Button type="submit" className="w-full font-bold py-6" disabled={loading}>
+                    {loading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : 'Criar minha conta'}
                   </Button>
                 </form>
               </Form>
@@ -249,13 +260,12 @@ export default function LoginPage() {
                   <FormField control={resetForm.control} name="email" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Email</FormLabel>
-                      <FormControl><Input placeholder="seu@email.com" {...field} /></FormControl>
+                      <FormControl><Input placeholder="seu@email.com" type="email" {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )} />
-                  <Button type="submit" className="w-full" disabled={loading}>
-                    {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Recuperar Senha
+                  <Button type="submit" className="w-full font-bold py-6" disabled={loading}>
+                    {loading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : 'Recuperar Senha'}
                   </Button>
                 </form>
               </Form>
@@ -264,14 +274,14 @@ export default function LoginPage() {
         )}
       </CardContent>
 
-      <CardFooter className="flex flex-col items-center justify-center text-sm">
+      <CardFooter className="flex flex-col items-center justify-center text-sm border-t bg-muted/30 pt-4">
         {mode === 'login' && (
-          <Button variant="link" size="sm" onClick={() => setMode('reset')}>
+          <Button variant="link" size="sm" onClick={() => setMode('reset')} className="text-muted-foreground hover:text-primary">
             Esqueceu sua senha?
           </Button>
         )}
         {(mode === 'reset' || mode === 'confirm_email') && (
-          <Button variant="link" size="sm" onClick={() => setMode('login')}>
+          <Button variant="link" size="sm" onClick={() => setMode('login')} className="text-muted-foreground hover:text-primary">
             Voltar para o login
           </Button>
         )}
