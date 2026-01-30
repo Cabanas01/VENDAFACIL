@@ -15,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Search, Store, ExternalLink, ShieldCheck, Mail } from 'lucide-react';
+import { Search, Store, ExternalLink, Mail } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { getPlanLabel } from '@/lib/plan-label';
 import { format } from 'date-fns';
@@ -28,18 +28,22 @@ export default function AdminStoresPage() {
 
   const fetchStores = async () => {
     setLoading(true);
-    // Buscamos lojas cruzando com o status de acesso e o email do dono
-    const { data, error } = await supabase
-      .from('stores')
-      .select(`
-        *,
-        store_access (plano_tipo, status_acesso, data_fim_acesso),
-        users (email)
-      `)
-      .order('created_at', { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from('stores')
+        .select(`
+          *,
+          store_access (plano_tipo, status_acesso, data_fim_acesso),
+          users (email)
+        `)
+        .order('created_at', { ascending: false });
 
-    if (!error) setStores(data || []);
-    setLoading(false);
+      if (!error) setStores(data || []);
+    } catch (err) {
+      console.error('Falha ao buscar lojas');
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -47,12 +51,13 @@ export default function AdminStoresPage() {
   }, []);
 
   const filteredStores = useMemo(() => {
-    const term = search.toLowerCase();
-    return stores.filter(s => 
-      s.name.toLowerCase().includes(term) || 
-      s.cnpj.includes(term) ||
-      s.users?.email?.toLowerCase().includes(term)
-    );
+    const term = (search || '').toLowerCase();
+    return stores.filter(s => {
+      const storeName = (s?.name || '').toLowerCase();
+      const storeCnpj = (s?.cnpj || '').toLowerCase();
+      const ownerEmail = (s?.users?.email || '').toLowerCase();
+      return storeName.includes(term) || storeCnpj.includes(term) || ownerEmail.includes(term);
+    });
   }, [stores, search]);
 
   return (
@@ -94,49 +99,59 @@ export default function AdminStoresPage() {
             <TableBody>
               {loading ? (
                 <TableRow><TableCell colSpan={6} className="text-center py-10">Carregando lojas...</TableCell></TableRow>
-              ) : filteredStores.map(s => (
-                <TableRow key={s.id} className="group hover:bg-muted/50 transition-colors">
-                  <TableCell>
-                    <div className="flex flex-col">
-                      <span className="font-bold text-sm">{s.name}</span>
-                      <span className="text-[10px] font-mono text-muted-foreground uppercase">{s.id}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2 text-xs">
-                      <Mail className="h-3 w-3 text-muted-foreground" />
-                      {s.users?.email || 'N/A'}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="text-[10px] font-bold uppercase">
-                      {getPlanLabel(s.store_access?.[0]?.plano_tipo)}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge 
-                      variant={s.store_access?.[0]?.status_acesso === 'ativo' ? 'default' : 'destructive'}
-                      className="text-[10px] capitalize"
-                    >
-                      {s.store_access?.[0]?.status_acesso || 'Sem Acesso'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {format(new Date(s.created_at), 'dd/MM/yyyy')}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className="gap-2"
-                      onClick={() => router.push(`/admin/stores/${s.id}`)}
-                    >
-                      Detalhes
-                      <ExternalLink className="h-3 w-3" />
-                    </Button>
+              ) : filteredStores.map(s => {
+                const access = Array.isArray(s?.store_access) ? s.store_access[0] : s?.store_access;
+                return (
+                  <TableRow key={s?.id} className="group hover:bg-muted/50 transition-colors">
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span className="font-bold text-sm">{s?.name || 'Sem Nome'}</span>
+                        <span className="text-[10px] font-mono text-muted-foreground uppercase">{s?.id}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2 text-xs">
+                        <Mail className="h-3 w-3 text-muted-foreground" />
+                        {s?.users?.email || 'N/A'}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-[10px] font-bold uppercase">
+                        {getPlanLabel(access?.plano_tipo)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge 
+                        variant={access?.status_acesso === 'ativo' ? 'default' : 'destructive'}
+                        className="text-[10px] capitalize"
+                      >
+                        {access?.status_acesso || 'Sem Acesso'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {s?.created_at ? format(new Date(s.created_at), 'dd/MM/yyyy') : '-'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="gap-2"
+                        onClick={() => router.push(`/admin/stores/${s?.id}`)}
+                      >
+                        Detalhes
+                        <ExternalLink className="h-3 w-3" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              {!loading && filteredStores.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-10 text-muted-foreground">
+                    Nenhuma loja encontrada para esta busca.
                   </TableCell>
                 </TableRow>
-              ))}
+              )}
             </TableBody>
           </Table>
         </CardContent>

@@ -67,24 +67,29 @@ export default function AdminAnalytics() {
       const fromDate = dateRange.from.toISOString();
       const toDate = (dateRange.to || dateRange.from).toISOString();
 
-      const { data, error } = await supabase
-        .rpc('get_analytics_summary', {
-          p_store_id: storeIdFilter,
-          p_from: fromDate,
-          p_to: toDate,
-        });
+      try {
+        const { data, error } = await supabase
+          .rpc('get_analytics_summary', {
+            p_store_id: storeIdFilter,
+            p_from: fromDate,
+            p_to: toDate,
+          });
 
-      if (error) {
-        toast({
-          variant: 'destructive',
-          title: 'Erro ao buscar dados de analytics',
-          description: error.message,
-        });
-        setSummary(null);
-      } else {
-        setSummary(data);
+        if (error) {
+          toast({
+            variant: 'destructive',
+            title: 'Erro ao buscar dados de analytics',
+            description: error.message,
+          });
+          setSummary(null);
+        } else {
+          setSummary(data as AnalyticsSummary);
+        }
+      } catch (err) {
+        console.error('Erro de rede ao buscar analytics');
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     fetchAnalytics();
@@ -93,8 +98,8 @@ export default function AdminAnalytics() {
   const eventsOverTimeData = useMemo(() => {
     if (!summary?.events_by_day) return [];
     return summary.events_by_day.map(d => ({
-        date: d.day ? format(parseISO(d.day), 'dd/MM') : '-',
-        total: d.count || 0
+        date: d?.day ? format(parseISO(d.day), 'dd/MM') : '-',
+        total: d?.count || 0
     }));
   }, [summary]);
 
@@ -173,7 +178,7 @@ export default function AdminAnalytics() {
                         <Activity className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{summary?.total_events ?? 0}</div>
+                        <div className="text-2xl font-bold">{summary?.total_events || 0}</div>
                     </CardContent>
                 </Card>
                  <Card>
@@ -182,7 +187,7 @@ export default function AdminAnalytics() {
                         <Eye className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{summary?.total_profile_views ?? 0}</div>
+                        <div className="text-2xl font-bold">{summary?.total_profile_views || 0}</div>
                     </CardContent>
                 </Card>
                  <Card>
@@ -191,7 +196,7 @@ export default function AdminAnalytics() {
                         <MousePointerClick className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{summary?.total_unique_clicks ?? 0}</div>
+                        <div className="text-2xl font-bold">{summary?.total_unique_clicks || 0}</div>
                     </CardContent>
                 </Card>
                  <Card>
@@ -200,7 +205,7 @@ export default function AdminAnalytics() {
                         <FileText className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{summary?.total_reports_opened ?? 0}</div>
+                        <div className="text-2xl font-bold">{summary?.total_reports_opened || 0}</div>
                     </CardContent>
                 </Card>
             </div>
@@ -223,9 +228,9 @@ export default function AdminAnalytics() {
                             </TableHeader>
                             <TableBody>
                                 {summary?.top_event_names?.map((event, idx) => (
-                                    <TableRow key={event.event_name || idx}>
-                                        <TableCell className="font-medium">{event.event_name || 'N/A'}</TableCell>
-                                        <TableCell className="text-right">{event.count || 0}</TableCell>
+                                    <TableRow key={event?.event_name || idx}>
+                                        <TableCell className="font-medium">{event?.event_name || 'N/A'}</TableCell>
+                                        <TableCell className="text-right">{event?.count || 0}</TableCell>
                                     </TableRow>
                                 ))}
                             </TableBody>

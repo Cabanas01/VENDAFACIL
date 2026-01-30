@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -23,9 +22,7 @@ export type StoreRow = {
   owner_email?: string | null;
   status: 'active' | 'trial' | 'suspended' | 'blocked' | 'deleted';
   business_type: string;
-  store_access: {
-    plano_tipo: string;
-  } | null;
+  store_access: any;
 };
 
 const businessCategories = ['general', 'restaurant', 'hamburgueria', 'pizzaria', 'acai', 'mercearia', 'farmacia', 'barbearia', 'salao', 'outros'];
@@ -64,51 +61,56 @@ export default function AdminStores() {
     setLoading(true);
     setErrorMsg(null);
 
-    let query = supabase
-      .from('stores')
-      .select('id, name, user_id, status, business_type, store_access(plano_tipo)');
+    try {
+      let query = supabase
+        .from('stores')
+        .select('id, name, user_id, status, business_type, store_access(plano_tipo)');
 
-    if (activeTab !== 'all') {
-      query = query.eq('business_type', activeTab);
-    }
-    
-    const { data: storesData, error: storesError } = await query;
-
-    if (storesError) {
-      setErrorMsg(`Erro ao buscar lojas: ${storesError.message}`);
-      setStores([]);
-      setLoading(false);
-      return;
-    }
-    
-    if (!storesData || storesData.length === 0) {
-      setStores([]);
-      setLoading(false);
-      return;
-    }
-
-    const ownerIds = [...new Set(storesData.map(s => s.user_id).filter(Boolean))];
-    let ownerEmailMap = new Map<string, string>();
-    if (ownerIds.length > 0) {
-      const { data: usersData, error: usersError } = await supabase
-        .from('users')
-        .select('id, email')
-        .in('id', ownerIds as string[]);
-
-      if (usersError) {
-        console.warn("Could not fetch owner emails:", usersError.message);
-      } else {
-        ownerEmailMap = new Map((usersData ?? []).map(u => [u.id, u.email as string]));
+      if (activeTab !== 'all' && activeTab !== 'general') {
+        query = query.eq('business_type', activeTab);
       }
-    }
-    
-    const combinedData = storesData.map((store) => ({
-      ...store,
-      owner_email: store.user_id ? ownerEmailMap.get(store.user_id) : 'N/A',
-    }));
+      
+      const { data: storesData, error: storesError } = await query;
 
-    setStores(combinedData as StoreRow[]);
-    setLoading(false);
+      if (storesError) {
+        setErrorMsg(`Erro ao buscar lojas: ${storesError.message}`);
+        setStores([]);
+        setLoading(false);
+        return;
+      }
+      
+      if (!storesData || storesData.length === 0) {
+        setStores([]);
+        setLoading(false);
+        return;
+      }
+
+      const ownerIds = [...new Set(storesData.map(s => s.user_id).filter(Boolean))];
+      let ownerEmailMap = new Map<string, string>();
+      if (ownerIds.length > 0) {
+        const { data: usersData, error: usersError } = await supabase
+          .from('users')
+          .select('id, email')
+          .in('id', ownerIds as string[]);
+
+        if (usersError) {
+          console.warn("Could not fetch owner emails:", usersError.message);
+        } else {
+          ownerEmailMap = new Map((usersData ?? []).map(u => [u.id, u.email as string]));
+        }
+      }
+      
+      const combinedData = storesData.map((store) => ({
+        ...store,
+        owner_email: store.user_id ? ownerEmailMap.get(store.user_id) : 'N/A',
+      }));
+
+      setStores(combinedData as StoreRow[]);
+    } catch (err) {
+      console.error('Erro inesperado na listagem de lojas');
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -149,50 +151,50 @@ export default function AdminStores() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {storeList.map(s => (
-                <TableRow key={s.id}>
-                  <TableCell>
-                    <div className="font-medium">{s.name ?? '-'}</div>
-                    <div className="text-xs text-muted-foreground font-mono">{s.id}</div>
-                  </TableCell>
-                  <TableCell>{s.owner_email ?? '-'}</TableCell>
-                   <TableCell>
-                    <Badge variant="secondary" className="capitalize">
-                      {getPlanLabel(s.store_access?.plano_tipo)}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={statusConfig[s.status].variant} className={`${statusConfig[s.status].className ?? ''} capitalize`}>
-                      {statusConfig[s.status].label}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                         <DropdownMenuItem onSelect={() => router.push(`/admin?tab=customers&store_id=${s.id}`)}>
-                           <Users className="mr-2 h-4 w-4" /> Ver Clientes
-                         </DropdownMenuItem>
-                        <DropdownMenuItem>
-                          <Eye className="mr-2 h-4 w-4" /> Ver Detalhes
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onSelect={() => handleOpenGrantModal(s)}>
-                            <Gift className="mr-2 h-4 w-4" /> Conceder Plano
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>
-                          <Lock className="mr-2 h-4 w-4" /> Suspender
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="text-red-500">
-                          <Trash2 className="mr-2 h-4 w-4" /> Excluir
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {storeList.map(s => {
+                const access = Array.isArray(s?.store_access) ? s.store_access[0] : s?.store_access;
+                return (
+                  <TableRow key={s?.id}>
+                    <TableCell>
+                      <div className="font-medium">{s?.name || 'Sem Nome'}</div>
+                      <div className="text-xs text-muted-foreground font-mono">{s?.id}</div>
+                    </TableCell>
+                    <TableCell>{s?.owner_email || '-'}</TableCell>
+                     <TableCell>
+                      <Badge variant="secondary" className="capitalize">
+                        {getPlanLabel(access?.plano_tipo)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={statusConfig[s?.status || 'trial'].variant} className={`${statusConfig[s?.status || 'trial'].className ?? ''} capitalize`}>
+                        {statusConfig[s?.status || 'trial'].label}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                           <DropdownMenuItem onSelect={() => router.push(`/admin/stores/${s?.id}`)}>
+                             <Eye className="mr-2 h-4 w-4" /> Ver Detalhes
+                           </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onSelect={() => handleOpenGrantModal(s)}>
+                              <Gift className="mr-2 h-4 w-4" /> Conceder Plano
+                          </DropdownMenuItem>
+                          <DropdownMenuItem>
+                            <Lock className="mr-2 h-4 w-4" /> Suspender
+                          </DropdownMenuItem>
+                          <DropdownMenuItem className="text-red-500">
+                            <Trash2 className="mr-2 h-4 w-4" /> Excluir
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
       );

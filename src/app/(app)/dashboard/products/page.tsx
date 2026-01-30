@@ -26,17 +26,19 @@ export default function ProductsDashboardPage() {
   const router = useRouter();
 
   const filteredProducts = useMemo(() => {
-    return products.filter(p => 
-      p.name.toLowerCase().includes(search.toLowerCase()) || 
-      p.category?.toLowerCase().includes(search.toLowerCase())
-    );
+    const term = (search || '').toLowerCase();
+    return products.filter(p => {
+      const productName = (p?.name || '').toLowerCase();
+      const productCat = (p?.category || '').toLowerCase();
+      return productName.includes(term) || productCat.includes(term);
+    });
   }, [products, search]);
 
   const stats = useMemo(() => {
     const totalItems = products.length;
-    const lowStock = products.filter(p => p.stock_qty <= (p.min_stock_qty ?? 0)).length;
+    const lowStock = products.filter(p => p.stock_qty <= (p.min_stock_qty || 0)).length;
     const totalInventoryValue = products.reduce((acc, p) => acc + (p.price_cents * p.stock_qty), 0);
-    const totalCostValue = products.reduce((acc, p) => acc + ((p.cost_cents ?? 0) * p.stock_qty), 0);
+    const totalCostValue = products.reduce((acc, p) => acc + ((p.cost_cents || 0) * p.stock_qty), 0);
 
     return { totalItems, lowStock, totalInventoryValue, totalCostValue };
   }, [products]);
@@ -130,15 +132,15 @@ export default function ProductsDashboardPage() {
             </TableHeader>
             <TableBody>
               {filteredProducts.map(p => {
-                const margin = p.price_cents > 0 ? ((p.price_cents - (p.cost_cents ?? 0)) / p.price_cents) * 100 : 0;
-                const isLow = p.stock_qty <= (p.min_stock_qty ?? 0);
+                const margin = p.price_cents > 0 ? ((p.price_cents - (p.cost_cents || 0)) / p.price_cents) * 100 : 0;
+                const isLow = p.stock_qty <= (p.min_stock_qty || 0);
                 
                 return (
-                  <TableRow key={p.id}>
-                    <TableCell className="font-bold">{p.name}</TableCell>
-                    <TableCell>{p.category || '-'}</TableCell>
-                    <TableCell className="text-right">{formatCurrency(p.price_cents)}</TableCell>
-                    <TableCell className="text-right text-muted-foreground">{formatCurrency(p.cost_cents ?? 0)}</TableCell>
+                  <TableRow key={p?.id}>
+                    <TableCell className="font-bold">{p?.name || 'Produto sem nome'}</TableCell>
+                    <TableCell>{p?.category || '-'}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(p?.price_cents || 0)}</TableCell>
+                    <TableCell className="text-right text-muted-foreground">{formatCurrency(p?.cost_cents || 0)}</TableCell>
                     <TableCell className="text-right">
                       <Badge variant="outline" className={margin > 30 ? 'text-green-600' : 'text-orange-600'}>
                         {margin.toFixed(0)}%
@@ -146,7 +148,7 @@ export default function ProductsDashboardPage() {
                     </TableCell>
                     <TableCell className="text-center font-mono">
                       <span className={isLow ? 'text-destructive font-bold' : ''}>
-                        {p.stock_qty}
+                        {p?.stock_qty || 0}
                       </span>
                     </TableCell>
                     <TableCell className="text-center">
