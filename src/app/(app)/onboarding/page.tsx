@@ -11,7 +11,7 @@ import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Loader2, Store, ArrowRight, Search } from 'lucide-react';
+import { Loader2, Store, ArrowRight } from 'lucide-react';
 import { useAuth } from '@/components/auth-provider';
 import { useToast } from '@/hooks/use-toast';
 import { isValidCnpj } from '@/lib/utils';
@@ -201,7 +201,7 @@ export default function OnboardingPage() {
                   <FormItem><FormLabel>Nome Fantasia</FormLabel><FormControl><Input placeholder="Ex: Padaria do Sol" {...field} /></FormControl><FormMessage /></FormItem>
                 )} />
                 <FormField control={form.control} name="legal_name" render={({ field }) => (
-                  <FormItem><FormLabel>Razão Social</FormLabel><FormControl><Input placeholder="Ex: Panificadora Sol LTDA" {...field} /></FormControl><FormMessage /></FormMessage>
+                  <FormItem><FormLabel>Razão Social</FormLabel><FormControl><Input placeholder="Ex: Panificadora Sol LTDA" {...field} /></FormControl><FormMessage /></FormItem>
                 )} />
               </div>
             ) : (
