@@ -17,6 +17,10 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 
+/**
+ * LoginPage (Burra)
+ * Apenas executa a ação de login. Não navega nem reage a estado global.
+ */
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -46,11 +50,9 @@ export default function LoginPage() {
         setError("Verifique seu e-mail para confirmar o cadastro.");
       }
     } catch (err: any) {
-      setError(err.message || 'Ocorreu um erro inesperado.');
+      setError(err.message || 'Falha na autenticação.');
     } finally {
       setLoading(false);
-      // NUNCA redirecionar manualmente aqui. 
-      // O AppLayout cuidará da navegação assim que o estado global atualizar.
     }
   };
 

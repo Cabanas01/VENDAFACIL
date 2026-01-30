@@ -1,7 +1,8 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { redirect } from 'next/navigation';
+import { useEffect } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { MainNav } from '@/components/main-nav';
 import { useAuth } from '@/components/auth-provider';
@@ -9,27 +10,36 @@ import { Loader2 } from 'lucide-react';
 
 /**
  * AppLayout (Guardião Único)
- * Centraliza a lógica de proteção de rotas e carregamento inicial.
+ * Centraliza a lógica de proteção de rotas.
  */
 export default function AppLayout({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
 
-  // 1. Aguarda carregamento inicial do AuthProvider
+  useEffect(() => {
+    // Se o carregamento terminou e não há usuário, manda para o login
+    if (!loading && !user) {
+      router.replace('/login');
+    }
+  }, [user, loading, router]);
+
+  // Enquanto carrega a sessão inicial, exibe tela de carregamento
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background">
         <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
-        <p className="text-sm text-muted-foreground animate-pulse">Autenticando...</p>
+        <p className="text-sm text-muted-foreground animate-pulse">Verificando acesso...</p>
       </div>
     );
   }
 
-  // 2. Se não houver usuário após o loading, redireciona para login
+  // Se não houver usuário, não renderiza nada (o useEffect fará o redirect)
   if (!user) {
-    redirect('/login');
+    return null;
   }
 
-  // 3. Usuário autenticado → Renderiza layout completo da aplicação
+  // Usuário autenticado → Renderiza aplicação
   return (
     <SidebarProvider>
       <div className="flex min-h-screen">

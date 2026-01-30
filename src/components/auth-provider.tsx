@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import type { User } from '@supabase/supabase-js';
+import { useRouter } from 'next/navigation';
 
 type AuthContextType = {
   user: User | null;
@@ -14,38 +15,46 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
   useEffect(() => {
     let mounted = true;
 
-    const init = async () => {
+    const initAuth = async () => {
       try {
-        const { data } = await supabase.auth.getSession();
-        if (!mounted) return;
-
-        setUser(data.session?.user ?? null);
+        // Busca a sessão inicial de forma robusta
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (mounted) {
+          setUser(session?.user ?? null);
+          setLoading(false);
+        }
       } catch (error) {
-        console.error('Erro ao buscar sessão inicial:', error);
-      } finally {
+        console.error('Erro na inicialização da auth:', error);
         if (mounted) setLoading(false);
       }
     };
 
-    init();
+    initAuth();
 
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        if (mounted) {
-          setUser(session?.user ?? null);
+    // Escuta mudanças de estado (login, logout, token refresh)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (mounted) {
+        const newUser = session?.user ?? null;
+        setUser(newUser);
+        
+        // Se o usuário acabou de logar, força um refresh para atualizar os cookies no servidor
+        if (event === 'SIGNED_IN') {
+          router.refresh();
         }
       }
-    );
+    });
 
     return () => {
       mounted = false;
-      listener.subscription.unsubscribe();
+      subscription.unsubscribe();
     };
-  }, []);
+  }, [router]);
 
   return (
     <AuthContext.Provider value={{ user, loading }}>
