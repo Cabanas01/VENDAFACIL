@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useAuth } from '@/components/auth-provider';
@@ -27,7 +28,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // 3. Autenticado com loja mas acesso bloqueado -> Billing (exceto se já estiver lá ou em settings)
+    // 3. Redirecionar do onboarding se já tem loja (Xerife)
+    if (storeStatus === 'has' && pathname === '/onboarding') {
+      router.replace('/dashboard');
+      return;
+    }
+
+    // 4. Paywall: Bloqueado -> Billing (exceto se for rota segura)
     const isAccessBlocked = accessStatus && !accessStatus.acesso_liberado;
     const isSafePath = pathname === '/billing' || pathname === '/settings';
     
@@ -36,15 +43,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // 4. Redirecionar do onboarding se já tem loja
-    if (storeStatus === 'has' && pathname === '/onboarding') {
-      router.replace('/dashboard');
-    }
-
   }, [user, loading, storeStatus, accessStatus, pathname, router]);
 
-  // Mostrar Loader enquanto decide o destino
-  if (loading || !user || storeStatus === 'unknown' || storeStatus === 'loading') {
+  // Mostrar Loader enquanto decide o destino ou carrega sessão
+  if (loading || (user && storeStatus === 'loading')) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
@@ -53,7 +55,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Se chegou aqui, o usuário está validado para ver a área logada
+  // Se não houver usuário, o useEffect cuidará do redirecionamento
+  if (!user) return null;
+
+  // Se estiver no onboarding, renderiza apenas o conteúdo (sem sidebar)
+  if (pathname === '/onboarding') {
+    return <main className="min-h-screen bg-background p-4 flex items-center justify-center">{children}</main>;
+  }
+
+  // Área Protegida Padrão
   return (
     <SidebarProvider>
       <div className="flex min-h-screen">
