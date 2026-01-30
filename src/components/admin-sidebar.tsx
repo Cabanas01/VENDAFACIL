@@ -43,7 +43,7 @@ import { useAuth } from '@/components/auth-provider';
 const adminNavItems = [
   { href: '/admin', label: 'Visão Geral', icon: LayoutDashboard, exact: true },
   { href: '/admin/stores', label: 'Lojas (Tenants)', icon: Store, exact: false },
-  { href: '/admin/sales', label: 'Vendas (Hotmart)', icon: CreditCard, exact: false },
+  { href: '/admin/sales', label: 'Vendas Global', icon: CreditCard, exact: false },
   { href: '/admin/customers', label: 'Clientes Global', icon: Users, exact: false },
 ];
 
