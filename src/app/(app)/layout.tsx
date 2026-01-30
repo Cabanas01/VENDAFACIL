@@ -29,13 +29,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // 3. Redirecionar do onboarding se já tem loja
+    // 3. Redirecionar do onboarding se já tem loja (status 'has')
     if (storeStatus === 'has' && pathname === '/onboarding') {
       router.replace('/dashboard');
       return;
     }
 
-    // 4. Paywall: Bloqueado -> Billing (exceto se for rota segura)
+    // 4. Paywall: Acesso Bloqueado -> Billing (exceto se for rota segura)
     const isAccessBlocked = accessStatus && !accessStatus.acesso_liberado;
     const isSafePath = pathname === '/billing' || pathname === '/settings' || pathname === '/onboarding';
     
@@ -46,26 +46,27 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   }, [user, loading, storeStatus, accessStatus, pathname, router]);
 
-  // Mostrar Loader enquanto decide o destino ou carrega sessão inicial
-  if (loading || storeStatus === 'unknown' || (user && storeStatus === 'loading' && pathname !== '/onboarding')) {
+  // REGRA DE OURO: Bloquear qualquer renderização enquanto estiver carregando ou status for desconhecido.
+  // Isso evita que o formulário de onboarding apareça prematuramente para quem já tem loja.
+  if (loading || storeStatus === 'unknown' || storeStatus === 'loading') {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
         <p className="text-sm text-muted-foreground animate-pulse">
-          {storeStatus === 'unknown' ? 'Sincronizando acesso...' : 'Carregando dados da loja...'}
+          {storeStatus === 'loading' ? 'Verificando sua loja...' : 'Carregando sessão...'}
         </p>
       </div>
     );
   }
 
-  // Tratamento de Erro Crítico (Evita loop de onboarding por falha de fetch)
+  // Tratamento de Erro Crítico (Instabilidade no Supabase)
   if (storeStatus === 'error') {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background p-6 text-center gap-4">
         <div className="space-y-2">
-            <h1 className="text-2xl font-bold text-destructive">Erro ao carregar dados</h1>
+            <h1 className="text-2xl font-bold text-destructive">Erro de Conexão</h1>
             <p className="text-muted-foreground max-w-md">
-                Não conseguimos validar se você possui uma loja vinculada a este e-mail. Isso pode ser instabilidade temporária.
+                Não conseguimos validar os dados da sua loja no momento. Por favor, tente atualizar a página.
             </p>
         </div>
         <Button onClick={() => user && fetchStoreData(user.id)} variant="outline">
@@ -75,7 +76,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Se estiver no onboarding, renderiza apenas o conteúdo (sem sidebar)
+  // Se for Onboarding, renderiza sem sidebar
   if (pathname === '/onboarding') {
     return (
       <main className="min-h-screen bg-background p-4 flex items-center justify-center w-full">
@@ -84,10 +85,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Se não houver usuário, o useEffect cuidará do redirecionamento
-  if (!user) return null;
+  // Fallback de segurança para redirecionamento
+  if (!user || storeStatus === 'none') return null;
 
-  // Área Protegida Padrão
+  // App Principal
   return (
     <SidebarProvider>
       <div className="flex min-h-screen">

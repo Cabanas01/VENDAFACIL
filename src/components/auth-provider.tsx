@@ -120,7 +120,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setStoreStatus('has');
     } catch (err) {
       console.error('[AUTH] Falha crítica ao carregar loja:', err);
-      // Importante: status 'error' impede o redirecionamento automático para onboarding
       setStoreStatus('error');
     }
   }, []);
@@ -160,9 +159,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const createStore = useCallback(async (storeData: any) => {
     if (!user) return null;
     
-    // Proteção: não tentar criar se já detectamos uma loja ou se estamos carregando
-    if (storeStatus === 'has' || storeStatus === 'loading') {
-        console.warn('[AUTH] Bloqueada tentativa de criar loja duplicada.');
+    // Trava de segurança: não prosseguir se já estiver carregando ou se já houver uma loja
+    if (storeStatus === 'loading' || storeStatus === 'has') {
         return store;
     }
 

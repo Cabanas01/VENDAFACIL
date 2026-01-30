@@ -6,26 +6,19 @@ import { useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, storeStatus } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    // Se o usuário já estiver logado nesta área (Login/Signup), move para a App
+    // REGRA DE OURO: Se o usuário logar, o AuthLayout detecta e o empurra para fora.
+    // O AppLayout no destino cuidará da lógica de onboarding/dashboard.
     if (!loading && user) {
       router.replace('/dashboard');
     }
   }, [user, loading, router]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  // Enquanto redireciona, mostra o loader para evitar tela branca ou flash do form
-  if (user) {
+  // Enquanto estiver autenticando ou se já estiver logado (redirecionando), mostrar loader.
+  if (loading || user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
