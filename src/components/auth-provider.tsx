@@ -56,21 +56,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [cashRegisters, setCashRegistersState] = useState<CashRegister[]>([]);
 
   const fetchStoreData = useCallback(async (userId: string) => {
+    setStoreStatus('loading');
     try {
-      const { data: ownerStore } = await supabase.from('stores').select('id').eq('user_id', userId).maybeSingle();
+      // 1. Tentar buscar como proprietário (Owner)
+      const { data: ownerStore, error: ownerError } = await supabase
+        .from('stores')
+        .select('id')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (ownerError) throw ownerError;
+
       let storeId = ownerStore?.id;
 
+      // 2. Se não for dono, tentar buscar como membro da equipe (Staff)
       if (!storeId) {
-        const { data: memberEntry } = await supabase.from('store_members').select('store_id').eq('user_id', userId).maybeSingle();
+        const { data: memberEntry, error: memberError } = await supabase
+          .from('store_members')
+          .select('store_id')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        if (memberError) throw memberError;
         storeId = memberEntry?.store_id;
       }
 
+      // 3. Se após ambas as buscas não houver ID, o usuário realmente não tem loja
       if (!storeId) {
         setStoreStatus('none');
         setStore(null);
         return;
       }
 
+      // 4. Carregar detalhes da loja e acessos
       const { data: statusData } = await (supabase.rpc as any)('get_store_access_status', { p_store_id: storeId });
       setAccessStatus(statusData?.[0] || null);
 
@@ -81,6 +99,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         supabase.from('cash_registers').select('*').eq('store_id', storeId).order('opened_at', { ascending: false }),
         supabase.from('store_members').select('*').eq('store_id', storeId),
       ]);
+
+      if (storeRes.error) throw storeRes.error;
 
       if (storeRes.data) {
         const { data: profiles } = await supabase.from('users').select('*').in('id', (membersRes.data || []).map(m => m.user_id));
@@ -99,7 +119,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setCashRegistersState(cashRes.data as CashRegister[] || []);
       setStoreStatus('has');
     } catch (err) {
-      console.error('[AUTH] Erro ao carregar dados da loja:', err);
+      console.error('[AUTH] Falha crítica ao carregar loja:', err);
+      // Importante: status 'error' impede o redirecionamento automático para onboarding
       setStoreStatus('error');
     }
   }, []);
@@ -139,8 +160,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const createStore = useCallback(async (storeData: any) => {
     if (!user) return null;
     
-    // Garantir que a sessão esteja ativa antes de chamar a RPC
-    await supabase.auth.getSession();
+    // Proteção: não tentar criar se já detectamos uma loja ou se estamos carregando
+    if (storeStatus === 'has' || storeStatus === 'loading') {
+        console.warn('[AUTH] Bloqueada tentativa de criar loja duplicada.');
+        return store;
+    }
 
     const { data, error } = await (supabase.rpc as any)('create_new_store', {
       p_name: storeData.name,
@@ -158,7 +182,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     await fetchStoreData(user.id);
     return data as Store;
-  }, [user, fetchStoreData]);
+  }, [user, storeStatus, store, fetchStoreData]);
 
   const updateStore = useCallback(async (data: any) => {
     if (!store || !user) return;

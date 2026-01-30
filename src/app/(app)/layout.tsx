@@ -5,10 +5,11 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useEffect } from 'react';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { MainNav } from '@/components/main-nav';
-import { Loader2 } from 'lucide-react';
+import { Loader2, RefreshCcw } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading, storeStatus, accessStatus } = useAuth();
+  const { user, loading, storeStatus, accessStatus, fetchStoreData } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -21,7 +22,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // 2. Autenticado mas sem loja -> Onboarding (exceto se já estiver lá)
+    // 2. Autenticado mas sem loja -> Onboarding
+    // Só redireciona se tivermos certeza absoluta (status 'none')
     if (storeStatus === 'none' && pathname !== '/onboarding') {
       router.replace('/onboarding');
       return;
@@ -52,6 +54,23 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <p className="text-sm text-muted-foreground animate-pulse">
           {storeStatus === 'unknown' ? 'Sincronizando acesso...' : 'Carregando dados da loja...'}
         </p>
+      </div>
+    );
+  }
+
+  // Tratamento de Erro Crítico (Evita loop de onboarding por falha de fetch)
+  if (storeStatus === 'error') {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background p-6 text-center gap-4">
+        <div className="space-y-2">
+            <h1 className="text-2xl font-bold text-destructive">Erro ao carregar dados</h1>
+            <p className="text-muted-foreground max-w-md">
+                Não conseguimos validar se você possui uma loja vinculada a este e-mail. Isso pode ser instabilidade temporária.
+            </p>
+        </div>
+        <Button onClick={() => user && fetchStoreData(user.id)} variant="outline">
+            <RefreshCcw className="mr-2 h-4 w-4" /> Tentar Novamente
+        </Button>
       </div>
     );
   }
