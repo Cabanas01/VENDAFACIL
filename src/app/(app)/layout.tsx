@@ -76,13 +76,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // Bloqueia onboarding para não criar duplicidade enquanto o banco está instável
   if (storeStatus === 'error') {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-background p-6 text-center gap-6">
+      <div className="mx-auto flex min-h-screen w-full max-w-xl flex-col items-center justify-center gap-6 p-6 text-center">
         <div className="bg-destructive/10 p-4 rounded-full">
             <AlertOctagon className="h-12 w-12 text-destructive" />
         </div>
         <div className="space-y-2">
             <h1 className="text-2xl font-bold">Erro de Sincronização</h1>
-            <p className="text-muted-foreground max-w-md mx-auto">
+            <p className="text-muted-foreground">
                 Não conseguimos validar os dados da sua loja devido a uma falha de conexão ou permissão.
                 <strong> Por segurança, o acesso ao onboarding foi bloqueado.</strong>
             </p>
