@@ -5,7 +5,7 @@
  * 
  * Este componente é o único autorizado a executar redirecionamentos.
  * Ele observa a máquina de estados do AuthProvider e decide o destino do usuário.
- * Também gerencia o Header Global com indicadores de CMV e Plano.
+ * Também gerencia a alternância entre a Sidebar da Loja e a Sidebar do Admin.
  */
 
 import { useAuth } from '@/components/auth-provider';
@@ -13,7 +13,8 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useEffect, useMemo } from 'react';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { MainNav } from '@/components/main-nav';
-import { Loader2, AlertTriangle, RefreshCcw, TrendingUp, ShieldCheck } from 'lucide-react';
+import { AdminSidebar } from '@/components/admin-sidebar';
+import { Loader2, AlertTriangle, RefreshCcw, TrendingUp, ShieldCheck, Activity } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -23,6 +24,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, storeStatus, store, accessStatus, products, sales, fetchStoreData } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+
+  const isAdminPath = pathname.startsWith('/admin');
 
   useEffect(() => {
     if (loading) return;
@@ -36,8 +39,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     // 2. Aguardar estados conclusivos da loja
     if (storeStatus === 'loading_auth' || storeStatus === 'loading_store') return;
 
-    // 3. Sem loja -> Onboarding
-    if (storeStatus === 'no_store' && pathname !== '/onboarding') {
+    // 3. Sem loja e não é admin -> Onboarding
+    // Se for admin, permitimos acesso sem loja vinculada para gestão do SaaS
+    const isActuallyAdmin = user?.is_admin === true;
+    
+    if (storeStatus === 'no_store' && pathname !== '/onboarding' && !isAdminPath) {
       router.replace('/onboarding');
       return;
     }
@@ -48,20 +54,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // 5. Paywall (Se liberado === false e não for rota segura)
+    // 5. Paywall (Se liberado === false e não for rota segura nem admin)
     const isLiberado = accessStatus?.acesso_liberado ?? false;
-    const isSafePath = pathname === '/billing' || pathname === '/settings' || pathname === '/onboarding';
+    const isSafePath = pathname === '/billing' || pathname === '/settings' || pathname === '/onboarding' || isAdminPath;
 
     if (storeStatus === 'has_store' && !isLiberado && !isSafePath) {
       router.replace('/billing');
       return;
     }
 
-  }, [user, loading, storeStatus, accessStatus, pathname, router]);
+  }, [user, loading, storeStatus, accessStatus, pathname, router, isAdminPath]);
 
   /**
-   * Cálculo Global do CMV %
-   * Baseado no custo atual dos produtos vs faturamento total histórico (conforme dados em cache)
+   * Cálculo Global do CMV % para o Header da Loja
    */
   const cmvPercentage = useMemo(() => {
     if (!sales || sales.length === 0) return 0;
@@ -83,17 +88,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
    * ESTADOS DE RENDERIZAÇÃO
    */
 
-  // Estado 1: Sincronizando (Loader)
   if (loading || storeStatus === 'loading_auth' || storeStatus === 'loading_store') {
     return <LoaderScreen message={storeStatus === 'loading_store' ? 'Sincronizando dados da sua loja...' : 'Validando sua sessão...'} />;
   }
 
-  // Estado 2: Falha Técnica (ErrorScreen)
   if (storeStatus === 'error') {
     return <ErrorScreen onRetry={() => user && fetchStoreData(user.id)} />;
   }
 
-  // Estado 3: Onboarding (Sem Sidebar)
+  // Estado: Onboarding (Sem Sidebar)
   if (pathname === '/onboarding') {
     return (
       <main className="min-h-screen bg-background p-4 flex items-center justify-center w-full">
@@ -102,48 +105,64 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Estado 4: Aplicação Principal (Com Sidebar)
-  if (storeStatus !== 'has_store') {
-    return <LoaderScreen message="Aguardando confirmação do sistema..." />;
-  }
-
+  // Estado: Aplicação Principal ou Admin
   return (
     <SidebarProvider>
       <div className="flex min-h-screen">
-        <MainNav />
+        {isAdminPath ? <AdminSidebar /> : <MainNav />}
         <SidebarInset>
-          {/* Header Global do Dashboard */}
-          <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b bg-background px-6">
+          {/* Header Global Dinâmico */}
+          <header className={`sticky top-0 z-30 flex h-16 items-center justify-between border-b px-6 ${isAdminPath ? 'bg-primary/5 border-primary/10' : 'bg-background'}`}>
             <div className="flex items-center gap-4">
               <div>
                 <h1 className="text-lg font-bold font-headline truncate max-w-[200px] md:max-w-md">
-                  {store?.name}
+                  {isAdminPath ? 'Painel Administrativo' : store?.name}
                 </h1>
+                
                 <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="text-[10px] h-5 py-0 px-2 font-medium bg-muted/50 border-primary/20">
-                    <ShieldCheck className="h-3 w-3 mr-1 text-primary" />
-                    Plano {getPlanLabel(accessStatus?.plano_tipo)}
-                  </Badge>
-                  <Badge variant={accessStatus?.acesso_liberado ? "default" : "destructive"} className="text-[10px] h-5 py-0 px-2">
-                    {accessStatus?.acesso_liberado ? 'Acesso Ativo' : 'Acesso Bloqueado'}
-                  </Badge>
+                  {isAdminPath ? (
+                    <Badge variant="default" className="text-[10px] h-5 py-0 px-2 font-bold bg-primary text-primary-foreground">
+                      <ShieldCheck className="h-3 w-3 mr-1" />
+                      SaaS ROOT
+                    </Badge>
+                  ) : (
+                    <>
+                      <Badge variant="outline" className="text-[10px] h-5 py-0 px-2 font-medium bg-muted/50 border-primary/20">
+                        <ShieldCheck className="h-3 w-3 mr-1 text-primary" />
+                        Plano {getPlanLabel(accessStatus?.plano_tipo)}
+                      </Badge>
+                      <Badge variant={accessStatus?.acesso_liberado ? "default" : "destructive"} className="text-[10px] h-5 py-0 px-2">
+                        {accessStatus?.acesso_liberado ? 'Acesso Ativo' : 'Acesso Bloqueado'}
+                      </Badge>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
 
             <div className="flex items-center gap-6">
               <Separator orientation="vertical" className="h-8 hidden sm:block" />
-              <div className="hidden sm:flex flex-col items-end">
-                <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Saúde Financeira</span>
-                <div className="flex items-center gap-1.5">
-                  <TrendingUp className={`h-4 w-4 ${cmvPercentage > 40 ? 'text-destructive' : 'text-green-500'}`} />
-                  <span className="text-sm font-bold">CMV {cmvPercentage.toFixed(1)}%</span>
+              
+              {isAdminPath ? (
+                <div className="hidden sm:flex flex-col items-end">
+                  <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Monitoramento SaaS</span>
+                  <div className="flex items-center gap-1.5">
+                    <Activity className="h-4 w-4 text-primary" />
+                    <span className="text-sm font-bold">Sistema Operacional</span>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="hidden sm:flex flex-col items-end">
+                  <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Saúde Financeira</span>
+                  <div className="flex items-center gap-1.5">
+                    <TrendingUp className={`h-4 w-4 ${cmvPercentage > 40 ? 'text-destructive' : 'text-green-500'}`} />
+                    <span className="text-sm font-bold">CMV {cmvPercentage.toFixed(1)}%</span>
+                  </div>
+                </div>
+              )}
             </div>
           </header>
 
-          {/* Conteúdo da Página */}
           <div className="flex-1 p-4 sm:p-6 lg:p-8 bg-muted/5">
             {children}
           </div>
@@ -152,10 +171,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     </SidebarProvider>
   );
 }
-
-/**
- * Componentes de Feedback
- */
 
 function LoaderScreen({ message }: { message: string }) {
   return (
