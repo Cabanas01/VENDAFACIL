@@ -10,7 +10,7 @@ import { Loader2 } from 'lucide-react';
 
 /**
  * AppLayout (Guardião Único)
- * Centraliza 100% da lógica de proteção de rotas e navegação reativa.
+ * Único lugar responsável por decidir redirecionamentos de autenticação e paywall.
  */
 export default function AppLayout({ children }: { children: ReactNode }) {
   const { user, loading, storeStatus, accessStatus } = useAuth();
@@ -18,28 +18,28 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => {
-    // 1. Aguarda resolver a autenticação básica
+    // Só toma decisões após o AuthProvider carregar a sessão inicial
     if (loading) return;
 
-    // 2. Se não houver usuário, vai para o login
+    // 1. Proteção Básica: Se não estiver logado, vai para /login
     if (!user) {
       router.replace('/login');
       return;
     }
 
-    // 3. Logado mas sem loja configurada? Vai para Onboarding
+    // 2. Fluxo de Onboarding: Se logado mas sem loja, obriga /onboarding
     if (storeStatus === 'none' && pathname !== '/onboarding') {
       router.replace('/onboarding');
       return;
     }
 
-    // 4. Já tem loja? Não pode ficar no onboarding
+    // 3. Bloqueio de Onboarding: Se já tem loja, não pode acessar onboarding
     if (storeStatus === 'has' && pathname === '/onboarding') {
       router.replace('/dashboard');
       return;
     }
 
-    // 5. Verificação de Paywall (somente se não estiver em Billing ou Settings)
+    // 4. Paywall: Se acesso expirado, bloqueia tudo exceto Billing e Settings
     if (accessStatus && !accessStatus.acesso_liberado && pathname !== '/billing' && pathname !== '/settings') {
       router.replace('/billing?reason=expired');
       return;
@@ -47,25 +47,25 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   }, [user, loading, storeStatus, accessStatus, pathname, router]);
 
-  // Tela de carregamento enquanto a sessão inicial é verificada
+  // Enquanto carrega a identidade, mostra tela neutra de loading
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background">
         <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
-        <p className="text-sm text-muted-foreground animate-pulse">Autenticando...</p>
+        <p className="text-sm text-muted-foreground animate-pulse">Verificando acesso...</p>
       </div>
     );
   }
 
-  // Se não houver usuário, o useEffect cuidará do redirecionamento
+  // Se não estiver logado, não renderiza nada (o useEffect fará o redirect)
   if (!user) return null;
 
-  // Onboarding renderiza sem Sidebar para foco total
+  // Onboarding renderiza sem Sidebar para foco total no cadastro
   if (pathname === '/onboarding') {
     return <main className="min-h-screen p-4 flex items-center justify-center bg-background">{children}</main>;
   }
 
-  // Layout padrão da aplicação com Sidebar
+  // Layout Padrão da Aplicação
   return (
     <SidebarProvider>
       <div className="flex min-h-screen">

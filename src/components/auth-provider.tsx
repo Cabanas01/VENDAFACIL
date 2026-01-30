@@ -12,7 +12,8 @@ import type {
   StoreAccessStatus,
   Customer,
   CartItem,
-  SaleItem
+  SaleItem,
+  StoreMember
 } from '@/lib/types';
 
 type AuthContextType = {
@@ -61,7 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { data, error } = await (supabase.rpc as any)('get_store_access_status', { p_store_id: storeId });
       if (error) throw error;
       if (Array.isArray(data) && data.length > 0) {
-        setAccessStatus(data[0]);
+        setAccessStatus(data[0] as StoreAccessStatus);
       } else {
         setAccessStatus({ acesso_liberado: false, data_fim_acesso: null, plano_nome: 'Nenhum', plano_tipo: null, mensagem: 'Sem plano ativo' });
       }
@@ -74,12 +75,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setStoreStatus('loading');
     try {
       let storeId: string | null = null;
+      
       const { data: ownerStore } = await supabase.from('stores').select('id').eq('user_id', userId).maybeSingle();
+      
       if (ownerStore) {
-        storeId = ownerStore.id;
+        storeId = (ownerStore as any).id;
       } else {
         const { data: memberEntry } = await supabase.from('store_members').select('store_id').eq('user_id', userId).maybeSingle();
-        if (memberEntry) storeId = memberEntry.store_id;
+        if (memberEntry) storeId = (memberEntry as any).store_id;
       }
 
       if (!storeId) {
@@ -89,20 +92,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       await fetchAccessStatus(storeId);
-      const { data: storeDetails } = await supabase.from('stores').select('*').eq('id', storeId).single();
       
-      const [productsRes, salesRes, cashRes] = await Promise.all([
+      const [storeRes, productsRes, salesRes, cashRes, membersRes] = await Promise.all([
+        supabase.from('stores').select('*').eq('id', storeId).single(),
         supabase.from('products').select('*').eq('store_id', storeId).order('name'),
         supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeId).order('created_at', { ascending: false }),
         supabase.from('cash_registers').select('*').eq('store_id', storeId).order('opened_at', { ascending: false }),
+        supabase.from('store_members').select('*').eq('store_id', storeId),
       ]);
 
-      setStore(storeDetails as Store);
-      setProducts(productsRes.data ?? []);
-      setSales(salesRes.data ?? []);
-      setCashRegistersState(cashRes.data ?? []);
+      if (storeRes.data) {
+        const storeData = storeRes.data as Store;
+        let members: StoreMember[] = [];
+        
+        if (membersRes.data && membersRes.data.length > 0) {
+          const userIds = membersRes.data.map(m => m.user_id);
+          const { data: profiles } = await supabase.from('users').select('*').in('id', userIds);
+          const profilesMap = new Map((profiles as any[] ?? []).map(p => [p.id, p]));
+          
+          members = membersRes.data.map(m => ({
+            ...m,
+            name: profilesMap.get(m.user_id)?.name ?? null,
+            email: profilesMap.get(m.user_id)?.email ?? null,
+            avatar_url: profilesMap.get(m.user_id)?.avatar_url ?? null,
+          })) as StoreMember[];
+        }
+        
+        setStore({ ...storeData, members });
+      }
+
+      setProducts((productsRes.data as Product[]) ?? []);
+      setSales((salesRes.data as Sale[]) ?? []);
+      setCashRegistersState((cashRes.data as CashRegister[]) ?? []);
       setStoreStatus('has');
     } catch (err: any) {
+      console.error('[AUTH] Erro ao carregar dados da loja:', err);
       setStoreStatus('error');
       setStoreError(err.message);
     }
@@ -118,17 +142,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         const sessionUser = session?.user ?? null;
         setUser(sessionUser);
-        
-        // Finaliza o loading principal da autenticação assim que sabemos se há sessão ou não.
-        // Isso permite que o AppLayout decida o redirecionamento instantaneamente.
-        setLoading(false);
+        setLoading(false); // Libera o AppLayout imediatamente
 
-        // Dispara o carregamento dos dados da loja em segundo plano se houver usuário.
         if (sessionUser) {
           fetchStoreData(sessionUser.id);
         }
       } catch (error) {
-        console.error('[AUTH] Erro ao iniciar:', error);
+        console.error('[AUTH] Erro na inicialização:', error);
         if (mounted) setLoading(false);
       }
     };
@@ -233,7 +253,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const setCashRegisters = async (action: any) => {
     if (!store || !user) return;
     const next = typeof action === 'function' ? action(cashRegisters) : action;
-    for (const cr of next) {
+    const items = Array.isArray(next) ? next : [next];
+    for (const cr of items) {
       if (cashRegisters.find(c => c.id === cr.id)) {
         await supabase.from('cash_registers').update(cr).eq('id', cr.id);
       } else {
@@ -248,9 +269,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const total = cart.reduce((s, i) => s + i.subtotal_cents, 0);
     const { data: sale } = await supabase.from('sales').insert({ store_id: store.id, total_cents: total, payment_method: paymentMethod }).select().single();
     if (sale) {
+      const typedSale = sale as Sale;
       for (const item of cart) {
         await supabase.from('sale_items').insert({
-          sale_id: sale.id,
+          sale_id: typedSale.id,
           product_id: item.product_id,
           product_name_snapshot: item.product_name_snapshot,
           product_barcode_snapshot: item.product_barcode_snapshot,
@@ -261,7 +283,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await (supabase.rpc as any)('decrement_stock', { p_product_id: item.product_id, p_quantity: item.quantity });
       }
       await fetchStoreData(user.id);
-      return sale as Sale;
+      return typedSale;
     }
     return null;
   };

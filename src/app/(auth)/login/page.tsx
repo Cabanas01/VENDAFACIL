@@ -18,9 +18,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 
 /**
- * LoginPage (Burra / Dumb Component)
+ * LoginPage (Componente Burro)
  * Apenas executa a ação de login. 
- * A navegação é decidida pelo AppLayout reativamente assim que o estado global muda.
+ * A navegação é decidida pelo AppLayout reativamente assim que o AuthProvider atualiza o estado.
  */
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -42,7 +42,7 @@ export default function LoginPage() {
           password,
         });
         if (authError) throw authError;
-        // Sucesso: Não navegamos aqui. O AppLayout detectará o 'user' e mudará a rota.
+        // Sucesso: O AppLayout detectará o novo estado de 'user' e redirecionará.
       } else {
         const { error: authError } = await supabase.auth.signUp({
           email,
@@ -115,7 +115,7 @@ export default function LoginPage() {
             </div>
 
             {error && (
-              <p className={`text-sm font-medium ${error.includes('Verifique') ? 'text-blue-500' : 'text-destructive'}`}>
+              <p className={`text-sm font-medium p-2 rounded ${error.includes('Verifique') ? 'bg-blue-50 text-blue-600' : 'bg-destructive/10 text-destructive'}`}>
                 {error}
               </p>
             )}
