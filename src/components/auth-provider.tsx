@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * @fileOverview AuthProvider (Motor de Estado Passivo)
+ * @fileOverview AuthProvider (MOTOR DE ESTADO PASSIVO)
  * 
  * Sincroniza sessão e dados do tenant. 
  * NÃO executa navegação (Regra de Ouro).
@@ -157,11 +157,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [fetchStoreData]);
 
   const createStore = useCallback(async (storeData: any) => {
-    // 1. Garantir que o cliente Supabase tenha a sessão atualizada (pula o cache)
     const { data: { user: currentUser } } = await supabase.auth.getUser();
-    if (!currentUser) throw new Error('Usuário não autenticado para criar loja.');
+    if (!currentUser) throw new Error('Usuário não autenticado.');
 
-    // 2. Chamar RPC. auth.uid() no banco agora será populado pelo token enviado.
     const { data, error } = await supabase.rpc('create_new_store', {
       p_name: storeData.name,
       p_legal_name: storeData.legal_name,
