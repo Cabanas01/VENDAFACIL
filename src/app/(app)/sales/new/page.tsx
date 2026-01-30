@@ -19,7 +19,8 @@ import {
   PiggyBank, 
   Loader2, 
   Package,
-  ArrowRight
+  ArrowRight,
+  X
 } from 'lucide-react';
 import { useAuth } from '@/components/auth-provider';
 import { useToast } from '@/hooks/use-toast';
@@ -123,24 +124,23 @@ export default function NewSalePage() {
     try {
       const sale = await addSale(cart, method);
       
-      // Verificação de segurança para o ID do retorno
       if (sale && sale.id) {
         toast({ 
           title: 'Venda realizada!', 
-          description: `Comprovante gerado com sucesso.` 
+          description: `Venda #${sale.id.substring(0, 8)} registrada com sucesso.` 
         });
         setCart([]);
         setIsFinalizing(false);
         router.push('/sales');
       } else {
-        throw new Error('A venda foi processada, mas o identificador não foi retornado.');
+        throw new Error('Não foi possível confirmar o registro da venda no sistema.');
       }
     } catch (error: any) {
       console.error('[PDV_FINALIZE_ERROR]', error);
       toast({
         variant: 'destructive',
         title: 'Erro ao processar venda',
-        description: error.message || 'Ocorreu uma falha técnica ao tentar salvar a venda.'
+        description: error.message || 'Ocorreu uma falha técnica ao tentar salvar a venda. Verifique sua conexão.'
       });
     } finally {
       setIsSubmitting(false);
@@ -149,7 +149,7 @@ export default function NewSalePage() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)]">
-      <PageHeader title="Ponto de Venda" subtitle="Caixa aberto e pronto para vendas." />
+      <PageHeader title="Ponto de Venda" subtitle="Registre vendas de forma rápida e prática." />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 overflow-hidden">
         
@@ -210,9 +210,9 @@ export default function NewSalePage() {
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2 text-base">
                 <ShoppingCart className="h-4 w-4 text-primary" />
-                Resumo da Venda
+                Carrinho
               </CardTitle>
-              <Badge variant="secondary" className="rounded-full font-black">{cart.length}</Badge>
+              <Badge variant="secondary" className="rounded-full font-black">{cart.length} itens</Badge>
             </div>
           </CardHeader>
 
@@ -250,7 +250,7 @@ export default function NewSalePage() {
                 {cart.length === 0 && (
                   <div className="py-24 text-center space-y-4">
                     <ShoppingCart className="h-10 w-10 text-muted-foreground mx-auto opacity-10" />
-                    <p className="text-xs text-muted-foreground px-12">Seu carrinho está vazio. Adicione produtos para começar.</p>
+                    <p className="text-xs text-muted-foreground px-12 text-center">Seu carrinho está vazio.</p>
                   </div>
                 )}
               </div>
@@ -260,11 +260,11 @@ export default function NewSalePage() {
           <CardFooter className="flex-none flex flex-col p-6 space-y-4 bg-primary/5 border-t">
             <div className="w-full space-y-1">
               <div className="flex justify-between text-[10px] uppercase font-bold text-muted-foreground tracking-tighter">
-                <span>Total Bruto</span>
+                <span>Subtotal</span>
                 <span>{formatCurrency(cartTotal)}</span>
               </div>
               <div className="flex justify-between text-3xl font-black text-primary tracking-tighter">
-                <span>TOTAL</span>
+                <span>Total</span>
                 <span>{formatCurrency(cartTotal)}</span>
               </div>
             </div>
@@ -274,7 +274,7 @@ export default function NewSalePage() {
               disabled={cart.length === 0 || isSubmitting}
               onClick={() => setIsFinalizing(true)}
             >
-              CONCLUIR VENDA
+              Finalizar Venda
               <ArrowRight className="ml-2 h-5 w-5" />
             </Button>
           </CardFooter>
@@ -284,8 +284,8 @@ export default function NewSalePage() {
       <Dialog open={isFinalizing} onOpenChange={setIsFinalizing}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Forma de Recebimento</DialogTitle>
-            <DialogDescription>Total a pagar: <span className="font-black text-primary">{formatCurrency(cartTotal)}</span></DialogDescription>
+            <DialogTitle>Forma de Pagamento</DialogTitle>
+            <DialogDescription>Selecione como o cliente irá pagar o valor de <span className="font-black text-primary">{formatCurrency(cartTotal)}</span>.</DialogDescription>
           </DialogHeader>
 
           <div className="grid grid-cols-1 gap-3 py-4">
@@ -295,8 +295,13 @@ export default function NewSalePage() {
               onClick={() => handleFinalize('cash')}
               disabled={isSubmitting}
             >
-              <Coins className="h-6 w-6 text-green-600" />
-              <span>Dinheiro / Espécie</span>
+              <div className="h-10 w-10 rounded-lg bg-green-100 flex items-center justify-center">
+                <Coins className="h-6 w-6 text-green-600" />
+              </div>
+              <div className="flex flex-col items-start">
+                <span className="font-bold">Dinheiro</span>
+                <span className="text-[10px] text-muted-foreground">Pagamento em espécie</span>
+              </div>
             </Button>
 
             <Button 
@@ -305,8 +310,13 @@ export default function NewSalePage() {
               onClick={() => handleFinalize('pix')}
               disabled={isSubmitting}
             >
-              <PiggyBank className="h-6 w-6 text-cyan-600" />
-              <span>PIX / Transferência</span>
+              <div className="h-10 w-10 rounded-lg bg-cyan-100 flex items-center justify-center">
+                <PiggyBank className="h-6 w-6 text-cyan-600" />
+              </div>
+              <div className="flex flex-col items-start">
+                <span className="font-bold">PIX</span>
+                <span className="text-[10px] text-muted-foreground">Transferência instantânea</span>
+              </div>
             </Button>
 
             <Button 
@@ -315,21 +325,26 @@ export default function NewSalePage() {
               onClick={() => handleFinalize('card')}
               disabled={isSubmitting}
             >
-              <CreditCard className="h-6 w-6 text-blue-600" />
-              <span>Cartão Débito / Crédito</span>
+              <div className="h-10 w-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                <CreditCard className="h-6 w-6 text-blue-600" />
+              </div>
+              <div className="flex flex-col items-start">
+                <span className="font-bold">Cartão</span>
+                <span className="text-[10px] text-muted-foreground">Débito ou Crédito</span>
+              </div>
             </Button>
           </div>
 
           {isSubmitting && (
             <div className="absolute inset-0 bg-background/90 flex flex-col items-center justify-center rounded-lg z-50 animate-in fade-in duration-200">
               <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-              <p className="font-black text-sm uppercase tracking-widest">Sincronizando Banco...</p>
+              <p className="font-black text-sm uppercase tracking-widest">Sincronizando...</p>
             </div>
           )}
 
           <DialogFooter className="sm:justify-start">
             <Button type="button" variant="ghost" onClick={() => setIsFinalizing(false)} disabled={isSubmitting}>
-              Voltar ao PDV
+              Voltar ao carrinho
             </Button>
           </DialogFooter>
         </DialogContent>

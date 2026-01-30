@@ -33,7 +33,7 @@ type AuthContextType = {
   customers: Customer[];
   cashRegisters: CashRegister[];
   
-  fetchStoreData: (userId: string) => Promise<void>;
+  fetchStoreData: (userId: string, silent?: boolean) => Promise<void>;
   createStore: (storeData: any) => Promise<Store | null>;
   updateStore: (data: any) => Promise<void>;
   updateUser: (data: any) => Promise<void>;
@@ -63,9 +63,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [cashRegisters, setCashRegistersState] = useState<CashRegister[]>([]);
 
-  const fetchStoreData = useCallback(async (userId: string) => {
+  const fetchStoreData = useCallback(async (userId: string, silent: boolean = false) => {
     if (!userId) return;
-    setStoreStatus('loading_store');
+    if (!silent) setStoreStatus('loading_store');
     
     try {
       const { data: ownerStore, error: ownerError } = await supabase
@@ -75,7 +75,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle();
 
       if (ownerError) {
-        setStoreStatus('error');
+        if (!silent) setStoreStatus('error');
         return;
       }
 
@@ -89,7 +89,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .maybeSingle();
 
         if (memberError) {
-          setStoreStatus('error');
+          if (!silent) setStoreStatus('error');
           return;
         }
         storeId = memberEntry?.store_id;
@@ -97,7 +97,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (!storeId) {
         setStore(null);
-        setStoreStatus('no_store');
+        if (!silent) setStoreStatus('no_store');
         return;
       }
 
@@ -119,11 +119,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setCustomers(customersRes.data as Customer[] || []);
       setCashRegistersState(cashRes.data as CashRegister[] || []);
       
-      setStoreStatus('has_store');
+      if (!silent) setStoreStatus('has_store');
 
     } catch (err) {
       console.error('[AUTH_PROVIDER] Sync error:', err);
-      setStoreStatus('error');
+      if (!silent) setStoreStatus('error');
     }
   }, []);
 
@@ -183,7 +183,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const updateStore = useCallback(async (data: any) => {
     if (!store || !user) return;
     await supabase.from('stores').update(data).eq('id', store.id);
-    await fetchStoreData(user.id);
+    await fetchStoreData(user.id, true);
   }, [store, user, fetchStoreData]);
 
   const updateUser = useCallback(async (data: any) => {
@@ -194,39 +194,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const removeStoreMember = useCallback(async (userId: string) => {
     if (!store || !user) return { error: new Error('Sessão inválida') };
     const { error } = await supabase.from('store_members').delete().eq('user_id', userId).eq('store_id', store.id);
-    if (!error) await fetchStoreData(user.id);
+    if (!error) await fetchStoreData(user.id, true);
     return { error };
   }, [store, user, fetchStoreData]);
 
   const addProduct = useCallback(async (product: any) => {
     if (!store || !user) return;
     await supabase.from('products').insert({ ...product, store_id: store.id });
-    await fetchStoreData(user.id);
+    await fetchStoreData(user.id, true);
   }, [store, user, fetchStoreData]);
 
   const addCustomer = useCallback(async (customer: any) => {
     if (!store || !user) return;
     const { error } = await supabase.from('customers').insert({ ...customer, store_id: store.id });
     if (error) throw error;
-    await fetchStoreData(user.id);
+    await fetchStoreData(user.id, true);
   }, [store, user, fetchStoreData]);
 
   const updateProduct = useCallback(async (id: string, product: any) => {
     if (!store || !user) return;
     await supabase.from('products').update(product).eq('id', id).eq('store_id', store.id);
-    await fetchStoreData(user.id);
+    await fetchStoreData(user.id, true);
   }, [store, user, fetchStoreData]);
 
   const updateProductStock = useCallback(async (id: string, qty: number) => {
     if (!store || !user) return;
     await supabase.from('products').update({ stock_qty: qty }).eq('id', id).eq('store_id', store.id);
-    await fetchStoreData(user.id);
+    await fetchStoreData(user.id, true);
   }, [store, user, fetchStoreData]);
 
   const removeProduct = useCallback(async (id: string) => {
     if (!store || !user) return;
     await supabase.from('products').delete().eq('id', id).eq('store_id', store.id);
-    await fetchStoreData(user.id);
+    await fetchStoreData(user.id, true);
   }, [store, user, fetchStoreData]);
 
   const findProductByBarcode = useCallback(async (barcode: string) => {
@@ -235,20 +235,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return data as Product || null;
   }, [store]);
 
-  /**
-   * Finaliza a venda seguindo o fluxo de integridade do banco:
-   * 1. Criar Registro de Venda (Sales) e capturar o ID real gerado
-   * 2. Inserir itens vinculados ao ID UUID da venda
-   * 3. Atualizar estoque atômico
-   */
   const addSale = useCallback(async (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => {
-    // Captura referências locais imutáveis para evitar perda de estado durante o await
+    // 1. Garantia de Sessão Fresca
+    const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser();
     const currentStore = store;
-    const currentUser = user;
 
-    if (!currentStore || !currentUser) {
-      console.error('[SALE_ABORTED] Loja ou Usuário nulo no início do fluxo.');
-      throw new Error('Sessão ou Loja inválida para registrar venda.');
+    if (authError || !currentUser || !currentStore) {
+      console.error('[SALE_ABORTED] Sessão ou Loja inválida.', { authError, currentUser, currentStore });
+      throw new Error('Sua sessão expirou. Por favor, recarregue a página e entre novamente.');
     }
     
     const total = cart.reduce((sum, item) => sum + item.subtotal_cents, 0);
@@ -264,9 +258,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .select()
       .single();
 
-    // Verificação estrita para evitar leitura de null.id adiante
     if (saleError || !createdSale) {
-      console.error('[SALE_DB_ERROR] Falha ao criar cabeçalho da venda:', saleError);
+      console.error('[SALE_DB_ERROR]', saleError);
+      // Tratamento de mensagens amigáveis para limites de plano ou erros de sistema
+      const errorMsg = saleError?.message || '';
+      if (errorMsg.includes('trial_sales_limit') || errorMsg.includes('limite')) {
+        throw new Error('Você atingiu o limite de vendas do seu plano atual. Realize o upgrade para continuar vendendo.');
+      }
       throw new Error(saleError?.message || 'Falha técnica ao registrar a venda no banco de dados.');
     }
 
@@ -290,23 +288,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // ETAPA 3: Baixa de estoque via RPC para cada item
       for (const item of cart) {
-        const { error: stockError } = await supabase.rpc('decrement_stock', { 
+        await supabase.rpc('decrement_stock', { 
           p_product_id: item.product_id, 
           p_quantity: item.quantity 
         });
-        if (stockError) console.warn(`[STOCK_SYNC_WARNING] Produto ${item.product_id} não baixou estoque:`, stockError.message);
       }
 
-      // Sincronizar dados globais em background
-      fetchStoreData(currentUser.id).catch(err => console.error('[SYNC_ERROR] Falha ao recarregar dados após venda', err));
+      // Sincronizar dados silenciosamente para não quebrar a navegação
+      fetchStoreData(currentUser.id, true).catch(err => console.error('[SYNC_ERROR]', err));
       
       return createdSale as Sale;
 
     } catch (err: any) {
-      console.error('[SALE_ITEMS_ERROR] Falha ao salvar itens. A venda foi aberta mas pode estar incompleta.', err);
-      throw new Error('A venda foi aberta, mas ocorreu um erro crítico ao salvar os itens.');
+      console.error('[SALE_ITEMS_ERROR]', err);
+      throw new Error('A venda foi criada, mas ocorreu um erro ao salvar os itens ou baixar o estoque.');
     }
-  }, [store, user, fetchStoreData]);
+  }, [store, fetchStoreData]);
 
   const setCashRegisters = useCallback(async (action: any) => {
     if (!store || !user) return;
@@ -318,7 +315,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await supabase.from('cash_registers').insert({ ...cr, store_id: store.id });
       }
     }
-    await fetchStoreData(user.id);
+    await fetchStoreData(user.id, true);
   }, [store, user, cashRegisters, fetchStoreData]);
 
   const deleteAccount = useCallback(async () => {
