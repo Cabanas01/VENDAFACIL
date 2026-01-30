@@ -58,19 +58,27 @@ export default function BillingPage() {
   const handleCheckout = (planId: PlanID) => {
     if (!store || !user) return;
     const url = CHECKOUT_LINKS.hotmart[planId];
-    if (!url) return;
+    if (!url) {
+        toast({
+            variant: 'destructive',
+            title: 'Checkout Indisponível',
+            description: 'Link de pagamento não configurado para este plano.'
+        });
+        return;
+    }
 
     const externalReference = `${store.id}|${planId}|${user.id}`;
     const finalUrl = `${url}${url.includes('?') ? '&' : '?'}external_reference=${encodeURIComponent(externalReference)}`;
     window.open(finalUrl, '_blank');
   };
 
-  const planOrder: PlanID[] = ['free', 'semanal', 'mensal', 'anual'];
+  // As chaves devem corresponder exatamente ao PlanID ('free' | 'weekly' | 'monthly' | 'yearly')
+  const planOrder: PlanID[] = ['free', 'weekly', 'monthly', 'yearly'];
 
   return (
     <div className="max-w-6xl mx-auto space-y-12 py-8">
       <div className="text-center space-y-4">
-        <h1 className="text-4xl font-extrabold tracking-tight font-headline">Plano e Acesso</h1>
+        <h1 className="text-4xl font-extrabold tracking-tight font-headline text-primary">Plano e Acesso</h1>
         <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
           Gerencie seu licenciamento e escolha o melhor plano para sua operação.
         </p>
@@ -114,8 +122,10 @@ export default function BillingPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {planOrder.map(planId => {
           const plan = PLANS_CONFIG[planId];
+          if (!plan) return null; // Prevenção contra undefined
+
           const isTrial = planId === 'free';
-          const isPopular = planId === 'anual';
+          const isPopular = planId === 'yearly';
           const isCurrent = accessStatus?.plano_tipo === planId && accessStatus.acesso_liberado;
 
           return (
