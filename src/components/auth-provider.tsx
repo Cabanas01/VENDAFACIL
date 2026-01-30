@@ -195,49 +195,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const updateStore = async (data: any) => {
     if (store && user) {
-      await supabase.from('stores').update(data).eq('id', store.id);
+      await (supabase as any).from('stores').update(data).eq('id', store.id);
       await fetchStoreData(user.id);
     }
   };
 
   const updateUser = async (data: any) => {
-    if (user) await supabase.from('users').update(data).eq('id', user.id);
+    if (user) await (supabase as any).from('users').update(data).eq('id', user.id);
   };
 
   const removeStoreMember = async (userId: string) => {
     if (!store || !user) return { error: new Error('Sessão inválida') };
-    const { error } = await supabase.from('store_members').delete().eq('user_id', userId).eq('store_id', store.id);
+    const { error } = await (supabase as any).from('store_members').delete().eq('user_id', userId).eq('store_id', store.id);
     if (!error) await fetchStoreData(user.id);
     return { error };
   };
 
   const addProduct = async (product: any) => {
     if (!store || !user) return;
-    await supabase.from('products').insert({ ...product, store_id: store.id });
+    await (supabase as any).from('products').insert({ ...product, store_id: store.id });
     await fetchStoreData(user.id);
   };
 
   const addCustomer = async (customer: any) => {
     if (!store || !user) return;
-    await supabase.from('customers').insert({ ...customer, store_id: store.id });
+    await (supabase as any).from('customers').insert({ ...customer, store_id: store.id });
     await fetchStoreData(user.id);
   };
 
   const updateProduct = async (id: string, product: any) => {
     if (!store || !user) return;
-    await supabase.from('products').update(product).eq('id', id);
+    await (supabase as any).from('products').update(product).eq('id', id);
     await fetchStoreData(user.id);
   };
 
   const updateProductStock = async (id: string, qty: number) => {
     if (!store || !user) return;
-    await supabase.from('products').update({ stock_qty: qty }).eq('id', id);
+    await (supabase as any).from('products').update({ stock_qty: qty }).eq('id', id);
     await fetchStoreData(user.id);
   };
 
   const removeProduct = async (id: string) => {
     if (!store || !user) return;
-    await supabase.from('products').delete().eq('id', id);
+    await (supabase as any).from('products').delete().eq('id', id);
     await fetchStoreData(user.id);
   };
 
@@ -253,9 +253,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const items = Array.isArray(next) ? next : [next];
     for (const cr of items) {
       if (cashRegisters.find(c => c.id === cr.id)) {
-        await supabase.from('cash_registers').update(cr).eq('id', cr.id);
+        await (supabase as any).from('cash_registers').update(cr).eq('id', cr.id);
       } else {
-        await supabase.from('cash_registers').insert({ ...cr, store_id: store.id });
+        await (supabase as any).from('cash_registers').insert({ ...cr, store_id: store.id });
       }
     }
     await fetchStoreData(user.id);
@@ -265,7 +265,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!store || !user) return null;
     const total = cart.reduce((s, i) => s + i.subtotal_cents, 0);
     
-    // Casting explicitamente para any para evitar erro de overload do TypeScript com 'never'
     const { data: sale } = await (supabase as any).from('sales').insert({ 
       store_id: store.id, 
       total_cents: total, 

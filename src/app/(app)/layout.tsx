@@ -7,6 +7,7 @@ import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { MainNav } from '@/components/main-nav';
 import { useAuth } from '@/components/auth-provider';
 import { Loader2 } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 /**
  * AppLayout (Guardião Único)
@@ -49,8 +50,14 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background">
-        <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
-        <p className="text-sm text-muted-foreground animate-pulse">Verificando acesso...</p>
+        <div className="mb-4 animate-pulse">
+          <Avatar className="h-16 w-16 rounded-lg">
+            <AvatarImage src="/logo.png" alt="Logo" />
+            <AvatarFallback className="bg-primary text-primary-foreground font-bold">VF</AvatarFallback>
+          </Avatar>
+        </div>
+        <Loader2 className="h-8 w-8 animate-spin text-primary mb-2" />
+        <p className="text-sm text-muted-foreground animate-pulse font-medium">Validando sua sessão...</p>
       </div>
     );
   }

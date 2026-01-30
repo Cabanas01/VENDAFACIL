@@ -18,8 +18,8 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 
 /**
- * LoginPage (Componente Burro)
- * Apenas executa a ação de login. A navegação é gerida pelo AppLayout.
+ * LoginPage (Componente Burro / Dumb Component)
+ * Apenas executa a ação de login. A navegação é gerida inteiramente pelo AppLayout.
  */
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -38,6 +38,7 @@ export default function LoginPage() {
       if (mode === 'login') {
         const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
         if (authError) throw authError;
+        // O AppLayout detectará a mudança de 'user' e redirecionará.
       } else {
         const { error: authError } = await supabase.auth.signUp({ email, password });
         if (authError) throw authError;
@@ -73,30 +74,67 @@ export default function LoginPage() {
           <form onSubmit={handleAuth} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="seu@email.com" />
+              <Input 
+                id="email" 
+                type="email" 
+                required 
+                value={email} 
+                onChange={e => setEmail(e.target.value)} 
+                placeholder="seu@email.com" 
+                autoComplete="email"
+              />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="password">Senha</Label>
               <div className="relative">
-                <Input id="password" type={showPassword ? 'text' : 'password'} required value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" />
-                <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7" onClick={() => setShowPassword(!showPassword)}>
+                <Input 
+                  id="password" 
+                  type={showPassword ? 'text' : 'password'} 
+                  required 
+                  value={password} 
+                  onChange={e => setPassword(e.target.value)} 
+                  placeholder="••••••••" 
+                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                />
+                <Button 
+                  type="button" 
+                  variant="ghost" 
+                  size="icon" 
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7" 
+                  onClick={() => setShowPassword(!showPassword)}
+                >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
               </div>
             </div>
 
-            {error && <p className={`text-sm font-medium p-2 rounded ${error.includes('Verifique') ? 'bg-blue-50 text-blue-600' : 'bg-destructive/10 text-destructive'}`}>{error}</p>}
+            {error && (
+              <p className={`text-sm font-medium p-2 rounded ${
+                error.includes('Verifique') 
+                  ? 'bg-blue-50 text-blue-600 border border-blue-100' 
+                  : 'bg-destructive/10 text-destructive border border-destructive/20'
+              }`}>
+                {error}
+              </p>
+            )}
 
             <Button type="submit" className="w-full font-bold py-6 text-lg" disabled={loading}>
-              {loading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : mode === 'login' ? 'Acessar Sistema' : 'Criar Minha Conta'}
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  Processando...
+                </>
+              ) : mode === 'login' ? 'Acessar Sistema' : 'Criar Minha Conta'}
             </Button>
           </form>
         </Tabs>
       </CardContent>
 
-      <CardFooter className="flex justify-center border-t bg-muted/30 pt-4">
-        <Button variant="link" size="sm" className="text-muted-foreground hover:text-primary">Esqueceu sua senha?</Button>
+      <CardFooter className="flex justify-center border-t bg-muted/30 pt-4 rounded-b-lg">
+        <Button variant="link" size="sm" className="text-muted-foreground hover:text-primary">
+          Esqueceu sua senha?
+        </Button>
       </CardFooter>
     </Card>
   );
