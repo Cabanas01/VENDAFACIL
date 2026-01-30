@@ -1,10 +1,10 @@
 'use client';
 
 /**
- * @fileOverview AppLayout (Guardião Único)
+ * @fileOverview AppLayout (O Guardião Único)
  * 
- * Este componente é o único lugar autorizado a executar redirecionamentos de fluxo.
- * Ele observa a Máquina de Estados do AuthProvider e decide o destino do usuário.
+ * Este componente é o único autorizado a executar redirecionamentos.
+ * Ele observa a máquina de estados do AuthProvider e decide o destino do usuário.
  */
 
 import { useAuth } from '@/components/auth-provider';
@@ -12,7 +12,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useEffect } from 'react';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { MainNav } from '@/components/main-nav';
-import { Loader2, RefreshCcw, AlertOctagon } from 'lucide-react';
+import { Loader2, AlertTriangle, RefreshCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -24,32 +24,32 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     // 1. Aguardar autenticação inicial
     if (loading) return;
 
-    // 2. Segurança: Se não está logado, expulsa para login
+    // 2. Sem user -> Login
     if (!user) {
       router.replace('/login');
       return;
     }
 
-    // 3. Aguardar estado conclusivo da loja (has_store | no_store | error)
-    if (storeStatus === 'loading_auth' || storeStatus === 'loading_store' || storeStatus === 'unknown') return;
+    // 3. Aguardar estados conclusivos da loja
+    if (storeStatus === 'loading_auth' || storeStatus === 'loading_store') return;
 
-    // 4. ONBOARDING: Se CONCLUSIVAMENTE não tem loja, manda para onboarding
+    // 4. Sem loja -> Onboarding
     if (storeStatus === 'no_store' && pathname !== '/onboarding') {
       router.replace('/onboarding');
       return;
     }
 
-    // 5. DASHBOARD: Se tem loja mas está no onboarding, manda para dashboard
+    // 5. Com loja mas no onboarding -> Dashboard
     if (storeStatus === 'has_store' && pathname === '/onboarding') {
       router.replace('/dashboard');
       return;
     }
 
-    // 6. PAYWALL: Bloqueio de acesso expirado (se aplicável)
-    const isAccessBlocked = accessStatus && !accessStatus.acesso_liberado;
+    // 6. Paywall (Se liberado === false e não for rota segura)
+    const isLiberado = accessStatus?.acesso_liberado ?? false;
     const isSafePath = pathname === '/billing' || pathname === '/settings' || pathname === '/onboarding';
-    
-    if (storeStatus === 'has_store' && isAccessBlocked && !isSafePath) {
+
+    if (storeStatus === 'has_store' && !isLiberado && !isSafePath) {
       router.replace('/billing');
       return;
     }
@@ -57,46 +57,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [user, loading, storeStatus, accessStatus, pathname, router]);
 
   /**
-   * RENDERIZAÇÃO DE ESTADOS DE TRANSIÇÃO (Evita Tela Branca)
+   * ESTADOS DE RENDERIZAÇÃO
    */
 
-  // Estado 1: Sincronização em curso
-  if (loading || storeStatus === 'unknown' || storeStatus === 'loading_auth' || storeStatus === 'loading_store') {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
-        <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground animate-pulse font-medium">
-          {storeStatus === 'loading_store' ? 'Sincronizando dados da sua loja...' : 'Validando sua sessão...'}
-        </p>
-      </div>
-    );
+  // Estado 1: Sincronizando (Loader)
+  if (loading || storeStatus === 'loading_auth' || storeStatus === 'loading_store') {
+    return <LoaderScreen message={storeStatus === 'loading_store' ? 'Sincronizando dados da sua loja...' : 'Validando sua sessão...'} />;
   }
 
-  // Estado 2: Falha Técnica (Safety Lock)
-  // Bloqueia onboarding para não criar duplicidade enquanto o banco está instável
+  // Estado 2: Falha Técnica (ErrorScreen)
   if (storeStatus === 'error') {
-    return (
-      <div className="mx-auto flex min-h-screen w-full max-w-xl flex-col items-center justify-center gap-6 p-6 text-center">
-        <div className="bg-destructive/10 p-4 rounded-full">
-            <AlertOctagon className="h-12 w-12 text-destructive" />
-        </div>
-        <div className="space-y-2">
-            <h1 className="text-2xl font-bold">Erro de Sincronização</h1>
-            <p className="text-muted-foreground">
-                Não conseguimos validar os dados da sua loja devido a uma falha de conexão ou permissão (RLS).
-                <strong> Por segurança, o acesso ao onboarding foi bloqueado para evitar duplicidade.</strong>
-            </p>
-        </div>
-        <div className="flex gap-3">
-            <Button onClick={() => user && fetchStoreData(user.id)} variant="default">
-                <RefreshCcw className="mr-2 h-4 w-4" /> Tentar Novamente
-            </Button>
-            <Button onClick={() => window.location.reload()} variant="outline">
-                Recarregar Sistema
-            </Button>
-        </div>
-      </div>
-    );
+    return <ErrorScreen onRetry={() => user && fetchStoreData(user.id)} />;
   }
 
   // Estado 3: Onboarding (Sem Sidebar)
@@ -108,14 +79,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Estado 4: App Principal (Com Sidebar) - Renderiza apenas se 'has_store'
-  // Nota: Se 'no_store' e ainda não redirecionou, o Loader acima segura.
+  // Estado 4: Aplicação Principal (Com Sidebar)
+  // Só renderiza se tiver loja. Se estiver redirecionando, o Loader acima já segurou.
   if (storeStatus !== 'has_store') {
-      return (
-        <div className="min-h-screen flex items-center justify-center bg-background">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
-      );
+    return <LoaderScreen message="Aguardando confirmação do sistema..." />;
   }
 
   return (
@@ -127,5 +94,40 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </SidebarInset>
       </div>
     </SidebarProvider>
+  );
+}
+
+/**
+ * Componentes de Feedback (Sênior)
+ */
+
+function LoaderScreen({ message }: { message: string }) {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
+      <Loader2 className="h-10 w-10 animate-spin text-primary" />
+      <p className="text-sm text-muted-foreground animate-pulse font-medium">{message}</p>
+    </div>
+  );
+}
+
+function ErrorScreen({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background p-6 text-center">
+      <div className="bg-destructive/10 p-4 rounded-full mb-4">
+        <AlertTriangle className="h-12 w-12 text-destructive" />
+      </div>
+      <h1 className="text-2xl font-bold mb-2">Erro de Sincronização</h1>
+      <p className="text-muted-foreground max-w-md mb-6">
+        Não conseguimos validar os dados da sua loja. Isso pode ser instabilidade de rede ou erro de permissão (RLS).
+      </p>
+      <div className="flex gap-3">
+        <Button onClick={onRetry} variant="default">
+          <RefreshCcw className="mr-2 h-4 w-4" /> Tentar Novamente
+        </Button>
+        <Button onClick={() => window.location.reload()} variant="outline">
+          Recarregar Página
+        </Button>
+      </div>
+    </div>
   );
 }

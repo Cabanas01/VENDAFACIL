@@ -3,10 +3,8 @@
 /**
  * @fileOverview AuthProvider (Cérebro Passivo)
  * 
- * PRINCÍPIOS SÊNIOR:
- * 1. Passividade: NÃO executa router.push. Reporta estados para o Layout.
- * 2. Certeza: Nunca assume 'no_store' se houver erro técnico (RLS/Rede).
- * 3. Atomicidade: Atualiza o estado global em um único "commit" após fetch completo.
+ * Este componente gerencia estritamente o estado e a sincronização com o Supabase.
+ * Ele NÃO executa redirecionamentos. Reporta a verdade do banco através do 'storeStatus'.
  */
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -21,8 +19,7 @@ import type {
   StoreAccessStatus,
   CartItem,
   StoreMember,
-  Customer,
-  SaleItem
+  Customer
 } from '@/lib/types';
 
 type AuthContextType = {
@@ -58,16 +55,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true); 
   const [store, setStore] = useState<Store | null>(null);
-  const [storeStatus, setStoreStatus] = useState<StoreStatus>('unknown');
+  const [storeStatus, setStoreStatus] = useState<StoreStatus>('loading_auth');
   const [accessStatus, setAccessStatus] = useState<StoreAccessStatus | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [cashRegisters, setCashRegistersState] = useState<CashRegister[]>([]);
 
-  /**
-   * Busca dados da loja com diferenciação semântica de erros.
-   * Elimina o "Falso Negativo" onde erro de RLS era tratado como ausência de loja.
-   */
   const fetchStoreData = useCallback(async (userId: string) => {
     setStoreStatus('loading_store');
     
@@ -79,9 +72,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .eq('user_id', userId)
         .maybeSingle();
 
-      // 🚨 SEGREDO: Se error for !== null, é falha técnica, NÃO é 'no_store'.
       if (ownerError) {
-        console.error('[AUTH] Erro técnico na busca de owner (RLS ou Rede):', ownerError);
+        console.error('[AUTH] Erro técnico na busca de owner (RLS):', ownerError);
         setStoreStatus('error');
         return;
       }
@@ -104,14 +96,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         storeId = memberEntry?.store_id;
       }
 
-      // 3. DECISÃO FINAL: Só admitimos 'no_store' se ambas as buscas forem null SEM erro.
+      // 3. DECISÃO FINAL: Só admitimos 'no_store' se ambas as buscas forem null SEM erro técnico.
       if (!storeId) {
         setStoreStatus('no_store');
         setStore(null);
         return;
       }
 
-      // 4. Carregamento atômico de dados (Paralelo)
+      // 4. Carregamento atômico de dados
       const [statusRes, storeRes, productsRes, salesRes, cashRes, membersRes] = await Promise.all([
         (supabase.rpc as any)('get_store_access_status', { p_store_id: storeId }),
         supabase.from('stores').select('*').eq('id', storeId).single(),
@@ -127,7 +119,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // Processamento de membros (Lookup de perfis)
+      // Processamento de membros para UI de configuração
       let members: StoreMember[] = [];
       if (membersRes.data && membersRes.data.length > 0) {
         const memberUserIds = membersRes.data.map(m => m.user_id);
@@ -141,7 +133,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         })) as StoreMember[];
       }
 
-      // 5. Commit Final do Estado
+      // Commit Final
       setAccessStatus(statusRes.data?.[0] || null);
       setStore({ ...storeRes.data, members } as Store);
       setProducts(productsRes.data as Product[] || []);
@@ -156,9 +148,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  /**
-   * Ciclo de Vida Auth
-   */
   useEffect(() => {
     let mounted = true;
 
@@ -205,12 +194,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [fetchStoreData]);
 
-  /**
-   * MUTAÇÕES (100% Passivas - Sem Navegação)
-   */
   const createStore = useCallback(async (storeData: any) => {
     if (!user) return null;
-    
     const { data, error } = await (supabase.rpc as any)('create_new_store', {
       p_name: storeData.name,
       p_legal_name: storeData.legal_name,
@@ -219,12 +204,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       p_phone: storeData.phone,
       p_timezone: storeData.timezone,
     });
-
-    if (error) {
-      console.error('[AUTH] Erro ao criar loja:', error);
-      throw error;
-    }
-    
+    if (error) throw error;
     await fetchStoreData(user.id);
     return data as Store;
   }, [user, fetchStoreData]);
@@ -293,15 +273,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const addSale = useCallback(async (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => {
     if (!store || !user) return null;
     const total = cart.reduce((sum, item) => sum + item.subtotal_cents, 0);
-    
     const { data: sale, error: saleError } = await (supabase as any).from('sales').insert({
       store_id: store.id,
       total_cents: total,
       payment_method: paymentMethod
     }).select().single();
-
     if (saleError) throw saleError;
-
     for (const item of cart) {
       await (supabase as any).from('sale_items').insert({
         sale_id: sale.id,
@@ -312,13 +289,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         unit_price_cents: item.unit_price_cents,
         subtotal_cents: item.subtotal_cents
       });
-
-      await (supabase.rpc as any)('decrement_stock', {
-        p_product_id: item.product_id,
-        p_quantity: item.quantity
-      });
+      await (supabase.rpc as any)('decrement_stock', { p_product_id: item.product_id, p_quantity: item.quantity });
     }
-
     await fetchStoreData(user.id);
     return sale as Sale;
   }, [store, user, fetchStoreData]);
