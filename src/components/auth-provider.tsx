@@ -140,11 +140,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const createStore = useCallback(async (storeData: any) => {
     if (!user) return null;
     
-    // Forçar verificação de sessão para garantir headers de auth
-    await supabase.auth.getUser();
-
+    // Call the database function using strictly the parameters expected by the signature
+    // PGRST202 indicated that p_user_id is not expected by the function.
     const { data, error } = await (supabase.rpc as any)('create_new_store', {
-      p_user_id: user.id, // Explicitamente passando o ID para evitar violação de not-null
       p_name: storeData.name,
       p_legal_name: storeData.legal_name,
       p_cnpj: storeData.cnpj,
@@ -153,7 +151,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       p_timezone: storeData.timezone,
     });
 
-    if (error) throw error;
+    if (error) {
+      console.error('[AUTH] RPC create_new_store failed:', error);
+      throw error;
+    }
+    
     await fetchStoreData(user.id);
     return data as Store;
   }, [user, fetchStoreData]);

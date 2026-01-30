@@ -28,7 +28,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // 3. Redirecionar do onboarding se já tem loja (Xerife)
+    // 3. Redirecionar do onboarding se já tem loja
     if (storeStatus === 'has' && pathname === '/onboarding') {
       router.replace('/dashboard');
       return;
@@ -36,7 +36,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
     // 4. Paywall: Bloqueado -> Billing (exceto se for rota segura)
     const isAccessBlocked = accessStatus && !accessStatus.acesso_liberado;
-    const isSafePath = pathname === '/billing' || pathname === '/settings';
+    const isSafePath = pathname === '/billing' || pathname === '/settings' || pathname === '/onboarding';
     
     if (storeStatus === 'has' && isAccessBlocked && !isSafePath) {
       router.replace('/billing');
@@ -45,8 +45,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   }, [user, loading, storeStatus, accessStatus, pathname, router]);
 
-  // Mostrar Loader enquanto decide o destino ou carrega sessão
-  if (loading || (user && storeStatus === 'loading')) {
+  // Mostrar Loader enquanto decide o destino ou carrega sessão inicial
+  if (loading || (user && storeStatus === 'loading' && pathname !== '/onboarding')) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
@@ -55,12 +55,26 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
+  // Se estiver no onboarding, renderiza apenas o conteúdo (sem sidebar)
+  if (pathname === '/onboarding') {
+    return (
+      <main className="min-h-screen bg-background p-4 flex items-center justify-center w-full">
+        <div className="w-full max-w-4xl">{children}</div>
+      </main>
+    );
+  }
+
   // Se não houver usuário, o useEffect cuidará do redirecionamento
   if (!user) return null;
 
-  // Se estiver no onboarding, renderiza apenas o conteúdo (sem sidebar)
-  if (pathname === '/onboarding') {
-    return <main className="min-h-screen bg-background p-4 flex items-center justify-center w-full">{children}</main>;
+  // Se a loja não estiver carregada ainda, mostramos o loader para evitar tela branca
+  if (storeStatus === 'loading' || storeStatus === 'unknown') {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground animate-pulse">Carregando dados da loja...</p>
+      </div>
+    );
   }
 
   // Área Protegida Padrão
