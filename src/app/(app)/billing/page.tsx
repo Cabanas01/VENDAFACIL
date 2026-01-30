@@ -1,321 +1,241 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { CheckCircle, AlertTriangle, XCircle, Info, ShieldCheck, Loader2 } from 'lucide-react';
+/**
+ * @fileOverview BillingPage (Dumb View)
+ * 
+ * Exibe os planos e o status do acesso atual.
+ * NÃO executa redirecionamentos. Confia no AppLayout para o bloqueio de rotas.
+ */
+
+import { useState } from 'react';
+import { 
+  CheckCircle2, 
+  AlertTriangle, 
+  XCircle, 
+  Info, 
+  ShieldCheck, 
+  Loader2, 
+  CreditCard,
+  Calendar,
+  Clock
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/components/auth-provider';
-import { useAnalytics } from '@/lib/analytics/track';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { PLANS_CONFIG, CHECKOUT_LINKS } from '@/lib/billing/checkoutLinks';
 import type { PlanID } from '@/lib/billing/checkoutLinks';
-
-
-const getStatusInfo = (accessStatus: import('@/lib/types').StoreAccessStatus | null) => {
-    if (!accessStatus) {
-        return {
-            icon: <AlertTriangle className="h-5 w-5 text-yellow-500" />,
-            text: 'Verificando...',
-            badgeVariant: 'secondary' as const,
-            description: 'Aguarde enquanto verificamos o status do seu acesso.',
-            planName: 'N/A'
-        }
-    }
-    
-    if (accessStatus.plano_nome === 'Erro') {
-        return {
-            icon: <XCircle className="h-5 w-5 text-destructive" />,
-            text: 'Erro de Verificação',
-            badgeVariant: 'destructive' as const,
-            description: accessStatus.mensagem,
-            planName: 'Erro'
-        }
-    }
-
-    if (accessStatus.plano_nome === 'Sem Plano' || accessStatus.plano_nome === 'Trial Expirado' || accessStatus.plano_nome === 'Nenhum') {
-         return {
-            icon: <Info className="h-5 w-5 text-blue-500" />,
-            text: accessStatus.plano_nome,
-            badgeVariant: 'secondary' as const,
-            description: accessStatus.mensagem,
-            planName: 'Nenhum'
-        }
-    }
-
-    const isExpired = !accessStatus.acesso_liberado && (accessStatus.mensagem.includes('expirou') || accessStatus.mensagem.includes('bloqueado'));
-    const isWaiting = !accessStatus.acesso_liberado && accessStatus.mensagem.includes('aguardando');
-
-    if (isExpired) {
-        return {
-            icon: <XCircle className="h-5 w-5 text-destructive" />,
-            text: 'Acesso Expirado',
-            badgeVariant: 'destructive' as const,
-            description: accessStatus.mensagem,
-            planName: accessStatus.plano_nome
-        }
-    }
-    if (isWaiting) {
-        return {
-            icon: <AlertTriangle className="h-5 w-5 text-yellow-500" />,
-            text: 'Aguardando Liberação',
-            badgeVariant: 'secondary' as const,
-            description: accessStatus.mensagem,
-            planName: accessStatus.plano_nome
-        }
-    }
-    // Default to active
-    return {
-        icon: <CheckCircle className="h-5 w-5 text-green-500" />,
-        text: 'Plano Ativo',
-        badgeVariant: 'default' as const,
-        description: accessStatus.mensagem,
-        planName: accessStatus.plano_nome
-    }
-}
-
+import { format, parseISO } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 export default function BillingPage() {
-  const { user, store, accessStatus, isLoading, fetchStoreData } = useAuth();
-  const { trackReportOpened, registerUniqueClick } = useAnalytics();
+  const { user, store, accessStatus, fetchStoreData } = useAuth();
   const { toast } = useToast();
   const [isStartingTrial, setIsStartingTrial] = useState(false);
-  
-  useEffect(() => {
-    trackReportOpened('billing_page');
-  }, [trackReportOpened]);
 
-
-  const handleCheckout = (planId: PlanID) => {
-    if (!store || !user) {
-        toast({
-            variant: 'destructive',
-            title: 'Erro de Autenticação',
-            description: 'Não foi possível identificar seu usuário ou loja. Por favor, faça login novamente.'
-        });
-        return;
-    }
-    
-    registerUniqueClick(`billing_plan_select_${planId}`);
-
-    const provider = 'hotmart';
-    const url = CHECKOUT_LINKS[provider]?.[planId];
-    
-    if (!url) {
-        toast({
-            variant: 'destructive',
-            title: 'Link de Checkout Indisponível',
-            description: `O link para o plano ${PLANS_CONFIG[planId].name} com ${provider} não foi configurado.`
-        });
-        return;
-    }
-
-    const externalReference = `${store.id}|${planId}|${user.id}`;
-    const finalUrl = `${url}${url.includes('?') ? '&' : '?'}external_reference=${encodeURIComponent(externalReference)}`;
-
-    registerUniqueClick(`billing_checkout_${provider}_${planId}`, {
-        provider: provider,
-        plan: planId,
-        source: 'billing_page',
-    });
-
-    const link = document.createElement('a');
-    link.href = finalUrl;
-    link.target = '_blank';
-    link.rel = 'noopener noreferrer';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  }
-  
+  /**
+   * Dispara o início do período de 7 dias gratuitos.
+   */
   const handleStartTrial = async () => {
     setIsStartingTrial(true);
     try {
-        const response = await fetch('/api/billing/start-trial', { method: 'POST' });
-        const result = await response.json();
+      const response = await fetch('/api/billing/start-trial', { method: 'POST' });
+      const result = await response.json();
 
-        if (!response.ok) {
-            throw new Error(result.error || 'Ocorreu um erro desconhecido.');
-        }
+      if (!response.ok) throw new Error(result.error || 'Erro ao iniciar trial');
 
-        toast({
-            title: 'Avaliação iniciada!',
-            description: 'Você agora have 7 dias de acesso gratuito.',
-        });
-        if(user) {
-            await fetchStoreData(user.id);
-        }
+      toast({ title: 'Avaliação iniciada!', description: 'Seu acesso foi liberado por 7 dias.' });
+      
+      // Sincroniza dados globais. O AppLayout detectará a mudança e poderá mudar a rota.
+      if (user) await fetchStoreData(user.id);
+      
     } catch (error: any) {
-        toast({
-            variant: 'destructive',
-            title: 'Não foi possível iniciar a avaliação',
-            description: error.message,
-        });
+      toast({
+        variant: 'destructive',
+        title: 'Não foi possível ativar',
+        description: error.message,
+      });
     } finally {
-        setIsStartingTrial(false);
+      setIsStartingTrial(false);
     }
-};
+  };
 
-  if (isLoading || !store) {
-    return (
-        <div className="p-8">
-            <Skeleton className="h-10 w-1/3 mb-8" />
-            <div className="space-y-4">
-                <Skeleton className="h-24 w-full" />
-                <Skeleton className="h-64 w-full" />
-            </div>
-        </div>
-    );
-  }
+  /**
+   * Monta o link externo de pagamento com referência para o webhook.
+   */
+  const handleCheckout = (planId: PlanID) => {
+    if (!store || !user) return;
 
-  const statusInfo = getStatusInfo(accessStatus);
+    const url = CHECKOUT_LINKS.hotmart[planId];
+    if (!url) {
+      toast({ variant: 'destructive', title: 'Checkout indisponível', description: 'Link não configurado para este plano.' });
+      return;
+    }
+
+    // Referência usada pelo webhook para identificar quem pagou o quê
+    const externalReference = `${store.id}|${planId}|${user.id}`;
+    const finalUrl = `${url}${url.includes('?') ? '&' : '?'}external_reference=${encodeURIComponent(externalReference)}`;
+
+    window.open(finalUrl, '_blank');
+  };
+
+  const statusInfo = getAccessStatusDisplay(accessStatus);
   const planOrder: PlanID[] = ['free', 'semanal', 'mensal', 'anual'];
-  
-  // Regra de negócio: Apenas planos pagos (semanal, mensal, anual) bloqueiam o checkout.
-  // Ter o plano 'free' (Avaliação) NÃO bloqueia os demais planos.
-  const paidPlans: PlanID[] = ['semanal', 'mensal', 'anual'];
-  const hasActivePaidPlan = accessStatus && paidPlans.includes(accessStatus.plano_tipo as PlanID);
-  const canShowHotmartPlans = !hasActivePaidPlan;
 
   return (
-    <div className="max-w-7xl mx-auto p-4 sm:p-8">
-        <div className="text-center mb-12">
-            <h1 className="text-4xl font-extrabold tracking-tight lg:text-5xl">Nossos Planos</h1>
-            <p className="mt-4 text-lg text-muted-foreground">Escolha o plano ideal para o seu negócio e comece a vender mais e melhor.</p>
-        </div>
-      
-        <div className="grid gap-8 md:grid-cols-1 mb-12">
-            <Card>
-                <CardHeader>
-                    <CardTitle>Situação do seu Acesso</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 bg-muted/50 rounded-lg">
-                        <div className="mb-2 sm:mb-0">
-                            <p className="font-bold text-lg">{statusInfo.planName}</p>
-                            <p className="text-sm text-muted-foreground">{statusInfo.description}</p>
-                        </div>
-                        <Badge variant={statusInfo.badgeVariant} className="flex items-center gap-2 text-sm px-3 py-1">
-                            {statusInfo.icon}
-                            <span>{statusInfo.text}</span>
-                        </Badge>
-                    </div>
-                </CardContent>
-            </Card>
-        </div>
+    <div className="max-w-6xl mx-auto space-y-12 py-8">
+      {/* Header */}
+      <div className="text-center space-y-4">
+        <h1 className="text-4xl font-extrabold tracking-tight font-headline">Assinatura e Acesso</h1>
+        <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+          Gerencie seu plano e visualize o status do seu acesso ao sistema VendaFácil.
+        </p>
+      </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 items-stretch">
-            {planOrder.map(planId => {
-                const plan = PLANS_CONFIG[planId];
-                if (!plan) return null;
-                
-                const isPaidPlan = paidPlans.includes(planId);
-                
-                // Se for um plano pago e o usuário já tiver um plano pago ativo, não mostramos os demais checkouts
-                if (isPaidPlan && !canShowHotmartPlans) {
-                    // Opcionalmente poderíamos mostrar o plano como "Plano Atual" mas por regra escondemos o checkout
-                    return null;
-                }
-
-                if (plan.isFree) {
-                    return (
-                        <Card key={planId} className="flex flex-col">
-                            <CardHeader className="text-center">
-                                <CardTitle className="text-2xl">{plan.name}</CardTitle>
-                                <CardDescription>{plan.description}</CardDescription>
-                            </CardHeader>
-                            <CardContent className="flex-grow flex flex-col items-center justify-center text-center">
-                                <div className="mb-6">
-                                    <span className="text-4xl font-bold">{plan.price}</span>
-                                    <span className="text-muted-foreground">/{plan.periodicity}</span>
-                                </div>
-                                <ul className="space-y-3 text-muted-foreground">
-                                    {plan.benefits.map((benefit, i) => (
-                                        <li key={i} className="flex items-center gap-2">
-                                            <CheckCircle className="h-4 w-4 text-green-500" />
-                                            <span>{benefit}</span>
-                                        </li>
-                                    ))}
-                                    <li className="flex items-center gap-2 text-yellow-500 pt-2">
-                                        <AlertTriangle className="h-4 w-4" />
-                                        <span>Limite de 10 clientes</span>
-                                    </li>
-                                    <li className="flex items-center gap-2 text-yellow-500">
-                                        <AlertTriangle className="h-4 w-4" />
-                                        <span>Limite de 5 vendas</span>
-                                    </li>
-                                </ul>
-                            </CardContent>
-                            <CardFooter>
-                                <Button 
-                                    className="w-full" 
-                                    size="lg" 
-                                    variant={'secondary'}
-                                    onClick={handleStartTrial}
-                                    disabled={store.trial_used || isStartingTrial || accessStatus?.plano_tipo === 'free'}
-                                >
-                                    {isStartingTrial && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                    {accessStatus?.plano_tipo === 'free' ? 'Avaliação Ativa' : store.trial_used ? 'Avaliação já utilizada' : 'Começar avaliação'}
-                                </Button>
-                            </CardFooter>
-                        </Card>
-                    );
-                }
-                
-                const isRecommended = planId === 'anual';
-
-                return (
-                    <Card key={planId} className={cn(
-                        "flex flex-col",
-                        isRecommended ? 'border-primary border-2 shadow-lg' : ''
-                    )}>
-                        {isRecommended && (
-                            <div className="py-1 px-4 bg-primary text-primary-foreground text-center text-sm font-semibold rounded-t-lg">
-                                Mais Popular
-                            </div>
-                        )}
-                        <CardHeader className="text-center">
-                            <CardTitle className="text-2xl">{plan.name}</CardTitle>
-                            <CardDescription>{plan.description}</CardDescription>
-                        </CardHeader>
-                        <CardContent className="flex-grow flex flex-col items-center justify-center text-center">
-                            <div className="mb-6">
-                                <span className="text-4xl font-bold">{plan.price}</span>
-                                <span className="text-muted-foreground">/{plan.periodicity}</span>
-                            </div>
-                            <ul className="space-y-3 text-muted-foreground">
-                                {plan.benefits.map((benefit, i) => (
-                                    <li key={i} className="flex items-center gap-2">
-                                        <CheckCircle className="h-4 w-4 text-green-500" />
-                                        <span>{benefit}</span>
-                                    </li>
-                                ))}
-                            </ul>
-                        </CardContent>
-                        <CardFooter>
-                            <Button 
-                                className="w-full" 
-                                size="lg" 
-                                variant={isRecommended ? 'default' : 'secondary'}
-                                onClick={() => handleCheckout(planId)}
-                            >
-                                Assinar Agora
-                            </Button>
-                        </CardFooter>
-                    </Card>
-                );
-            })}
-        </div>
-        
-        <div className="mt-12 flex flex-col items-center gap-6">
-            <div className="text-center text-muted-foreground text-sm flex items-center gap-2">
-                <ShieldCheck className="h-4 w-4 text-green-600" />
-                <span>Pagamento seguro via Hotmart. Você pode cancelar quando quiser.</span>
+      {/* Status Atual */}
+      <Card className="border-primary/20 bg-muted/30">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ShieldCheck className="h-5 w-5 text-primary" />
+            Situação do seu Acesso
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6 p-6 bg-background rounded-xl border">
+            <div className="space-y-2 text-center md:text-left">
+              <div className="flex items-center justify-center md:justify-start gap-2">
+                <span className="text-2xl font-bold">{statusInfo.planName}</span>
+                <Badge variant={statusInfo.badgeVariant}>{statusInfo.statusText}</Badge>
+              </div>
+              <p className="text-muted-foreground">{statusInfo.description}</p>
             </div>
-        </div>
 
+            {accessStatus?.data_fim_acesso && (
+              <div className="flex items-center gap-4 px-6 py-3 bg-muted rounded-lg border">
+                <Calendar className="h-5 w-5 text-primary" />
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Expira em</p>
+                  <p className="font-semibold">
+                    {format(parseISO(accessStatus.data_fim_acesso), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Grid de Planos */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch">
+        {planOrder.map(planId => {
+          const plan = PLANS_CONFIG[planId];
+          const isCurrent = accessStatus?.plano_tipo === planId && accessStatus.acesso_liberado;
+          const isTrial = planId === 'free';
+          const isPopular = planId === 'anual';
+
+          return (
+            <Card key={planId} className={cn(
+              "flex flex-col relative transition-all duration-300 hover:shadow-xl",
+              isPopular && "border-primary shadow-lg scale-105 z-10",
+              isCurrent && "border-green-500 bg-green-50/10"
+            )}>
+              {isPopular && (
+                <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground px-4 py-1 rounded-full text-xs font-bold uppercase tracking-widest">
+                  Melhor Escolha
+                </div>
+              )}
+
+              <CardHeader className="text-center">
+                <CardTitle className="text-xl font-headline">{plan.name}</CardTitle>
+                <CardDescription>{plan.description}</CardDescription>
+              </CardHeader>
+
+              <CardContent className="flex-1 space-y-6">
+                <div className="text-center">
+                  <span className="text-3xl font-bold">{plan.price}</span>
+                  <span className="text-muted-foreground ml-1">/{plan.periodicity}</span>
+                </div>
+
+                <ul className="space-y-3">
+                  {plan.benefits.map((b, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                      <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0 mt-0.5" />
+                      <span>{b}</span>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+
+              <CardFooter>
+                {isTrial ? (
+                  <Button 
+                    className="w-full" 
+                    variant="outline"
+                    onClick={handleStartTrial}
+                    disabled={isStartingTrial || store?.trial_used || isCurrent}
+                  >
+                    {isStartingTrial && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {store?.trial_used ? 'Trial já utilizado' : 'Começar 7 dias grátis'}
+                  </Button>
+                ) : (
+                  <Button 
+                    className="w-full" 
+                    variant={isPopular ? 'default' : 'secondary'}
+                    onClick={() => handleCheckout(planId)}
+                    disabled={isCurrent}
+                  >
+                    {isCurrent ? 'Plano Atual' : 'Assinar Agora'}
+                  </Button>
+                )}
+              </CardFooter>
+            </Card>
+          );
+        })}
+      </div>
+
+      {/* Footer Info */}
+      <div className="flex flex-col items-center gap-4 pt-8 text-muted-foreground">
+        <div className="flex items-center gap-2 text-sm">
+          <ShieldCheck className="h-4 w-4 text-green-600" />
+          Pagamento processado com segurança via Hotmart.
+        </div>
+        <p className="text-xs text-center max-w-md">
+          A liberação do acesso é imediata após a confirmação do pagamento. 
+          Em caso de boleto ou PIX, o sistema aguarda a notificação do banco.
+        </p>
+      </div>
     </div>
   );
+}
+
+/**
+ * Helper para normalizar as mensagens de status do acesso.
+ */
+function getAccessStatusDisplay(status: any) {
+  if (!status) {
+    return {
+      planName: 'Verificando...',
+      statusText: 'Aguarde',
+      badgeVariant: 'secondary' as const,
+      description: 'Sincronizando dados de licenciamento...',
+    };
+  }
+
+  if (status.acesso_liberado) {
+    return {
+      planName: status.plano_nome,
+      statusText: 'Ativo',
+      badgeVariant: 'default' as const,
+      description: status.mensagem || 'Seu acesso está liberado.',
+    };
+  }
+
+  return {
+    planName: status.plano_nome || 'Sem Plano',
+    statusText: 'Bloqueado',
+    badgeVariant: 'destructive' as const,
+    description: status.mensagem || 'Seu acesso expirou ou não foi encontrado.',
+  };
 }
