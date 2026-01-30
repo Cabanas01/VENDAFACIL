@@ -5,6 +5,7 @@
  * 
  * Coleta os dados comerciais para a criação da primeira loja.
  * Implementa sincronização forçada de sessão para garantir que auth.uid() não seja null.
+ * Segue premissas: CNPJ sem máscara, fetch via useEffect, inputs 100% controlados.
  */
 
 import { useState, useEffect } from 'react';
@@ -25,7 +26,7 @@ import { supabase } from '@/lib/supabase/client';
 const onboardingSchema = z.object({
   name: z.string().min(3, 'Nome fantasia muito curto'),
   legal_name: z.string().min(3, 'Razão social muito curta'),
-  cnpj: z.string().refine(isValidCnpj, 'CNPJ inválido'),
+  cnpj: z.string().refine((val) => isValidCnpj(val), 'CNPJ inválido'),
   phone: z.string().min(10, 'Telefone inválido'),
   timezone: z.string().default('America/Sao_Paulo'),
   cep: z.string().length(9, 'CEP inválido'),
@@ -45,7 +46,7 @@ export default function OnboardingPage() {
   const [isLoadingCnpj, setIsLoadingCnpj] = useState(false);
   const [step, setStep] = useState(1);
 
-  // ✅ Premissa 1: Todos os inputs começam com string vazia
+  // Premissa: Todos os inputs começam com string vazia
   const form = useForm<OnboardingValues>({
     resolver: zodResolver(onboardingSchema),
     defaultValues: { 
@@ -63,11 +64,13 @@ export default function OnboardingPage() {
     },
   });
 
-  // ✅ Premissa 2: CNPJ sem máscara para busca
-  const cnpjValue = form.watch('cnpj') || '';
+  const { setValue, watch, trigger } = form;
+
+  // CNPJ sem máscara para monitoramento
+  const cnpjValue = watch('cnpj') || '';
   const cleanCnpj = cnpjValue.replace(/\D/g, '');
 
-  // ✅ Premissa 3 e 4: useEffect correto sem loop
+  // Efeito de busca automática (Somente BrasilAPI - mais completo)
   useEffect(() => {
     if (cleanCnpj.length !== 14) return;
 
@@ -79,40 +82,40 @@ export default function OnboardingPage() {
         
         const data = await response.json();
         
-        // ✅ Premissa 5: States refletindo nos inputs controlados
-        form.setValue('legal_name', data.razao_social || '');
-        form.setValue('name', data.nome_fantasia || data.razao_social || '');
-        form.setValue('phone', data.ddd_telefone_1 || '');
-        form.setValue('cep', data.cep || '');
-        form.setValue('street', data.logradouro || '');
-        form.setValue('neighborhood', data.bairro || '');
-        form.setValue('city', data.municipio || '');
-        form.setValue('state', data.uf || '');
-        form.setValue('number', data.numero || '');
+        // Populando campos controlados
+        setValue('legal_name', data.razao_social || '');
+        setValue('name', data.nome_fantasia || data.razao_social || '');
+        setValue('phone', data.ddd_telefone_1 || '');
+        setValue('cep', data.cep || '');
+        setValue('street', data.logradouro || '');
+        setValue('neighborhood', data.bairro || '');
+        setValue('city', data.municipio || '');
+        setValue('state', data.uf || '');
+        setValue('number', data.numero || '');
 
-        toast({ title: 'Dados localizados!', description: 'Campos preenchidos automaticamente.' });
+        toast({ title: 'Dados localizados!', description: 'Campos preenchidos automaticamente via BrasilAPI.' });
       } catch (err) {
-        console.warn('[CNPJ_AUTOFILL_ERROR]', err);
+        console.warn('[ONBOARDING_CNPJ_AUTOFILL]', err);
+        toast({ variant: 'destructive', title: 'Aviso', description: 'Não foi possível localizar os dados deste CNPJ automaticamente.' });
       } finally {
         setIsLoadingCnpj(false);
       }
     };
 
     fetchCnpjData();
-  }, [cleanCnpj, form, toast]);
+  }, [cleanCnpj, setValue, toast]);
 
   const onSubmit = async (values: OnboardingValues) => {
     setIsSubmitting(true);
     
     try {
-      // ✅ PROBLEMA 1: Sincronização forçada de sessão antes do RPC
-      const { data: userData, error: userError } = await supabase.auth.getUser();
+      // Garantia de Sessão: Força o browser a hidratar o JWT antes do RPC
+      const { data: { user: activeUser }, error: userError } = await supabase.auth.getUser();
 
-      if (userError || !userData?.user) {
-        console.error('[ONBOARDING] Usuário não autenticado', userError);
+      if (userError || !activeUser) {
         toast({
           variant: 'destructive',
-          title: 'Sessão inválida',
+          title: 'Sessão instável',
           description: 'Não foi possível validar sua conta. Por favor, recarregue a página.',
         });
         setIsSubmitting(false);
@@ -135,36 +138,17 @@ export default function OnboardingPage() {
         }
       });
 
-      toast({ title: 'Tudo pronto!', description: 'Sua loja foi configurada com sucesso.' });
+      toast({ title: 'Configuração concluída!', description: 'Sua loja está pronta para operar.' });
+      // A navegação é gerida passivamente pelo AppLayout ao detectar storeStatus: has_store
     } catch (error: any) {
+      console.error('[ONBOARDING_SUBMIT_ERROR]', error);
       toast({
         variant: 'destructive',
-        title: 'Erro ao salvar loja',
-        description: error.message || 'Ocorreu um erro ao processar os dados no banco.'
+        title: 'Falha na criação da loja',
+        description: error.message || 'Verifique sua conexão e tente novamente.'
       });
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  const handleCepChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    let val = e.target.value.replace(/\D/g, '');
-    if (val.length > 5) val = val.slice(0, 5) + '-' + val.slice(5, 8);
-    form.setValue('cep', val);
-
-    if (val.replace('-', '').length === 8) {
-      try {
-        const res = await fetch(`https://viacep.com.br/ws/${val.replace('-', '')}/json/`);
-        const data = await res.json();
-        if (!data.erro) {
-          form.setValue('street', data.logradouro || '');
-          form.setValue('neighborhood', data.bairro || '');
-          form.setValue('city', data.localidade || '');
-          form.setValue('state', data.uf || '');
-        }
-      } catch (err) {
-        console.error('[CEP_ERROR]', err);
-      }
     }
   };
 
@@ -172,12 +156,14 @@ export default function OnboardingPage() {
     <Card className="shadow-2xl w-full border-border/50 max-w-lg mx-auto">
       <CardHeader className="space-y-4">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-2xl font-headline font-bold">Nova Loja</CardTitle>
-          <Store className="h-8 w-8 text-primary" />
+          <CardTitle className="text-2xl font-headline font-bold text-primary">VendaFácil Setup</CardTitle>
+          <div className="bg-primary/10 p-2 rounded-lg">
+            <Store className="h-6 w-6 text-primary" />
+          </div>
         </div>
         <Progress value={step === 1 ? 50 : 100} className="h-2" />
         <CardDescription>
-          {step === 1 ? 'Dados de identificação da empresa.' : 'Localização e contato comercial.'}
+          {step === 1 ? 'Primeiro, identifique sua empresa.' : 'Agora, onde sua loja está localizada?'}
         </CardDescription>
       </CardHeader>
 
@@ -188,10 +174,10 @@ export default function OnboardingPage() {
               <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
                 <FormField control={form.control} name="cnpj" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>CNPJ</FormLabel>
+                    <FormLabel>CNPJ (Somente números)</FormLabel>
                     <FormControl>
                       <div className="relative">
-                        <Input placeholder="00.000.000/0000-00" {...field} />
+                        <Input placeholder="00000000000000" {...field} />
                         {isLoadingCnpj && (
                           <div className="absolute right-3 top-1/2 -translate-y-1/2">
                             <Loader2 className="h-4 w-4 animate-spin text-primary" />
@@ -220,12 +206,12 @@ export default function OnboardingPage() {
             ) : (
               <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
                 <FormField control={form.control} name="cep" render={({ field }) => (
-                  <FormItem><FormLabel>CEP</FormLabel><FormControl><Input placeholder="00000-000" {...field} onChange={handleCepChange} /></FormControl><FormMessage /></FormItem>
+                  <FormItem><FormLabel>CEP</FormLabel><FormControl><Input placeholder="00000-000" {...field} /></FormControl><FormMessage /></FormItem>
                 )} />
                 <div className="grid grid-cols-4 gap-4">
                   <div className="col-span-3">
                     <FormField control={form.control} name="street" render={({ field }) => (
-                      <FormItem><FormLabel>Rua</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                      <FormItem><FormLabel>Rua/Avenida</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                     )} />
                   </div>
                   <div className="col-span-1">
@@ -250,7 +236,7 @@ export default function OnboardingPage() {
                   </div>
                 </div>
                 <FormField control={form.control} name="phone" render={({ field }) => (
-                  <FormItem><FormLabel>Telefone</FormLabel><FormControl><Input placeholder="(00) 00000-0000" {...field} /></FormControl><FormMessage /></FormItem>
+                  <FormItem><FormLabel>Telefone de Contato</FormLabel><FormControl><Input placeholder="(00) 00000-0000" {...field} /></FormControl><FormMessage /></FormItem>
                 )} />
               </div>
             )}
@@ -268,7 +254,7 @@ export default function OnboardingPage() {
                 type="button" 
                 className="ml-auto" 
                 onClick={async () => {
-                  const isValid = await form.trigger(['cnpj', 'name', 'legal_name']);
+                  const isValid = await trigger(['cnpj', 'name', 'legal_name']);
                   if (isValid) setStep(2);
                 }}
               >
