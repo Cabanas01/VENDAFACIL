@@ -23,13 +23,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const isAdminPath = pathname.startsWith('/admin');
 
-  // TESTE DE CONTEXTO OBRIGATÓRIO PARA DIAGNÓSTICO
+  // ✅ PROBLEMA 2: Log de diagnóstico para provar o estado do guardião
   useEffect(() => {
     console.log('[APP LAYOUT]', { user: user?.email, storeStatus, pathname });
   }, [user, storeStatus, pathname]);
 
   useEffect(() => {
-    if (loading) return;
+    // ✋ REGRA ABSOLUTA: Não decidir enquanto o estado é intermediário
+    if (loading || storeStatus === 'loading_auth' || storeStatus === 'loading_store') {
+      return;
+    }
 
     // 1. Falta de Sessão
     if (!user) {
@@ -37,10 +40,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // 2. Aguardar estados terminais de busca de loja
-    if (storeStatus === 'loading_auth' || storeStatus === 'loading_store') return;
-
-    // 3. Gestão de Tenant
+    // 2. Gestão de Tenant (Somente estados terminais decidem)
     if (storeStatus === 'no_store' && pathname !== '/onboarding' && !isAdminPath) {
       router.replace('/onboarding');
       return;
@@ -51,7 +51,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // 4. Paywall
+    // 3. Paywall
     const isLiberado = accessStatus?.acesso_liberado ?? false;
     const isSafePath = pathname === '/billing' || pathname === '/settings' || pathname === '/onboarding' || isAdminPath;
 
@@ -62,12 +62,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   }, [user, loading, storeStatus, accessStatus, pathname, router, isAdminPath]);
 
-  // RENDERS DE ESTADO INTERMEDIÁRIO
+  // ✅ RENDER DE CARREGAMENTO (Impede flashes de conteúdo errado)
   if (loading || storeStatus === 'loading_auth' || storeStatus === 'loading_store') {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground animate-pulse">Sincronizando dados da sua loja...</p>
+        <p className="text-sm text-muted-foreground animate-pulse">Sincronizando dados do sistema...</p>
       </div>
     );
   }
@@ -78,7 +78,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center">
         <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
         <h1 className="text-xl font-bold mb-2">Erro de Sincronização</h1>
-        <p className="text-muted-foreground mb-6">Não conseguimos validar os dados da sua conta no momento. Isso pode ser um problema de permissão no servidor.</p>
+        <p className="text-muted-foreground mb-6">Não conseguimos validar os dados da sua conta no momento.</p>
         <Button onClick={() => user && fetchStoreData(user.id)} variant="outline">
           <RefreshCcw className="mr-2 h-4 w-4" /> Tentar Novamente
         </Button>

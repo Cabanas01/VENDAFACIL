@@ -45,6 +45,7 @@ export default function OnboardingPage() {
   const [isLoadingCnpj, setIsLoadingCnpj] = useState(false);
   const [step, setStep] = useState(1);
 
+  // ✅ Premissa 1: Todos os inputs começam com string vazia
   const form = useForm<OnboardingValues>({
     resolver: zodResolver(onboardingSchema),
     defaultValues: { 
@@ -62,9 +63,11 @@ export default function OnboardingPage() {
     },
   });
 
+  // ✅ Premissa 2: CNPJ sem máscara para busca
   const cnpjValue = form.watch('cnpj') || '';
   const cleanCnpj = cnpjValue.replace(/\D/g, '');
 
+  // ✅ Premissa 3 e 4: useEffect correto sem loop
   useEffect(() => {
     if (cleanCnpj.length !== 14) return;
 
@@ -76,6 +79,7 @@ export default function OnboardingPage() {
         
         const data = await response.json();
         
+        // ✅ Premissa 5: States refletindo nos inputs controlados
         form.setValue('legal_name', data.razao_social || '');
         form.setValue('name', data.nome_fantasia || data.razao_social || '');
         form.setValue('phone', data.ddd_telefone_1 || '');
@@ -101,21 +105,20 @@ export default function OnboardingPage() {
     setIsSubmitting(true);
     
     try {
-      // ✅ PASSO CRÍTICO: Sincronização forçada de sessão
+      // ✅ PROBLEMA 1: Sincronização forçada de sessão antes do RPC
       const { data: userData, error: userError } = await supabase.auth.getUser();
 
       if (userError || !userData?.user) {
-        console.error('[ONBOARDING] Falha na sincronização de sessão', userError);
+        console.error('[ONBOARDING] Usuário não autenticado', userError);
         toast({
           variant: 'destructive',
-          title: 'Sessão instável',
+          title: 'Sessão inválida',
           description: 'Não foi possível validar sua conta. Por favor, recarregue a página.',
         });
         setIsSubmitting(false);
         return;
       }
 
-      // Agora o client tem o JWT atualizado e auth.uid() não será null no banco
       await createStore({
         name: values.name,
         legal_name: values.legal_name,
