@@ -1,11 +1,16 @@
 'use client';
 
+/**
+ * @fileOverview AppLayout (Guardião Único)
+ * Este é o cérebro da navegação. Ele é o único lugar que executa router.replace.
+ */
+
 import { useAuth } from '@/components/auth-provider';
 import { useRouter, usePathname } from 'next/navigation';
 import { useEffect } from 'react';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { MainNav } from '@/components/main-nav';
-import { Loader2, RefreshCcw } from 'lucide-react';
+import { Loader2, RefreshCcw, AlertOctagon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -14,69 +19,84 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => {
+    // 🚨 REGRA 1: Se a sessão auth ainda está carregando, não fazemos nada.
     if (loading) return;
 
-    // 1. Não autenticado -> Login
+    // 🚨 REGRA 2: Se não houver usuário autenticado, expulsar para o login.
     if (!user) {
       router.replace('/login');
       return;
     }
 
-    // 2. Autenticado mas sem loja -> Onboarding
-    // Só redireciona se tivermos certeza absoluta (status 'none')
-    if (storeStatus === 'none' && pathname !== '/onboarding') {
+    // 🚨 REGRA 3: Se a loja ainda está sendo buscada ou houve erro, não redirecionamos.
+    // Aguardamos os estados terminais: 'has_store', 'no_store' ou 'error'.
+    if (storeStatus === 'loading_store' || storeStatus === 'unknown') return;
+
+    // 🚨 REGRA 4: SE REALMENTE NÃO TEM LOJA -> Onboarding
+    if (storeStatus === 'no_store' && pathname !== '/onboarding') {
       router.replace('/onboarding');
       return;
     }
 
-    // 3. Redirecionar do onboarding se já tem loja (status 'has')
-    if (storeStatus === 'has' && pathname === '/onboarding') {
+    // 🚨 REGRA 5: SE TEM LOJA MAS ESTÁ NO ONBOARDING -> Dashboard
+    if (storeStatus === 'has_store' && pathname === '/onboarding') {
       router.replace('/dashboard');
       return;
     }
 
-    // 4. Paywall: Acesso Bloqueado -> Billing (exceto se for rota segura)
+    // 🚨 REGRA 6: PAYWALL - Se acesso expirou, vai para Billing (exceto se já estiver lá ou em settings)
     const isAccessBlocked = accessStatus && !accessStatus.acesso_liberado;
     const isSafePath = pathname === '/billing' || pathname === '/settings' || pathname === '/onboarding';
     
-    if (storeStatus === 'has' && isAccessBlocked && !isSafePath) {
+    if (storeStatus === 'has_store' && isAccessBlocked && !isSafePath) {
       router.replace('/billing');
       return;
     }
 
   }, [user, loading, storeStatus, accessStatus, pathname, router]);
 
-  // REGRA DE OURO: Bloquear qualquer renderização enquanto estiver carregando ou status for desconhecido.
-  // Isso evita que o formulário de onboarding apareça prematuramente para quem já tem loja.
-  if (loading || storeStatus === 'unknown' || storeStatus === 'loading') {
+  /**
+   * RENDERIZAÇÃO DE ESTADOS DE CARREGAMENTO (Evita tela branca)
+   */
+
+  // 1. Loader de Autenticação / Inicialização
+  if (loading || storeStatus === 'unknown' || storeStatus === 'loading_store') {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground animate-pulse">
-          {storeStatus === 'loading' ? 'Verificando sua loja...' : 'Carregando sessão...'}
+        <p className="text-sm text-muted-foreground animate-pulse font-medium">
+          {storeStatus === 'loading_store' ? 'Sincronizando dados da sua loja...' : 'Validando sua sessão...'}
         </p>
       </div>
     );
   }
 
-  // Tratamento de Erro Crítico (Instabilidade no Supabase)
+  // 2. Interface de Erro de Conexão (RLS ou Supabase Down)
   if (storeStatus === 'error') {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-background p-6 text-center gap-4">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background p-6 text-center gap-6">
+        <div className="bg-destructive/10 p-4 rounded-full">
+            <AlertOctagon className="h-12 w-12 text-destructive" />
+        </div>
         <div className="space-y-2">
-            <h1 className="text-2xl font-bold text-destructive">Erro de Conexão</h1>
-            <p className="text-muted-foreground max-w-md">
-                Não conseguimos validar os dados da sua loja no momento. Por favor, tente atualizar a página.
+            <h1 className="text-2xl font-bold">Erro de Sincronização</h1>
+            <p className="text-muted-foreground max-w-md mx-auto">
+                Não conseguimos validar os dados da sua loja. Isso pode ser uma falha de conexão ou permissão de acesso.
             </p>
         </div>
-        <Button onClick={() => user && fetchStoreData(user.id)} variant="outline">
-            <RefreshCcw className="mr-2 h-4 w-4" /> Tentar Novamente
-        </Button>
+        <div className="flex gap-3">
+            <Button onClick={() => user && fetchStoreData(user.id)} variant="default">
+                <RefreshCcw className="mr-2 h-4 w-4" /> Tentar Novamente
+            </Button>
+            <Button onClick={() => window.location.reload()} variant="outline">
+                Recarregar App
+            </Button>
+        </div>
       </div>
     );
   }
 
-  // Se for Onboarding, renderiza sem sidebar
+  // 3. Renderização do Onboarding (Sem Sidebar)
   if (pathname === '/onboarding') {
     return (
       <main className="min-h-screen bg-background p-4 flex items-center justify-center w-full">
@@ -85,10 +105,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Fallback de segurança para redirecionamento
-  if (!user || storeStatus === 'none') return null;
+  // 4. Fallback de Segurança (Se status for no_store mas o useEffect ainda não redirecionou)
+  if (storeStatus === 'no_store') {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-background">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      );
+  }
 
-  // App Principal
+  // 5. App Principal (Com Sidebar) - Renderiza apenas se 'has_store'
   return (
     <SidebarProvider>
       <div className="flex min-h-screen">

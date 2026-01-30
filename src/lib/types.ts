@@ -114,7 +114,15 @@ export type Customer = {
     created_at: string;
 };
 
-export type StoreStatus = 'unknown' | 'loading' | 'has' | 'none' | 'error';
+/**
+ * Estados do Guardião de Rotas
+ * - unknown: App inicializando, checando auth.
+ * - loading_store: Sessão OK, buscando loja no banco.
+ * - has_store: Loja encontrada e dados carregados.
+ * - no_store: Buscas concluídas, usuário realmente não tem loja.
+ * - error: Falha técnica ao consultar o banco (RLS, rede, etc).
+ */
+export type StoreStatus = 'unknown' | 'loading_store' | 'has_store' | 'no_store' | 'error';
 
 
 // Types for Time-based Access Control
