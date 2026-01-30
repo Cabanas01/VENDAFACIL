@@ -3,7 +3,7 @@
 /**
  * @fileOverview AppLayout (Guardião Único)
  * 
- * Este componente é o único lugar autorizado a executar redirecionamentos.
+ * Este componente é o único lugar autorizado a executar redirecionamentos de fluxo.
  * Ele observa a Máquina de Estados do AuthProvider e decide o destino do usuário.
  */
 
@@ -24,7 +24,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     // 1. Aguardar autenticação inicial
     if (loading) return;
 
-    // 2. Segurança: Se não está logado, expulsa
+    // 2. Segurança: Se não está logado, expulsa para login
     if (!user) {
       router.replace('/login');
       return;
@@ -45,7 +45,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // 6. PAYWALL: Bloqueio de acesso expirado
+    // 6. PAYWALL: Bloqueio de acesso expirado (se aplicável)
     const isAccessBlocked = accessStatus && !accessStatus.acesso_liberado;
     const isSafePath = pathname === '/billing' || pathname === '/settings' || pathname === '/onboarding';
     
@@ -83,8 +83,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="space-y-2">
             <h1 className="text-2xl font-bold">Erro de Sincronização</h1>
             <p className="text-muted-foreground">
-                Não conseguimos validar os dados da sua loja devido a uma falha de conexão ou permissão.
-                <strong> Por segurança, o acesso ao onboarding foi bloqueado.</strong>
+                Não conseguimos validar os dados da sua loja devido a uma falha de conexão ou permissão (RLS).
+                <strong> Por segurança, o acesso ao onboarding foi bloqueado para evitar duplicidade.</strong>
             </p>
         </div>
         <div className="flex gap-3">

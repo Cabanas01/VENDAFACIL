@@ -81,7 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // 🚨 SEGREDO: Se error for !== null, é falha técnica, NÃO é 'no_store'.
       if (ownerError) {
-        console.error('[AUTH] Erro técnico na busca de owner:', ownerError);
+        console.error('[AUTH] Erro técnico na busca de owner (RLS ou Rede):', ownerError);
         setStoreStatus('error');
         return;
       }
@@ -121,7 +121,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         supabase.from('store_members').select('*').eq('store_id', storeId),
       ]);
 
-      if (storeRes.error) throw storeRes.error;
+      if (storeRes.error) {
+        console.error('[AUTH] Erro ao carregar detalhes da loja:', storeRes.error);
+        setStoreStatus('error');
+        return;
+      }
 
       // Processamento de membros (Lookup de perfis)
       let members: StoreMember[] = [];
@@ -180,11 +184,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
       const newUser = session?.user ?? null;
-      setUser(newUser);
       
-      if (newUser) {
-        fetchStoreData(newUser.id);
-      } else {
+      if (event === 'SIGNED_IN' || (event === 'INITIAL_SESSION' && newUser)) {
+        setUser(newUser);
+        fetchStoreData(newUser!.id);
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
         setStore(null);
         setStoreStatus('no_store');
         setAccessStatus(null);
@@ -206,9 +211,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const createStore = useCallback(async (storeData: any) => {
     if (!user) return null;
     
-    // Safety check para evitar duplicidade acidental no frontend
-    if (storeStatus === 'loading_store' || storeStatus === 'has_store') return store;
-
     const { data, error } = await (supabase.rpc as any)('create_new_store', {
       p_name: storeData.name,
       p_legal_name: storeData.legal_name,
@@ -225,7 +227,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     await fetchStoreData(user.id);
     return data as Store;
-  }, [user, storeStatus, store, fetchStoreData]);
+  }, [user, fetchStoreData]);
 
   const updateStore = useCallback(async (data: any) => {
     if (!store || !user) return;
