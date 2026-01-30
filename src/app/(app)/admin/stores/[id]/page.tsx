@@ -4,7 +4,6 @@
  * @fileOverview Detalhes da Loja (Admin Drill-down)
  * 
  * Fornece uma visão 360º de um tenant específico para o administrador.
- * Permite gerenciar acessos, visualizar dados operacionais e equipe.
  */
 
 import { useEffect, useState, useMemo } from 'react';
@@ -24,14 +23,12 @@ import {
   TrendingUp, 
   User, 
   MapPin, 
-  Calendar,
   Lock,
   Unlock,
-  Package,
-  Loader2
+  Loader2,
+  AlertTriangle
 } from 'lucide-react';
 import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 import { GrantPlanDialog } from '../../grant-plan-dialog';
 import { useToast } from '@/hooks/use-toast';
 
@@ -55,7 +52,7 @@ export default function AdminStoreDetailsPage() {
       const [storeRes, customersRes, salesRes, membersRes] = await Promise.all([
         supabase.from('stores').select('*, users(email), store_access(*)').eq('id', id).single(),
         supabase.from('customers').select('*').eq('store_id', id).order('created_at', { ascending: false }),
-        supabase.from('sales').select('*, sale_items(*)').eq('store_id', id).order('created_at', { ascending: false }),
+        supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', id).order('created_at', { ascending: false }),
         supabase.from('store_members').select('*, users(name, email)').eq('store_id', id)
       ]);
 
@@ -66,18 +63,18 @@ export default function AdminStoreDetailsPage() {
       setSales(salesRes.data || []);
       setMembers(membersRes.data || []);
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Erro ao carrergar dados', description: err.message });
+      toast({ variant: 'destructive', title: 'Erro ao carregar dados', description: err.message });
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadAllData();
+    if (id) loadAllData();
   }, [id]);
 
   const stats = useMemo(() => {
-    const revenue = sales.reduce((acc, s) => acc + s.total_cents, 0);
+    const revenue = sales.reduce((acc, s) => acc + (s.total_cents || 0), 0);
     return { revenue, salesCount: sales.length, customersCount: customers.length };
   }, [sales, customers]);
 
@@ -85,24 +82,36 @@ export default function AdminStoreDetailsPage() {
     return (
       <div className="h-[60vh] flex flex-col items-center justify-center gap-4 text-muted-foreground">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        <p className="animate-pulse">Cruzando dados do tenant...</p>
+        <p className="animate-pulse font-medium">Cruzando dados do tenant...</p>
+      </div>
+    );
+  }
+
+  if (!store) {
+    return (
+      <div className="h-[60vh] flex flex-col items-center justify-center gap-4 text-center">
+        <AlertTriangle className="h-12 w-12 text-destructive" />
+        <div className="space-y-1">
+          <h2 className="text-xl font-bold">Loja não encontrada</h2>
+          <p className="text-muted-foreground">O identificador {id} não corresponde a nenhum registro ativo.</p>
+        </div>
+        <Button variant="outline" onClick={() => router.back()}>Voltar</Button>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" onClick={() => router.back()}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <PageHeader 
-          title={store.name} 
+          title={store.name || 'Loja sem Nome'} 
           subtitle={`Gestão administrativa da loja ${store.id}`} 
         />
       </div>
 
-      {/* Grid de Resumo Rápido */}
       <div className="grid gap-6 md:grid-cols-4">
         <Card className="bg-primary/5 border-primary/10">
           <CardHeader className="pb-2"><CardTitle className="text-xs font-bold uppercase text-primary">Faturamento Global</CardTitle></CardHeader>
@@ -138,10 +147,9 @@ export default function AdminStoreDetailsPage() {
           <TabsTrigger value="sales">Vendas ({sales.length})</TabsTrigger>
           <TabsTrigger value="customers">Clientes ({customers.length})</TabsTrigger>
           <TabsTrigger value="access" className="text-primary font-bold">Plano & Licença</TabsTrigger>
-          <TabsTrigger value="team">Membros Equipe</TabsTrigger>
+          <TabsTrigger value="team">Equipe ({members.length})</TabsTrigger>
         </TabsList>
 
-        {/* Overview Tab */}
         <TabsContent value="overview">
           <div className="grid gap-6 md:grid-cols-2">
             <Card>
@@ -149,15 +157,15 @@ export default function AdminStoreDetailsPage() {
               <CardContent className="space-y-4">
                 <div>
                   <label className="text-[10px] font-bold uppercase text-muted-foreground">E-mail de Login</label>
-                  <p className="font-medium">{store.users?.email}</p>
+                  <p className="font-medium">{store.users?.email || 'N/A'}</p>
                 </div>
                 <div>
                   <label className="text-[10px] font-bold uppercase text-muted-foreground">Razão Social</label>
-                  <p className="font-medium">{store.legal_name}</p>
+                  <p className="font-medium">{store.legal_name || '-'}</p>
                 </div>
                 <div>
                   <label className="text-[10px] font-bold uppercase text-muted-foreground">CNPJ</label>
-                  <p className="font-mono font-bold text-primary">{store.cnpj}</p>
+                  <p className="font-mono font-bold text-primary">{store.cnpj || '-'}</p>
                 </div>
               </CardContent>
             </Card>
@@ -182,7 +190,6 @@ export default function AdminStoreDetailsPage() {
           </div>
         </TabsContent>
 
-        {/* Sales Tab */}
         <TabsContent value="sales">
           <Card>
             <CardContent className="pt-6">
@@ -198,10 +205,10 @@ export default function AdminStoreDetailsPage() {
                 <TableBody>
                   {sales.map(s => (
                     <TableRow key={s.id}>
-                      <TableCell className="text-xs">{format(new Date(s.created_at), 'dd/MM/yyyy HH:mm')}</TableCell>
-                      <TableCell className="font-bold">{formatCurrency(s.total_cents)}</TableCell>
+                      <TableCell className="text-xs">{s.created_at ? format(new Date(s.created_at), 'dd/MM/yyyy HH:mm') : '-'}</TableCell>
+                      <TableCell className="font-bold">{formatCurrency(s.total_cents || 0)}</TableCell>
                       <TableCell className="capitalize text-xs">{s.payment_method}</TableCell>
-                      <TableCell className="text-xs">{s.sale_items?.length} produtos</TableCell>
+                      <TableCell className="text-xs">{s.items?.length || 0} produtos</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -210,7 +217,6 @@ export default function AdminStoreDetailsPage() {
           </Card>
         </TabsContent>
 
-        {/* Access Tab */}
         <TabsContent value="access" className="space-y-6">
           <div className="grid gap-6 md:grid-cols-2">
             <Card className="border-primary/20 bg-primary/5">
@@ -236,36 +242,35 @@ export default function AdminStoreDetailsPage() {
                 
                 <div className="flex gap-3">
                   <Button className="flex-1" onClick={() => setIsGrantDialogOpen(true)}>
-                    <Unlock className="h-4 w-4 mr-2" /> Alterar / Conceder Plano
+                    <Unlock className="h-4 w-4 mr-2" /> Conceder Plano
                   </Button>
                   <Button variant="destructive" className="flex-1">
-                    <Lock className="h-4 w-4 mr-2" /> Bloquear Acesso
+                    <Lock className="h-4 w-4 mr-2" /> Bloquear
                   </Button>
                 </div>
               </CardContent>
             </Card>
 
             <Card>
-              <CardHeader><CardTitle className="text-lg">Metadados de Cobrança</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-lg font-bold">Metadados SaaS</CardTitle></CardHeader>
               <CardContent className="space-y-4 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Origem do Último Pagamento:</span>
+                  <span className="text-muted-foreground">Origem da Licença:</span>
                   <span className="font-bold uppercase text-xs">{store.store_access?.[0]?.origem || 'Manual'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">ID Externo (Webhook):</span>
+                  <span className="text-muted-foreground">ID Interno do Tenant:</span>
                   <span className="font-mono text-[10px]">{store.id}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Assinatura Renovável:</span>
-                  <Badge variant="outline">{store.store_access?.[0]?.renovavel ? 'Sim' : 'Não'}</Badge>
+                  <span className="text-muted-foreground">Data de Criação:</span>
+                  <span className="font-bold">{store.created_at ? format(new Date(store.created_at), 'dd/MM/yyyy') : '-'}</span>
                 </div>
               </CardContent>
             </Card>
           </div>
         </TabsContent>
 
-        {/* Team Tab */}
         <TabsContent value="team">
           <Card>
             <CardContent className="pt-6">
@@ -281,10 +286,10 @@ export default function AdminStoreDetailsPage() {
                 <TableBody>
                   {members.map(m => (
                     <TableRow key={m.user_id}>
-                      <TableCell className="font-bold">{m.users?.name || 'Sem nome'}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{m.users?.email}</TableCell>
+                      <TableCell className="font-bold">{m.users?.name || 'Membro sem nome'}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{m.users?.email || '-'}</TableCell>
                       <TableCell><Badge variant="outline" className="text-[10px] uppercase">{m.role}</Badge></TableCell>
-                      <TableCell className="text-xs">{format(new Date(m.created_at), 'dd/MM/yyyy')}</TableCell>
+                      <TableCell className="text-xs">{m.created_at ? format(new Date(m.created_at), 'dd/MM/yyyy') : '-'}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

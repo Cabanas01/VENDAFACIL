@@ -93,8 +93,8 @@ export default function AdminAnalytics() {
   const eventsOverTimeData = useMemo(() => {
     if (!summary?.events_by_day) return [];
     return summary.events_by_day.map(d => ({
-        date: format(parseISO(d.day), 'dd/MM'),
-        total: d.count
+        date: d.day ? format(parseISO(d.day), 'dd/MM') : '-',
+        total: d.count || 0
     }));
   }, [summary]);
 
@@ -123,8 +123,8 @@ export default function AdminAnalytics() {
                     <CardDescription>Use estes botões para disparar eventos de teste.</CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-2">
-                    <Button onClick={handleGoToBilling} variant="outline">
-                        <Wallet className="mr-2" />
+                    <Button onClick={handleGoToBilling} variant="outline" className="w-full justify-start">
+                        <Wallet className="mr-2 h-4 w-4" />
                         Ir para Assinaturas (Testar Clique Único)
                     </Button>
                 </CardContent>
@@ -222,10 +222,10 @@ export default function AdminAnalytics() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {summary?.top_event_names?.map(event => (
-                                    <TableRow key={event.event_name}>
-                                        <TableCell className="font-medium">{event.event_name}</TableCell>
-                                        <TableCell className="text-right">{event.count}</TableCell>
+                                {summary?.top_event_names?.map((event, idx) => (
+                                    <TableRow key={event.event_name || idx}>
+                                        <TableCell className="font-medium">{event.event_name || 'N/A'}</TableCell>
+                                        <TableCell className="text-right">{event.count || 0}</TableCell>
                                     </TableRow>
                                 ))}
                             </TableBody>
@@ -251,8 +251,8 @@ export default function AdminAnalytics() {
                 <CardDescription>Use estes botões para disparar eventos de teste.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-2">
-                <Button onClick={handleGoToBilling} variant="outline">
-                    <Wallet className="mr-2" />
+                <Button onClick={handleGoToBilling} variant="outline" className="w-full justify-start">
+                    <Wallet className="mr-2 h-4 w-4" />
                     Ir para Assinaturas (Testar Clique Único)
                 </Button>
             </CardContent>

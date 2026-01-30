@@ -53,15 +53,17 @@ export default function ReportsPage() {
     }
 
     const totals = filteredSales.reduce((acc, sale) => {
-      acc.totalCents += sale.total_cents;
+      acc.totalCents += (sale.total_cents || 0);
       acc.count += 1;
-      acc[sale.payment_method] = (acc[sale.payment_method] || 0) + sale.total_cents;
+      if (sale.payment_method) {
+        acc[sale.payment_method] = (acc[sale.payment_method] || 0) + (sale.total_cents || 0);
+      }
       return acc;
     }, { totalCents: 0, count: 0, cash: 0, pix: 0, card: 0 });
 
-    const cost = filteredSales.flatMap(s => s.items).reduce((acc, item) => {
+    const cost = filteredSales.flatMap(s => s.items || []).reduce((acc, item) => {
         const product = products.find(p => p.id === item.product_id);
-        return acc + (product?.cost_cents ?? 0) * item.quantity;
+        return acc + (product?.cost_cents ?? 0) * (item.quantity || 0);
     }, 0);
     
     const profit = totals.totalCents - cost;
@@ -75,43 +77,46 @@ export default function ReportsPage() {
       const salesOnDay = filteredSales.filter(s => format(new Date(s.created_at), 'yyyy-MM-dd') === format(day, 'yyyy-MM-dd'));
       return {
           date: format(day, 'dd/MM'),
-          total: salesOnDay.reduce((sum, s) => sum + s.total_cents, 0)
+          total: salesOnDay.reduce((sum, s) => sum + (s.total_cents || 0), 0)
       }
   }) : [];
 
   const salesByPaymentMethod = filteredSales.reduce((acc, sale) => {
-      acc[sale.payment_method] = (acc[sale.payment_method] || 0) + sale.total_cents;
+      if (sale.payment_method) {
+        acc[sale.payment_method] = (acc[sale.payment_method] || 0) + (sale.total_cents || 0);
+      }
       return acc;
   }, {} as Record<'cash' | 'pix' | 'card', number>);
 
   const salesByProduct = filteredSales
-    .flatMap(sale => sale.items)
+    .flatMap(sale => sale.items || [])
     .reduce((acc, item) => {
-        acc[item.product_name_snapshot] = (acc[item.product_name_snapshot] || 0) + item.subtotal_cents;
+        const name = item.product_name_snapshot || 'Produto sem nome';
+        acc[name] = (acc[name] || 0) + (item.subtotal_cents || 0);
         return acc;
     }, {} as Record<string, number>);
   const topProducts = Object.entries(salesByProduct).sort((a, b) => b[1] - a[1]).map(([name, total]) => ({ name, total }));
 
   const salesByCategory = filteredSales
-    .flatMap(sale => sale.items)
+    .flatMap(sale => sale.items || [])
     .map(item => {
         const product = products.find(p => p.id === item.product_id);
         return { ...item, category: product?.category || 'Sem categoria' };
     })
     .reduce((acc, item) => {
-        acc[item.category] = (acc[item.category] || 0) + item.quantity;
+        acc[item.category] = (acc[item.category] || 0) + (item.quantity || 0);
         return acc;
     }, {} as Record<string, number>);
    const topCategories = Object.entries(salesByCategory).sort((a,b) => b[1] - a[1]).map(([name, total]) => ({name, total}));
 
   const stockByCategory = products.reduce((acc, product) => {
     const category = product.category || 'Sem categoria';
-    acc[category] = (acc[category] || 0) + product.stock_qty;
+    acc[category] = (acc[category] || 0) + (product.stock_qty || 0);
     return acc;
   }, {} as Record<string, number>);
   const stockByCategoryData = Object.entries(stockByCategory).map(([name, total]) => ({ name, total }));
 
-  const productsWithoutSale = products.filter(p => p.stock_qty > 0 && !filteredSales.some(s => s.items.some(i => i.product_id === p.id)));
+  const productsWithoutSale = products.filter(p => p.stock_qty > 0 && !filteredSales.some(s => (s.items || []).some(i => i.product_id === p.id)));
 
   const handleGenerateReportText = () => {
     if (!dateRange?.from || !reportData) {
