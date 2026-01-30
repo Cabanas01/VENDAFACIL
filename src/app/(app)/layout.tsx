@@ -4,7 +4,7 @@
  * @fileOverview AppLayout (O ÚNICO Guardião)
  * 
  * Toda decisão de navegação acontece aqui. 
- * Ele escuta o AuthProvider global e move o usuário conforme o estado.
+ * Centraliza logs de diagnóstico e proteção de rotas.
  */
 
 import { useAuth } from '@/components/auth-provider';
@@ -23,8 +23,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const isAdminPath = pathname.startsWith('/admin');
 
-  // TESTE DE CONTEXTO REQUISITADO
-  console.log('[APP LAYOUT]', { user: user?.email, storeStatus, pathname });
+  // TESTE DE CONTEXTO OBRIGATÓRIO PARA DIAGNÓSTICO
+  useEffect(() => {
+    console.log('[APP LAYOUT]', { user: user?.email, storeStatus, pathname });
+  }, [user, storeStatus, pathname]);
 
   useEffect(() => {
     if (loading) return;
@@ -35,7 +37,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // 2. Aguardar estados terminais
+    // 2. Aguardar estados terminais de busca de loja
     if (storeStatus === 'loading_auth' || storeStatus === 'loading_store') return;
 
     // 3. Gestão de Tenant
@@ -60,7 +62,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   }, [user, loading, storeStatus, accessStatus, pathname, router, isAdminPath]);
 
-  // RENDERS DE ESTADO
+  // RENDERS DE ESTADO INTERMEDIÁRIO
   if (loading || storeStatus === 'loading_auth' || storeStatus === 'loading_store') {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
@@ -70,12 +72,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
+  // RENDER DE ERRO TÉCNICO (RLS / REDE)
   if (storeStatus === 'error') {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center">
         <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
         <h1 className="text-xl font-bold mb-2">Erro de Sincronização</h1>
-        <p className="text-muted-foreground mb-6">Não conseguimos validar os dados da sua conta no momento.</p>
+        <p className="text-muted-foreground mb-6">Não conseguimos validar os dados da sua conta no momento. Isso pode ser um problema de permissão no servidor.</p>
         <Button onClick={() => user && fetchStoreData(user.id)} variant="outline">
           <RefreshCcw className="mr-2 h-4 w-4" /> Tentar Novamente
         </Button>
@@ -83,7 +86,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (pathname === '/onboarding') return <main className="min-h-screen p-4 flex items-center justify-center">{children}</main>;
+  // No Onboarding não usamos sidebar
+  if (pathname === '/onboarding') return <main className="min-h-screen p-4 flex items-center justify-center bg-muted/5">{children}</main>;
 
   return (
     <SidebarProvider>

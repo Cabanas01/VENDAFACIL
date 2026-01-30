@@ -3,9 +3,8 @@
 /**
  * @fileOverview AuthProvider (Motor de Estado Passivo)
  * 
- * REGRA DE OURO: Este componente NÃO decide navegação.
- * Ele apenas sincroniza a sessão e os dados do tenant com o Supabase
- * e expõe a máquina de estados oficial para o AppLayout.
+ * Sincroniza sessão e dados do tenant. 
+ * NÃO executa navegação (Regra de Ouro).
  */
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -19,7 +18,6 @@ import type {
   StoreStatus, 
   StoreAccessStatus,
   CartItem,
-  StoreMember,
   Customer
 } from '@/lib/types';
 
@@ -68,7 +66,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setStoreStatus('loading_store');
     
     try {
-      // 1. Tentar localizar como Proprietário
       const { data: ownerStore, error: ownerError } = await supabase
         .from('stores')
         .select('id')
@@ -82,7 +79,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       let storeId = ownerStore?.id;
 
-      // 2. Tentar localizar como Equipe
       if (!storeId) {
         const { data: memberEntry, error: memberError } = await supabase
           .from('store_members')
@@ -97,21 +93,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         storeId = memberEntry?.store_id;
       }
 
-      // 3. Ausência Conclusiva
       if (!storeId) {
         setStore(null);
         setStoreStatus('no_store');
         return;
       }
 
-      // 4. Carregamento Full
-      const [statusRes, storeRes, productsRes, salesRes, cashRes, membersRes, customersRes] = await Promise.all([
+      const [statusRes, storeRes, productsRes, salesRes, cashRes, customersRes] = await Promise.all([
         supabase.rpc('get_store_access_status', { p_store_id: storeId }),
         supabase.from('stores').select('*').eq('id', storeId).single(),
         supabase.from('products').select('*').eq('store_id', storeId).order('name'),
         supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeId).order('created_at', { ascending: false }),
         supabase.from('cash_registers').select('*').eq('store_id', storeId).order('opened_at', { ascending: false }),
-        supabase.from('store_members').select('*').eq('store_id', storeId),
         supabase.from('customers').select('*').eq('store_id', storeId).order('name'),
       ]);
 
@@ -134,8 +127,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const initAuth = async () => {
-      const { data } = await supabase.auth.getSession();
-      const sessionUser = data.session?.user ?? null;
+      const { data: { user: sessionUser } } = await supabase.auth.getUser();
       setUser(sessionUser);
       setLoading(false);
 
@@ -165,19 +157,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [fetchStoreData]);
 
   const createStore = useCallback(async (storeData: any) => {
-    if (!user) return null;
+    // 1. Garantir que o cliente Supabase tenha a sessão atualizada (pula o cache)
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
+    if (!currentUser) throw new Error('Usuário não autenticado para criar loja.');
+
+    // 2. Chamar RPC. auth.uid() no banco agora será populado pelo token enviado.
     const { data, error } = await supabase.rpc('create_new_store', {
       p_name: storeData.name,
       p_legal_name: storeData.legal_name,
       p_cnpj: storeData.cnpj,
       p_address: storeData.address,
       p_phone: storeData.phone,
-      p_timezone: storeData.timezone,
+      p_timezone: storeData.timezone || 'America/Sao_Paulo',
     });
-    if (error) throw error;
-    await fetchStoreData(user.id);
+
+    if (error) {
+      console.error('[AUTH_PROVIDER] RPC create_new_store failed:', error);
+      throw error;
+    }
+
+    await fetchStoreData(currentUser.id);
     return data as Store;
-  }, [user, fetchStoreData]);
+  }, [fetchStoreData]);
 
   const updateStore = useCallback(async (data: any) => {
     if (!store || !user) return;
