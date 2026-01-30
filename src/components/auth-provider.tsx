@@ -239,7 +239,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const addCustomer = useCallback(async (customer: any) => {
     if (!store || !user) return;
     const { error } = await (supabase as any).from('customers').insert({ ...customer, store_id: store.id });
-    if (error) throw error;
+    
+    if (error) {
+      if (error.message?.includes('trial_customer_limit')) {
+        throw new Error('Limite de 10 clientes do plano de avaliação atingido. Faça o upgrade para continuar.');
+      }
+      throw error;
+    }
+    
     await fetchStoreData(user.id);
   }, [store, user, fetchStoreData]);
 
@@ -270,18 +277,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return data as Product || null;
   }, [store]);
 
-  /**
-   * Função para processar uma nova venda.
-   * Lida com a criação da venda, itens e decremento de estoque.
-   * Intercepta erros de limites de plano do backend.
-   */
   const addSale = useCallback(async (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => {
     if (!store || !user) return null;
     
     const total = cart.reduce((sum, item) => sum + item.subtotal_cents, 0);
 
     try {
-      // 1. Inserir registro mestre da venda
       const { data: sale, error: saleError } = await (supabase as any)
         .from('sales')
         .insert({
@@ -293,14 +294,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .single();
 
       if (saleError) {
-        // Intercepta erro de trigger do plano trial
         if (saleError.message?.includes('trial_sales_limit')) {
           throw new Error('Limite de 5 vendas do plano de avaliação atingido. Faça o upgrade para continuar.');
         }
         throw saleError;
       }
 
-      // 2. Inserir itens da venda e atualizar estoque
       for (const item of cart) {
         const { error: itemError } = await (supabase as any).from('sale_items').insert({
           sale_id: sale.id,
@@ -314,7 +313,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (itemError) throw itemError;
 
-        // Chama RPC de estoque
         const { error: stockError } = await (supabase.rpc as any)('decrement_stock', { 
           p_product_id: item.product_id, 
           p_quantity: item.quantity 
@@ -323,13 +321,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (stockError) throw stockError;
       }
 
-      // Sincroniza dados locais
       await fetchStoreData(user.id);
       return sale as Sale;
 
     } catch (err: any) {
       console.error('[SALE_ERROR]', err);
-      throw err; // Repassa para a UI tratar
+      throw err; 
     }
   }, [store, user, fetchStoreData]);
 

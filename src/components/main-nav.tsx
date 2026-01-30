@@ -46,7 +46,7 @@ const mainNavItems = [
   { href: '/sales/new', label: 'Frente de Caixa (PDV)', icon: ShoppingCart, exact: false },
   { href: '/sales', label: 'Histórico de Vendas', icon: LineChart, exact: false },
   { href: '/dashboard/products', label: 'Produtos e Estoque', icon: Package, exact: true },
-  { href: '/clients', label: 'Meus Clientes', icon: Users, exact: true },
+  { href: '/dashboard/customers', label: 'Meus Clientes', icon: Users, exact: true },
   { href: '/cash', label: 'Caixa do Dia', icon: Wallet, exact: true },
 ];
 
