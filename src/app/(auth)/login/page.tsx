@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -26,9 +26,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/components/auth-provider';
-import { login, signup } from '../actions';
+import { supabase } from '@/lib/supabase/client';
 
 const authSchema = z.object({
   email: z.string().email({ message: 'Email inválido.' }),
@@ -38,77 +36,57 @@ const authSchema = z.object({
 type AuthValues = z.infer<typeof authSchema>;
 
 export default function LoginPage() {
-  const router = useRouter();
   const { toast } = useToast();
-  const { isAuthenticated, isLoading } = useAuth();
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [mode, setMode] = useState<'login' | 'signup' | 'confirm_email'>('login');
+  const [mode, setMode] = useState<'login' | 'signup'>('login');
 
   const form = useForm<AuthValues>({
     resolver: zodResolver(authSchema),
     defaultValues: { email: '', password: '' },
   });
 
-  // Redirecionamento reativo: Se o estado global mudar para autenticado, vamos para a dashboard.
-  useEffect(() => {
-    if (!isLoading && isAuthenticated) {
-      router.replace('/dashboard');
-    }
-  }, [isAuthenticated, isLoading, router]);
-
   const handleAuth = async (values: AuthValues) => {
     setLoading(true);
-    const formData = new FormData();
-    formData.append('email', values.email);
-    formData.append('password', values.password);
+    
+    // ⚠️ LoginPage é "burra": executa a ação e para.
+    // O redirecionamento será feito pelo RootLayout/AppLayout ao detectar a nova sessão.
+    if (mode === 'login') {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: values.email,
+        password: values.password,
+      });
 
-    try {
-      const result = mode === 'login' ? await login(formData) : await signup(formData);
-
-      if (result?.error) {
+      if (error) {
         toast({
           variant: "destructive",
-          title: mode === 'login' ? "Erro ao entrar" : "Erro no cadastro",
-          description: result.error.message,
+          title: "Erro ao entrar",
+          description: error.message,
         });
-      } else if (mode === 'signup' && !result?.error) {
-        setMode('confirm_email');
+        setLoading(false);
       }
-      // 🚨 IMPORTANTE: Se for login, não redirecionamos aqui. O useEffect acima cuidará disso
-      // assim que o AuthProvider detectar a nova sessão nos cookies.
-    } catch (e: any) {
-      toast({
-        variant: 'destructive',
-        title: 'Erro inesperado',
-        description: 'Não foi possível conectar ao servidor. Verifique sua conexão.',
+      // Sucesso: Não faz nada. O layout vai reagir ao cookie/sessão.
+    } else {
+      const { error } = await supabase.auth.signUp({
+        email: values.email,
+        password: values.password,
       });
-    } finally {
+
+      if (error) {
+        toast({
+          variant: "destructive",
+          title: "Erro no cadastro",
+          description: error.message,
+        });
+      } else {
+        toast({
+          title: "Conta criada!",
+          description: "Verifique seu e-mail para confirmar o cadastro.",
+        });
+      }
       setLoading(false);
     }
   };
-
-  if (mode === 'confirm_email') {
-    return (
-      <Card className="w-full max-w-md shadow-2xl border-primary/10">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4 bg-primary/10 p-3 rounded-full w-fit">
-            <AlertCircle className="h-10 w-10 text-primary" />
-          </div>
-          <CardTitle className="text-2xl font-headline">Confirme seu E-mail</CardTitle>
-          <CardDescription>
-            Enviamos um link de ativação para <strong>{form.getValues('email')}</strong>. 
-            Por favor, verifique sua caixa de entrada e spam.
-          </CardDescription>
-        </CardHeader>
-        <CardFooter>
-          <Button variant="outline" className="w-full" onClick={() => setMode('login')}>
-            Voltar para o Login
-          </Button>
-        </CardFooter>
-      </Card>
-    );
-  }
 
   return (
     <Card className="w-full max-w-md shadow-2xl border-primary/10">
@@ -124,7 +102,7 @@ export default function LoginPage() {
       </CardHeader>
 
       <CardContent>
-        <Tabs value={mode as string} onValueChange={(val) => setMode(val as any)}>
+        <Tabs value={mode} onValueChange={(val) => setMode(val as any)}>
           <TabsList className="grid w-full grid-cols-2 mb-6">
             <TabsTrigger value="login">Entrar</TabsTrigger>
             <TabsTrigger value="signup">Cadastrar</TabsTrigger>
@@ -135,7 +113,7 @@ export default function LoginPage() {
               <FormField control={form.control} name="email" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Email</FormLabel>
-                  <FormControl><Input placeholder="seu@email.com" type="email" autoComplete="email" {...field} /></FormControl>
+                  <FormControl><Input placeholder="seu@email.com" type="email" {...field} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
@@ -145,7 +123,7 @@ export default function LoginPage() {
                   <FormLabel>Senha</FormLabel>
                   <FormControl>
                     <div className="relative">
-                      <Input type={showPassword ? 'text' : 'password'} placeholder="••••••••" autoComplete="current-password" {...field} />
+                      <Input type={showPassword ? 'text' : 'password'} placeholder="••••••••" {...field} />
                       <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7" onClick={() => setShowPassword(!showPassword)}>
                         {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </Button>
