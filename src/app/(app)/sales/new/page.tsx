@@ -127,20 +127,18 @@ export default function NewSalePage() {
       if (sale && sale.id) {
         toast({ 
           title: 'Venda realizada!', 
-          description: `Venda #${sale.id.substring(0, 8)} registrada com sucesso.` 
+          description: `Venda registrada com sucesso.` 
         });
         setCart([]);
         setIsFinalizing(false);
         router.push('/sales');
-      } else {
-        throw new Error('Não foi possível confirmar o registro da venda no sistema.');
       }
     } catch (error: any) {
       console.error('[PDV_FINALIZE_ERROR]', error);
       toast({
         variant: 'destructive',
         title: 'Erro ao processar venda',
-        description: error.message || 'Ocorreu uma falha técnica ao tentar salvar a venda. Verifique sua conexão.'
+        description: error.message || 'Ocorreu uma falha técnica ao salvar a venda.'
       });
     } finally {
       setIsSubmitting(false);

@@ -236,7 +236,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [store]);
 
   const addSale = useCallback(async (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => {
-    // 1. Garantia de Sessão Fresca
+    // 1. Garantia de Sessão Fresca (Evita erro de RLS por JWT expirado)
     const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser();
     const currentStore = store;
 
@@ -247,7 +247,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     const total = cart.reduce((sum, item) => sum + item.subtotal_cents, 0);
 
-    // ETAPA 1: Inserir o cabeçalho da venda
+    // ETAPA 1: Inserir o cabeçalho da venda e capturar o ID real gerado pelo banco
     const { data: createdSale, error: saleError } = await supabase
       .from('sales')
       .insert({ 
@@ -260,16 +260,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (saleError || !createdSale) {
       console.error('[SALE_DB_ERROR]', saleError);
-      // Tratamento de mensagens amigáveis para limites de plano ou erros de sistema
       const errorMsg = saleError?.message || '';
-      if (errorMsg.includes('trial_sales_limit') || errorMsg.includes('limite')) {
-        throw new Error('Você atingiu o limite de vendas do seu plano atual. Realize o upgrade para continuar vendendo.');
+      if (errorMsg.includes('security policy') || errorMsg.includes('RLS')) {
+        throw new Error('Acesso negado pelo banco de dados. Verifique se seu plano está ativo.');
       }
-      throw new Error(saleError?.message || 'Falha técnica ao registrar a venda no banco de dados.');
+      if (errorMsg.includes('trial_sales_limit')) {
+        throw new Error('Limite de vendas do plano de avaliação atingido.');
+      }
+      throw new Error(saleError?.message || 'Falha técnica ao registrar a venda.');
     }
 
     try {
-      // ETAPA 2: Inserir itens vinculados ao createdSale.id real (UUID)
+      // ETAPA 2: Inserir itens vinculados ao ID real retornado
       const itemsToInsert = cart.map(item => ({
         sale_id: createdSale.id, 
         product_id: item.product_id,
@@ -286,7 +288,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (itemsError) throw itemsError;
 
-      // ETAPA 3: Baixa de estoque via RPC para cada item
+      // ETAPA 3: Baixa de estoque via RPC
       for (const item of cart) {
         await supabase.rpc('decrement_stock', { 
           p_product_id: item.product_id, 
@@ -294,14 +296,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
       }
 
-      // Sincronizar dados silenciosamente para não quebrar a navegação
-      fetchStoreData(currentUser.id, true).catch(err => console.error('[SYNC_ERROR]', err));
+      // Sincronização silenciosa
+      fetchStoreData(currentUser.id, true).catch(err => console.warn('[SYNC_AFTER_SALE_WARN]', err));
       
       return createdSale as Sale;
 
     } catch (err: any) {
-      console.error('[SALE_ITEMS_ERROR]', err);
-      throw new Error('A venda foi criada, mas ocorreu um erro ao salvar os itens ou baixar o estoque.');
+      console.error('[SALE_FINALIZE_CRITICAL_ERROR]', err);
+      // Tentativa de Rollback do cabeçalho caso os itens falhem
+      await supabase.from('sales').delete().eq('id', createdSale.id);
+      throw new Error('Erro ao processar itens da venda. A transação foi cancelada.');
     }
   }, [store, fetchStoreData]);
 
