@@ -18,7 +18,8 @@ import type {
   StoreStatus, 
   StoreAccessStatus,
   CartItem,
-  Customer
+  Customer,
+  SaleItem
 } from '@/lib/types';
 
 type AuthContextType = {
@@ -63,6 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [cashRegisters, setCashRegistersState] = useState<CashRegister[]>([]);
 
   const fetchStoreData = useCallback(async (userId: string) => {
+    if (!userId) return;
     setStoreStatus('loading_store');
     
     try {
@@ -235,35 +237,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   /**
    * Finaliza a venda seguindo o fluxo de integridade do banco:
-   * 1. Criar Registro de Venda (Sales) e capturar o ID (UUID)
-   * 2. Inserir itens vinculados ao ID real da venda
+   * 1. Criar Registro de Venda (Sales) e capturar o ID real gerado
+   * 2. Inserir itens vinculados ao ID UUID da venda
    * 3. Atualizar estoque atômico
    */
   const addSale = useCallback(async (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => {
-    if (!store || !user) throw new Error('Sessão ou Loja inválida para registrar venda.');
+    // Captura referências locais imutáveis para evitar perda de estado durante o await
+    const currentStore = store;
+    const currentUser = user;
+
+    if (!currentStore || !currentUser) {
+      console.error('[SALE_ABORTED] Loja ou Usuário nulo no início do fluxo.');
+      throw new Error('Sessão ou Loja inválida para registrar venda.');
+    }
     
     const total = cart.reduce((sum, item) => sum + item.subtotal_cents, 0);
 
-    // ETAPA 1: Inserir a venda e obter o ID real (gerado pelo banco)
-    const { data: sale, error: saleError } = await supabase
+    // ETAPA 1: Inserir o cabeçalho da venda
+    const { data: createdSale, error: saleError } = await supabase
       .from('sales')
       .insert({ 
-        store_id: store.id, 
+        store_id: currentStore.id, 
         total_cents: total, 
         payment_method: paymentMethod 
       })
       .select()
       .single();
 
-    if (saleError || !sale) {
-      console.error('[SALE_ERROR] Falha ao criar cabeçalho da venda:', saleError);
-      throw new Error('Não foi possível registrar a venda no sistema.');
+    // Verificação estrita para evitar leitura de null.id adiante
+    if (saleError || !createdSale) {
+      console.error('[SALE_DB_ERROR] Falha ao criar cabeçalho da venda:', saleError);
+      throw new Error(saleError?.message || 'Falha técnica ao registrar a venda no banco de dados.');
     }
 
     try {
-      // ETAPA 2: Preparar e inserir itens vinculados ao sale.id capturado
+      // ETAPA 2: Inserir itens vinculados ao createdSale.id real (UUID)
       const itemsToInsert = cart.map(item => ({
-        sale_id: sale.id, // UUID real gerado pelo banco
+        sale_id: createdSale.id, 
         product_id: item.product_id,
         product_name_snapshot: item.product_name_snapshot,
         product_barcode_snapshot: item.product_barcode_snapshot || null,
@@ -278,23 +288,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (itemsError) throw itemsError;
 
-      // ETAPA 3: Atualizar estoque via RPC atômico para cada produto
+      // ETAPA 3: Baixa de estoque via RPC para cada item
       for (const item of cart) {
         const { error: stockError } = await supabase.rpc('decrement_stock', { 
           p_product_id: item.product_id, 
           p_quantity: item.quantity 
         });
-        if (stockError) console.error(`[STOCK_ERROR] Falha ao atualizar produto ${item.product_id}:`, stockError);
+        if (stockError) console.warn(`[STOCK_SYNC_WARNING] Produto ${item.product_id} não baixou estoque:`, stockError.message);
       }
 
-      // Sincronizar dados globais após sucesso total
-      await fetchStoreData(user.id);
-      return sale as Sale;
+      // Sincronizar dados globais em background
+      fetchStoreData(currentUser.id).catch(err => console.error('[SYNC_ERROR] Falha ao recarregar dados após venda', err));
+      
+      return createdSale as Sale;
 
     } catch (err: any) {
-      console.error('[SALE_TRANSACTION_ERROR] Erro na inserção de itens ou estoque. A venda foi registrada mas está incompleta.', err);
-      // Aqui poderíamos implementar um rollback manual se necessário, deletando sale.id
-      throw new Error('A venda foi registrada, mas ocorreu um erro ao salvar os itens ou atualizar o estoque.');
+      console.error('[SALE_ITEMS_ERROR] Falha ao salvar itens. A venda foi aberta mas pode estar incompleta.', err);
+      throw new Error('A venda foi aberta, mas ocorreu um erro crítico ao salvar os itens.');
     }
   }, [store, user, fetchStoreData]);
 
