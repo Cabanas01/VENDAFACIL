@@ -1,4 +1,3 @@
-
 'use client';
 
 import type { ReactNode } from 'react';
@@ -7,7 +6,6 @@ import { usePathname, useRouter } from 'next/navigation';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { MainNav } from '@/components/main-nav';
 import { useAuth } from '@/components/auth-provider';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Loader2 } from 'lucide-react';
 
 export default function AppLayout({ children }: { children: ReactNode }) {
@@ -16,7 +14,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => {
-    // 🚨 REGRA DE OURO: O AppLayout decide o redirecionamento baseado no estado finalizado
+    // 🚨 REGRA DE OURO: O AppLayout é o único lugar que decide redirecionamentos de proteção.
     if (isLoading) return;
 
     if (!isAuthenticated) {
@@ -24,34 +22,34 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Fluxo de Negócio Adicional (Onboarding / Billing)
+    // Fluxo de Onboarding
     if (storeStatus === 'none' && pathname !== '/onboarding') {
       router.replace('/onboarding');
       return;
     }
 
-    if (storeStatus === 'has' && accessStatus && !accessStatus.acesso_liberado && pathname !== '/billing' && pathname !== '/settings') {
+    // Fluxo de Billing (Paywall)
+    const isPaywallExempt = pathname === '/billing' || pathname === '/settings' || pathname === '/onboarding';
+    if (storeStatus === 'has' && accessStatus && !accessStatus.acesso_liberado && !isPaywallExempt) {
       router.replace('/billing');
       return;
     }
   }, [isLoading, isAuthenticated, storeStatus, accessStatus, pathname, router]);
 
-  // Tela de Carregamento enquanto a Auth resolve
+  // Tela de Carregamento Universal (Previne loops e flashes de conteúdo)
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-10 w-10 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground animate-pulse">Sincronizando acesso...</p>
-        </div>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background">
+        <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
+        <p className="text-sm text-muted-foreground animate-pulse">Sincronizando sua sessão...</p>
       </div>
     );
   }
 
-  // Se não estiver autenticado, o useEffect cuidará do redirect. Não renderizamos nada.
+  // Se não estiver autenticado, o useEffect acima fará o router.replace. 
+  // Não renderizamos nada para evitar que o usuário veja conteúdo protegido por 1 frame.
   if (!isAuthenticated) return null;
 
-  // Renderização do Layout Protegido
   return (
     <SidebarProvider>
       <div className="flex min-h-screen">
