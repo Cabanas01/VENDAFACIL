@@ -1,5 +1,12 @@
 'use client';
 
+/**
+ * @fileOverview LoginPage (Dumb Component)
+ * 
+ * Componente "burro" que apenas dispara o login.
+ * Toda a lógica de "o que acontece depois" reside nos layouts.
+ */
+
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { Loader2, Eye, EyeOff } from 'lucide-react';
@@ -32,7 +39,7 @@ export default function LoginPage() {
         if (authError) throw authError;
         setError("Cadastro realizado! Verifique seu e-mail para ativar.");
       }
-      // NUNCA redirecionar aqui. O AuthLayout cuidará disso ao detectar o user.
+      // NUNCA redirecionar aqui. O AuthLayout/AppLayout cuidará disso ao detectar o user.
     } catch (err: any) {
       setError(err.message || 'Falha na autenticação.');
       setLoading(false);

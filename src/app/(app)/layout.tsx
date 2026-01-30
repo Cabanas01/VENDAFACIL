@@ -2,7 +2,9 @@
 
 /**
  * @fileOverview AppLayout (Guardião Único)
- * Este é o cérebro da navegação. Ele é o único lugar que executa router.replace.
+ * 
+ * Este componente é o único lugar autorizado a executar redirecionamentos.
+ * Ele observa a Máquina de Estados do AuthProvider e decide o destino do usuário.
  */
 
 import { useAuth } from '@/components/auth-provider';
@@ -19,32 +21,31 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => {
-    // 🚨 REGRA 1: Se a sessão auth ainda está carregando, não fazemos nada.
+    // 1. Aguardar autenticação inicial
     if (loading) return;
 
-    // 🚨 REGRA 2: Se não houver usuário autenticado, expulsar para o login.
+    // 2. Segurança: Se não está logado, expulsa
     if (!user) {
       router.replace('/login');
       return;
     }
 
-    // 🚨 REGRA 3: Se a loja ainda está sendo buscada ou houve erro, não redirecionamos.
-    // Aguardamos os estados terminais: 'has_store', 'no_store' ou 'error'.
-    if (storeStatus === 'loading_store' || storeStatus === 'unknown') return;
+    // 3. Aguardar estado conclusivo da loja (has_store | no_store | error)
+    if (storeStatus === 'loading_auth' || storeStatus === 'loading_store' || storeStatus === 'unknown') return;
 
-    // 🚨 REGRA 4: SE REALMENTE NÃO TEM LOJA -> Onboarding
+    // 4. ONBOARDING: Se CONCLUSIVAMENTE não tem loja, manda para onboarding
     if (storeStatus === 'no_store' && pathname !== '/onboarding') {
       router.replace('/onboarding');
       return;
     }
 
-    // 🚨 REGRA 5: SE TEM LOJA MAS ESTÁ NO ONBOARDING -> Dashboard
+    // 5. DASHBOARD: Se tem loja mas está no onboarding, manda para dashboard
     if (storeStatus === 'has_store' && pathname === '/onboarding') {
       router.replace('/dashboard');
       return;
     }
 
-    // 🚨 REGRA 6: PAYWALL - Se acesso expirou, vai para Billing (exceto se já estiver lá ou em settings)
+    // 6. PAYWALL: Bloqueio de acesso expirado
     const isAccessBlocked = accessStatus && !accessStatus.acesso_liberado;
     const isSafePath = pathname === '/billing' || pathname === '/settings' || pathname === '/onboarding';
     
@@ -56,11 +57,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [user, loading, storeStatus, accessStatus, pathname, router]);
 
   /**
-   * RENDERIZAÇÃO DE ESTADOS DE CARREGAMENTO (Evita tela branca)
+   * RENDERIZAÇÃO DE ESTADOS DE TRANSIÇÃO (Evita Tela Branca)
    */
 
-  // 1. Loader de Autenticação / Inicialização
-  if (loading || storeStatus === 'unknown' || storeStatus === 'loading_store') {
+  // Estado 1: Sincronização em curso
+  if (loading || storeStatus === 'unknown' || storeStatus === 'loading_auth' || storeStatus === 'loading_store') {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
@@ -71,7 +72,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // 2. Interface de Erro de Conexão (RLS ou Supabase Down)
+  // Estado 2: Falha Técnica (Safety Lock)
+  // Bloqueia onboarding para não criar duplicidade enquanto o banco está instável
   if (storeStatus === 'error') {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background p-6 text-center gap-6">
@@ -81,7 +83,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="space-y-2">
             <h1 className="text-2xl font-bold">Erro de Sincronização</h1>
             <p className="text-muted-foreground max-w-md mx-auto">
-                Não conseguimos validar os dados da sua loja. Isso pode ser uma falha de conexão ou permissão de acesso.
+                Não conseguimos validar os dados da sua loja devido a uma falha de conexão ou permissão.
+                <strong> Por segurança, o acesso ao onboarding foi bloqueado.</strong>
             </p>
         </div>
         <div className="flex gap-3">
@@ -89,14 +92,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <RefreshCcw className="mr-2 h-4 w-4" /> Tentar Novamente
             </Button>
             <Button onClick={() => window.location.reload()} variant="outline">
-                Recarregar App
+                Recarregar Sistema
             </Button>
         </div>
       </div>
     );
   }
 
-  // 3. Renderização do Onboarding (Sem Sidebar)
+  // Estado 3: Onboarding (Sem Sidebar)
   if (pathname === '/onboarding') {
     return (
       <main className="min-h-screen bg-background p-4 flex items-center justify-center w-full">
@@ -105,8 +108,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // 4. Fallback de Segurança (Se status for no_store mas o useEffect ainda não redirecionou)
-  if (storeStatus === 'no_store') {
+  // Estado 4: App Principal (Com Sidebar) - Renderiza apenas se 'has_store'
+  // Nota: Se 'no_store' e ainda não redirecionou, o Loader acima segura.
+  if (storeStatus !== 'has_store') {
       return (
         <div className="min-h-screen flex items-center justify-center bg-background">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -114,7 +118,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       );
   }
 
-  // 5. App Principal (Com Sidebar) - Renderiza apenas se 'has_store'
   return (
     <SidebarProvider>
       <div className="flex min-h-screen">

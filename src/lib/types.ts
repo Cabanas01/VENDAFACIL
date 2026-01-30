@@ -115,14 +115,16 @@ export type Customer = {
 };
 
 /**
- * Estados do Guardião de Rotas
- * - unknown: App inicializando, checando auth.
- * - loading_store: Sessão OK, buscando loja no banco.
- * - has_store: Loja encontrada e dados carregados.
- * - no_store: Buscas concluídas, usuário realmente não tem loja.
- * - error: Falha técnica ao consultar o banco (RLS, rede, etc).
+ * Máquina de Estados do SaaS (Guardião Único)
+ * 
+ * unknown: Estado inicial frio.
+ * loading_auth: Verificando se existe sessão no Supabase.
+ * loading_store: Usuário autenticado, consultando o banco de dados.
+ * has_store: Loja encontrada e dados carregados com sucesso.
+ * no_store: CERTEZA ABSOLUTA de que o usuário não tem loja (buscas owner/staff vazias SEM erro).
+ * error: Falha técnica crítica (RLS bloqueando, rede fora, timeout). Bloqueia onboarding por segurança.
  */
-export type StoreStatus = 'unknown' | 'loading_store' | 'has_store' | 'no_store' | 'error';
+export type StoreStatus = 'unknown' | 'loading_auth' | 'loading_store' | 'has_store' | 'no_store' | 'error';
 
 
 // Types for Time-based Access Control

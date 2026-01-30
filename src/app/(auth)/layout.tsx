@@ -2,6 +2,7 @@
 
 /**
  * @fileOverview AuthLayout (Guardião de Entrada)
+ * 
  * Garante que usuários logados nunca vejam as páginas de login/signup.
  */
 
@@ -16,7 +17,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     // Se o usuário logar enquanto está nesta página, o AuthLayout o detecta 
-    // e o joga para o /dashboard. O AppLayout lá cuidará do resto.
+    // e o joga para o dashboard. O AppLayout lá cuidará da loja.
     if (!loading && user) {
       router.replace('/dashboard');
     }

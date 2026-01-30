@@ -1,11 +1,12 @@
 'use client';
 
 /**
- * @fileOverview AuthProvider Refatorado (Sênior)
- * Objetivos:
- * 1. Passividade Total: Este componente NÃO executa navegação. Ele é apenas o armazém de estado.
- * 2. Detecção Robusta de Loja: Diferencia erro de acesso (RLS) de ausência real de dados.
- * 3. Previsibilidade: Estados claros para que o AppLayout tome decisões sem loops.
+ * @fileOverview AuthProvider (Cérebro Passivo)
+ * 
+ * PRINCÍPIOS SÊNIOR:
+ * 1. Passividade: NÃO executa router.push. Reporta estados para o Layout.
+ * 2. Certeza: Nunca assume 'no_store' se houver erro técnico (RLS/Rede).
+ * 3. Atomicidade: Atualiza o estado global em um único "commit" após fetch completo.
  */
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -26,7 +27,7 @@ import type {
 
 type AuthContextType = {
   user: User | null;
-  loading: boolean; // Refere-se apenas ao carregamento da SESSÃO inicial
+  loading: boolean; 
   store: Store | null;
   storeStatus: StoreStatus;
   accessStatus: StoreAccessStatus | null;
@@ -55,7 +56,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true); // Sessão auth
+  const [loading, setLoading] = useState(true); 
   const [store, setStore] = useState<Store | null>(null);
   const [storeStatus, setStoreStatus] = useState<StoreStatus>('unknown');
   const [accessStatus, setAccessStatus] = useState<StoreAccessStatus | null>(null);
@@ -64,32 +65,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [cashRegisters, setCashRegistersState] = useState<CashRegister[]>([]);
 
   /**
-   * Busca dados da loja de forma ultra-defensiva.
-   * Não assume 'no_store' a menos que todos os selects retornem explicitamente vazio E sem erros.
+   * Busca dados da loja com diferenciação semântica de erros.
+   * Elimina o "Falso Negativo" onde erro de RLS era tratado como ausência de loja.
    */
   const fetchStoreData = useCallback(async (userId: string) => {
-    // 1. Iniciamos o carregamento da loja. O AppLayout deve mostrar um Loader aqui.
     setStoreStatus('loading_store');
     
     try {
-      // 2. Tentar buscar como proprietário (Owner)
-      // Usamos .select('id') para ser rápido.
+      // 1. Tentar buscar como Proprietário (Owner)
       const { data: ownerStore, error: ownerError } = await supabase
         .from('stores')
         .select('id')
         .eq('user_id', userId)
         .maybeSingle();
 
-      // 🚨 CRÍTICO: Se houver erro técnico (RLS, rede), NÃO prosseguimos para 'no_store'.
+      // 🚨 SEGREDO: Se error for !== null, é falha técnica, NÃO é 'no_store'.
       if (ownerError) {
-        console.error('[AUTH] Erro ao buscar owner store:', ownerError);
+        console.error('[AUTH] Erro técnico na busca de owner:', ownerError);
         setStoreStatus('error');
         return;
       }
 
       let storeId = ownerStore?.id;
 
-      // 3. Se não for dono, tentar buscar como membro da equipe (Staff)
+      // 2. Se não encontrou como owner, tentar como Staff
       if (!storeId) {
         const { data: memberEntry, error: memberError } = await supabase
           .from('store_members')
@@ -98,21 +97,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .maybeSingle();
 
         if (memberError) {
-          console.error('[AUTH] Erro ao buscar membership:', memberError);
+          console.error('[AUTH] Erro técnico na busca de membership:', memberError);
           setStoreStatus('error');
           return;
         }
         storeId = memberEntry?.store_id;
       }
 
-      // 4. Se após ambas as buscas honestas não houver ID, o usuário realmente não tem loja.
+      // 3. DECISÃO FINAL: Só admitimos 'no_store' se ambas as buscas forem null SEM erro.
       if (!storeId) {
         setStoreStatus('no_store');
         setStore(null);
         return;
       }
 
-      // 5. Carregar detalhes da loja e acessos (Paralelo para velocidade)
+      // 4. Carregamento atômico de dados (Paralelo)
       const [statusRes, storeRes, productsRes, salesRes, cashRes, membersRes] = await Promise.all([
         (supabase.rpc as any)('get_store_access_status', { p_store_id: storeId }),
         supabase.from('stores').select('*').eq('id', storeId).single(),
@@ -122,10 +121,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         supabase.from('store_members').select('*').eq('store_id', storeId),
       ]);
 
-      // Verificar se houve falha na busca principal da loja
       if (storeRes.error) throw storeRes.error;
 
-      // 6. Processar Membros (Busca os perfis dos IDs encontrados)
+      // Processamento de membros (Lookup de perfis)
       let members: StoreMember[] = [];
       if (membersRes.data && membersRes.data.length > 0) {
         const memberUserIds = membersRes.data.map(m => m.user_id);
@@ -139,43 +137,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         })) as StoreMember[];
       }
 
-      // 7. Commit Final do Estado
+      // 5. Commit Final do Estado
       setAccessStatus(statusRes.data?.[0] || null);
       setStore({ ...storeRes.data, members } as Store);
       setProducts(productsRes.data as Product[] || []);
       setSales(salesRes.data as Sale[] || []);
       setCashRegistersState(cashRes.data as CashRegister[] || []);
       
-      // 🎉 Terminal: O usuário tem loja e está tudo carregado.
       setStoreStatus('has_store');
 
     } catch (err) {
-      console.error('[AUTH] Falha crítica inesperada no carregamento dos dados:', err);
+      console.error('[AUTH] Falha crítica durante hidratamento da loja:', err);
       setStoreStatus('error');
     }
   }, []);
 
   /**
-   * Monitoramento Inicial da Sessão
+   * Ciclo de Vida Auth
    */
   useEffect(() => {
     let mounted = true;
 
     const initAuth = async () => {
-      // Começamos em loading: true
+      setStoreStatus('loading_auth');
       const { data } = await supabase.auth.getSession();
       
       if (!mounted) return;
 
       const sessionUser = data.session?.user ?? null;
       setUser(sessionUser);
-      setLoading(false); // Auth resolvido. Agora o storeStatus assume o controle visual.
+      setLoading(false); 
 
       if (sessionUser) {
-        // Se temos usuário, iniciamos a busca da loja imediatamente.
         fetchStoreData(sessionUser.id);
       } else {
-        // Sem usuário, o status de loja é irrelevante para este contexto.
         setStoreStatus('no_store'); 
       }
     };
@@ -190,7 +185,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (newUser) {
         fetchStoreData(newUser.id);
       } else {
-        // Reset total em caso de logout
         setStore(null);
         setStoreStatus('no_store');
         setAccessStatus(null);
@@ -207,15 +201,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [fetchStoreData]);
 
   /**
-   * Métodos de Mutação (100% Passivos)
+   * MUTAÇÕES (100% Passivas - Sem Navegação)
    */
   const createStore = useCallback(async (storeData: any) => {
     if (!user) return null;
     
-    // Trava de segurança: Se já estamos carregando ou já temos loja, não duplicar.
-    if (storeStatus === 'loading_store' || storeStatus === 'has_store') {
-        return store;
-    }
+    // Safety check para evitar duplicidade acidental no frontend
+    if (storeStatus === 'loading_store' || storeStatus === 'has_store') return store;
 
     const { data, error } = await (supabase.rpc as any)('create_new_store', {
       p_name: storeData.name,
@@ -227,11 +219,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     if (error) {
-      console.error('[AUTH] Falha ao criar loja via RPC:', error);
+      console.error('[AUTH] Erro ao criar loja:', error);
       throw error;
     }
     
-    // Atualiza o estado global sem navegar. O AppLayout detectará a mudança.
     await fetchStoreData(user.id);
     return data as Store;
   }, [user, storeStatus, store, fetchStoreData]);
@@ -247,7 +238,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!user) return;
     const { error } = await supabase.from('users').update(data).eq('id', user.id);
     if (error) throw error;
-    // O onAuthStateChange ou fetch local atualizará o objeto user.
   }, [user]);
 
   const removeStoreMember = useCallback(async (userId: string) => {
@@ -351,7 +341,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     await supabase.auth.signOut();
-    // Limpeza de estado imediata
     setUser(null);
     setStore(null);
     setStoreStatus('no_store');
