@@ -1,4 +1,3 @@
-
 'use client';
 
 /**
@@ -192,7 +191,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const createStore = useCallback(async (storeData: any) => {
     if (!user) return null;
     
-    // Respeitando a assinatura exata exigida pela RPC conforme logs de erro anteriores
     const { data, error } = await (supabase.rpc as any)('create_new_store', {
       p_name: storeData.name,
       p_legal_name: storeData.legal_name,
@@ -207,7 +205,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw error;
     }
 
-    // Após o sucesso da RPC, sincronizamos os dados
     await fetchStoreData(user.id);
     return data as Store;
   }, [user, fetchStoreData]);
@@ -273,29 +270,67 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return data as Product || null;
   }, [store]);
 
+  /**
+   * Função para processar uma nova venda.
+   * Lida com a criação da venda, itens e decremento de estoque.
+   * Intercepta erros de limites de plano do backend.
+   */
   const addSale = useCallback(async (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => {
     if (!store || !user) return null;
+    
     const total = cart.reduce((sum, item) => sum + item.subtotal_cents, 0);
-    const { data: sale, error: saleError } = await (supabase as any).from('sales').insert({
-      store_id: store.id,
-      total_cents: total,
-      payment_method: paymentMethod
-    }).select().single();
-    if (saleError) throw saleError;
-    for (const item of cart) {
-      await (supabase as any).from('sale_items').insert({
-        sale_id: sale.id,
-        product_id: item.product_id,
-        product_name_snapshot: item.product_name_snapshot,
-        product_barcode_snapshot: item.product_barcode_snapshot,
-        quantity: item.quantity,
-        unit_price_cents: item.unit_price_cents,
-        subtotal_cents: item.subtotal_cents
-      });
-      await (supabase.rpc as any)('decrement_stock', { p_product_id: item.product_id, p_quantity: item.quantity });
+
+    try {
+      // 1. Inserir registro mestre da venda
+      const { data: sale, error: saleError } = await (supabase as any)
+        .from('sales')
+        .insert({
+          store_id: store.id,
+          total_cents: total,
+          payment_method: paymentMethod
+        })
+        .select()
+        .single();
+
+      if (saleError) {
+        // Intercepta erro de trigger do plano trial
+        if (saleError.message?.includes('trial_sales_limit')) {
+          throw new Error('Limite de 5 vendas do plano de avaliação atingido. Faça o upgrade para continuar.');
+        }
+        throw saleError;
+      }
+
+      // 2. Inserir itens da venda e atualizar estoque
+      for (const item of cart) {
+        const { error: itemError } = await (supabase as any).from('sale_items').insert({
+          sale_id: sale.id,
+          product_id: item.product_id,
+          product_name_snapshot: item.product_name_snapshot,
+          product_barcode_snapshot: item.product_barcode_snapshot,
+          quantity: item.quantity,
+          unit_price_cents: item.unit_price_cents,
+          subtotal_cents: item.subtotal_cents
+        });
+
+        if (itemError) throw itemError;
+
+        // Chama RPC de estoque
+        const { error: stockError } = await (supabase.rpc as any)('decrement_stock', { 
+          p_product_id: item.product_id, 
+          p_quantity: item.quantity 
+        });
+        
+        if (stockError) throw stockError;
+      }
+
+      // Sincroniza dados locais
+      await fetchStoreData(user.id);
+      return sale as Sale;
+
+    } catch (err: any) {
+      console.error('[SALE_ERROR]', err);
+      throw err; // Repassa para a UI tratar
     }
-    await fetchStoreData(user.id);
-    return sale as Sale;
   }, [store, user, fetchStoreData]);
 
   const setCashRegisters = useCallback(async (action: any) => {

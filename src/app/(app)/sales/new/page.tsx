@@ -1,319 +1,364 @@
 'use client';
 
-import { useState, useMemo, useRef, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { Search, ShoppingCart, PlusCircle, MinusCircle, Trash2, X, CreditCard, Coins, PiggyBank, Barcode } from 'lucide-react';
+/**
+ * @fileOverview Tela de Nova Venda / PDV
+ * 
+ * Interface de balcão otimizada para rapidez.
+ * Lida com busca de produtos, carrinho e finalização com métodos de pagamento.
+ */
 
+import { useState, useMemo } from 'react';
+import { 
+  Search, 
+  ShoppingCart, 
+  Plus, 
+  Minus, 
+  Trash2, 
+  CreditCard, 
+  Coins, 
+  PiggyBank, 
+  Loader2, 
+  Package,
+  ArrowRight
+} from 'lucide-react';
+import { useAuth } from '@/components/auth-provider';
+import { useToast } from '@/hooks/use-toast';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useToast } from '@/hooks/use-toast';
+import { Separator } from '@/components/ui/separator';
+import { Badge } from '@/components/ui/badge';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { useAuth } from '@/components/auth-provider';
-import type { Product, CartItem, Sale } from '@/lib/types';
-import { printReceipt } from '@/lib/print-receipt';
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import type { Product, CartItem } from '@/lib/types';
+import { useRouter } from 'next/navigation';
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value / 100);
 
 export default function NewSalePage() {
-  const router = useRouter();
+  const { products, addSale } = useAuth();
   const { toast } = useToast();
-  const { products, addSale, findProductByBarcode, store } = useAuth();
+  const router = useRouter();
 
-  const [searchQuery, setSearchQuery] = useState('');
+  const [search, setSearch] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [isConfirming, setIsConfirming] = useState(false);
-  const [isSearchingManually, setIsSearchingManually] = useState(false);
-  
-  const barcodeInputRef = useRef<HTMLInputElement>(null);
+  const [isFinalizing, setIsFinalizing] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  useEffect(() => {
-    // If the user is manually searching, don't trap focus.
-    if (isSearchingManually) {
-      return;
-    }
-
-    const focusInput = () => barcodeInputRef.current?.focus();
-    focusInput();
-    const interval = setInterval(focusInput, 500); // Keep focus on the input for the scanner
-    
-    return () => {
-      clearInterval(interval);
-    };
-  }, [isSearchingManually]);
-
-  const handleBarcodeScan = async (scannedCode: string) => {
-    if (!scannedCode) return;
-
-    const product = await findProductByBarcode(scannedCode);
-
-    if (product) {
-      addToCart(product);
-      toast({
-        title: 'Produto Adicionado',
-        description: `${product.name} foi adicionado ao carrinho.`,
-      });
-    } else {
-      toast({
-        variant: 'destructive',
-        title: 'Produto não encontrado',
-        description: `Nenhum produto encontrado com o código: ${scannedCode}`,
-      });
-    }
-  };
-
+  // Filtro de produtos reativo
   const filteredProducts = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-  
-    if (!q) return products.filter(p => p.active);
-  
-    return products.filter(p =>
-      p.active &&
-      (
-        p.name.toLowerCase().includes(q) ||
-        (p.barcode && p.barcode.toLowerCase().includes(q))
+    const term = search.toLowerCase();
+    return products.filter(p => 
+      p.active && (
+        p.name.toLowerCase().includes(term) || 
+        p.barcode?.includes(term) ||
+        p.category?.toLowerCase().includes(term)
       )
     );
-  }, [products, searchQuery]);
+  }, [products, search]);
 
-  const cartTotal = useMemo(() => {
-    return cart.reduce((sum, item) => sum + item.subtotal_cents, 0);
-  }, [cart]);
+  const cartTotal = useMemo(() => 
+    cart.reduce((sum, item) => sum + item.subtotal_cents, 0), 
+  [cart]);
 
+  /**
+   * Adiciona ou incrementa item no carrinho
+   */
   const addToCart = (product: Product) => {
-    const existingItem = cart.find(item => item.product_id === product.id);
-    const stockAvailable = product.stock_qty > (existingItem?.quantity ?? 0);
+    const existing = cart.find(item => item.product_id === product.id);
     
-    if (!stockAvailable) {
-      toast({ variant: 'destructive', title: 'Estoque insuficiente', description: `Não há mais unidades de ${product.name} em estoque.` });
-      return;
-    }
-
-    if (existingItem) {
-      updateQuantity(product.id, existingItem.quantity + 1);
+    if (existing) {
+      if (existing.quantity >= product.stock_qty) {
+        toast({ variant: 'destructive', title: 'Estoque insuficiente', description: `Apenas ${product.stock_qty} unidades disponíveis.` });
+        return;
+      }
+      setCart(cart.map(item => item.product_id === product.id 
+        ? { ...item, quantity: item.quantity + 1, subtotal_cents: (item.quantity + 1) * item.unit_price_cents } 
+        : item
+      ));
     } else {
+      if (product.stock_qty <= 0) {
+        toast({ variant: 'destructive', title: 'Produto sem estoque' });
+        return;
+      }
       setCart([...cart, {
         product_id: product.id,
         product_name_snapshot: product.name,
-        product_barcode_snapshot: product.barcode ?? null,
+        product_barcode_snapshot: product.barcode,
         quantity: 1,
         unit_price_cents: product.price_cents,
         subtotal_cents: product.price_cents,
-        stock_qty: product.stock_qty,
+        stock_qty: product.stock_qty
       }]);
     }
   };
 
-  const updateQuantity = (productId: string, newQuantity: number) => {
-    if (newQuantity <= 0) {
-      setCart(cart.filter(item => item.product_id !== productId));
-      return;
-    }
-
-    const item = cart.find(item => item.product_id === productId);
-    const product = products.find(p => p.id === productId);
-    if (!item || !product) return;
-
-    if (newQuantity > product.stock_qty) {
-      toast({ variant: 'destructive', title: 'Estoque insuficiente' });
-      return;
-    }
-
-    setCart(cart.map(item => 
-      item.product_id === productId 
-      ? { ...item, quantity: newQuantity, subtotal_cents: item.unit_price_cents * newQuantity }
-      : item
-    ));
+  /**
+   * Ajusta quantidade manualmente
+   */
+  const updateQty = (id: string, delta: number) => {
+    setCart(prev => prev.map(item => {
+      if (item.product_id !== id) return item;
+      const newQty = item.quantity + delta;
+      if (newQty <= 0) return item; // Deletar é via trash
+      if (newQty > item.stock_qty) {
+        toast({ variant: 'destructive', title: 'Limite de estoque' });
+        return item;
+      }
+      return { ...item, quantity: newQty, subtotal_cents: newQty * item.unit_price_cents };
+    }).filter(item => item.quantity > 0));
   };
-  
-  const handleFinalizeSale = async (paymentMethod: 'cash' | 'pix' | 'card') => {
-    if (cart.length === 0) {
-      toast({ variant: 'destructive', title: 'Carrinho vazio' });
-      return;
-    }
-    if (!store) {
-      toast({ variant: 'destructive', title: 'Erro', description: 'Dados da loja não encontrados.' });
-      return;
-    }
 
+  const removeFromCart = (id: string) => {
+    setCart(cart.filter(item => item.product_id !== id));
+  };
+
+  /**
+   * Finaliza a venda no banco de dados
+   */
+  const handleFinalize = async (method: 'cash' | 'pix' | 'card') => {
+    setIsSubmitting(true);
     try {
-        const newSale = await addSale(cart, paymentMethod);
-        if (newSale) {
-            toast({ title: 'Venda realizada com sucesso!', description: `Total: ${formatCurrency(cartTotal)}` });
-            printReceipt(newSale, store);
-        } else {
-            throw new Error('A venda não foi concluída com sucesso.');
-        }
-        setCart([]);
-        setIsConfirming(false);
-        router.push('/sales');
+      await addSale(cart, method);
+      toast({ title: 'Venda realizada!', description: 'O estoque foi atualizado com sucesso.' });
+      setCart([]);
+      setIsFinalizing(false);
+      router.push('/sales');
     } catch (error: any) {
-        toast({ variant: 'destructive', title: 'Erro ao finalizar venda', description: error.message });
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao processar venda',
+        description: error.message
+      });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   return (
-    <>
-      <input
-        ref={barcodeInputRef}
-        type="text"
-        className="absolute w-0 h-0 p-0 m-0 border-0 opacity-0"
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === 'Tab') {
-            e.preventDefault();
-            const scannedCode = (e.target as HTMLInputElement).value;
-            handleBarcodeScan(scannedCode);
-            (e.target as HTMLInputElement).value = '';
-          }
-        }}
-      />
+    <div className="flex flex-col h-[calc(100vh-8rem)]">
+      <PageHeader title="Ponto de Venda" subtitle="Registre vendas de forma rápida e prática." />
 
-      <PageHeader title="Nova Venda / PDV" subtitle="Use o leitor de código de barras ou selecione os produtos.">
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <Barcode className="h-5 w-5 text-green-500" />
-          <span>Leitor Ativo</span>
-        </div>
-      </PageHeader>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-        {/* Product Selection */}
-        <div className="lg:col-span-2">
-          <Card>
-            <CardHeader>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 overflow-hidden">
+        
+        {/* Lado Esquerdo: Catálogo */}
+        <div className="lg:col-span-2 flex flex-col space-y-4">
+          <Card className="flex-none">
+            <CardContent className="p-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input 
-                  placeholder="Buscar produto por nome..." 
-                  className="pl-10" 
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  onFocus={() => setIsSearchingManually(true)}
-                  onBlur={() => setIsSearchingManually(false)}
+                  placeholder="Buscar por nome, categoria ou código de barras..." 
+                  className="pl-10 h-12 text-lg"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  autoFocus
                 />
               </div>
-            </CardHeader>
-            <CardContent>
-              <ScrollArea className="h-[60vh]">
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                  {filteredProducts.map(product => (
-                    <Card key={product.id} className="flex flex-col">
-                      <CardContent className="p-3 flex-1 flex flex-col justify-between">
-                         <div>
-                            <p className="font-semibold text-sm leading-tight">{product.name}</p>
-                            <p className="text-xs text-muted-foreground">{formatCurrency(product.price_cents)}</p>
-                         </div>
-                         <Badge variant={product.stock_qty > 0 ? 'outline' : 'destructive'} className="mt-2 text-xs w-fit">
-                            Estoque: {product.stock_qty}
-                        </Badge>
-                      </CardContent>
-                      <CardFooter className="p-0">
-                        <Button 
-                          className="w-full rounded-t-none" 
-                          size="sm"
-                          onClick={() => addToCart(product)}
-                          disabled={product.stock_qty <= (cart.find(i => i.product_id === product.id)?.quantity ?? 0)}
-                        >
-                          Adicionar
-                        </Button>
-                      </CardFooter>
-                    </Card>
-                  ))}
-                </div>
-              </ScrollArea>
             </CardContent>
           </Card>
+
+          <ScrollArea className="flex-1 rounded-md border bg-background/50">
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
+              {filteredProducts.map(product => (
+                <Card 
+                  key={product.id} 
+                  className="group cursor-pointer hover:border-primary transition-all active:scale-95"
+                  onClick={() => addToCart(product)}
+                >
+                  <CardContent className="p-4 space-y-2">
+                    <div className="space-y-1">
+                      <h3 className="font-bold text-sm leading-tight line-clamp-2 h-10">{product.name}</h3>
+                      <p className="text-xs text-muted-foreground italic">{product.category || 'Geral'}</p>
+                    </div>
+                    <div className="flex items-center justify-between pt-2">
+                      <span className="text-primary font-bold">{formatCurrency(product.price_cents)}</span>
+                      <Badge variant={product.stock_qty < 5 ? "destructive" : "secondary"} className="text-[10px]">
+                        {product.stock_qty} un
+                      </Badge>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+              {filteredProducts.length === 0 && (
+                <div className="col-span-full py-20 text-center space-y-4">
+                  <Package className="h-12 w-12 text-muted-foreground mx-auto" />
+                  <p className="text-muted-foreground">Nenhum produto encontrado.</p>
+                </div>
+              )}
+            </div>
+          </ScrollArea>
         </div>
 
-        {/* Cart */}
-        <div className="sticky top-6">
-          <Card>
-            <CardHeader className="flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-2 text-lg"><ShoppingCart /> Carrinho</CardTitle>
-              {cart.length > 0 && (
-                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setCart([])}>
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                 </Button>
-              )}
-            </CardHeader>
-            <CardContent>
-              {cart.length > 0 ? (
-                <ScrollArea className="h-64 pr-4">
-                    <div className="space-y-4">
-                    {cart.map(item => (
-                        <div key={item.product_id} className="flex justify-between items-center">
-                            <div>
-                                <p className="font-medium text-sm">{item.product_name_snapshot}</p>
-                                <p className="text-muted-foreground text-sm">{formatCurrency(item.unit_price_cents)}</p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => updateQuantity(item.product_id, item.quantity - 1)}><MinusCircle className="h-4 w-4" /></Button>
-                                <span>{item.quantity}</span>
-                                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => updateQuantity(item.product_id, item.quantity + 1)}><PlusCircle className="h-4 w-4" /></Button>
-                            </div>
-                            <p className="font-medium w-16 text-right">{formatCurrency(item.subtotal_cents)}</p>
-                        </div>
-                    ))}
+        {/* Lado Direito: Carrinho */}
+        <Card className="flex flex-col h-full border-primary/20 shadow-xl bg-background">
+          <CardHeader className="flex-none bg-muted/30 border-b">
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <ShoppingCart className="h-5 w-5 text-primary" />
+                Carrinho
+              </CardTitle>
+              <Badge variant="default" className="rounded-full px-3">{cart.length} itens</Badge>
+            </div>
+          </CardHeader>
+
+          <CardContent className="flex-1 p-0 overflow-hidden">
+            <ScrollArea className="h-full">
+              <div className="p-4 space-y-4">
+                {cart.map(item => (
+                  <div key={item.product_id} className="flex flex-col space-y-2 group animate-in fade-in slide-in-from-right-2 duration-200">
+                    <div className="flex justify-between items-start gap-2">
+                      <div className="flex-1">
+                        <p className="text-sm font-bold leading-tight">{item.product_name_snapshot}</p>
+                        <p className="text-xs text-muted-foreground">{formatCurrency(item.unit_price_cents)} un</p>
+                      </div>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-6 w-6 text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => removeFromCart(item.product_id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
-                </ScrollArea>
-              ) : (
-                <div className="h-64 flex items-center justify-center">
-                  <p className="text-muted-foreground text-center">Seu carrinho está vazio.</p>
-                </div>
-              )}
-            </CardContent>
-            <Separator />
-            <CardFooter className="flex flex-col gap-4 pt-4">
-                <div className="w-full flex justify-between items-center text-lg font-bold">
-                    <span>Total</span>
-                    <span>{formatCurrency(cartTotal)}</span>
-                </div>
-                <Button className="w-full" size="lg" onClick={() => setIsConfirming(true)} disabled={cart.length === 0}>
-                    Finalizar Venda
-                </Button>
-            </CardFooter>
-          </Card>
-        </div>
+                    
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center border rounded-md h-8 overflow-hidden bg-background">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-full rounded-none px-2"
+                          onClick={() => updateQty(item.product_id, -1)}
+                        >
+                          <Minus className="h-3 w-3" />
+                        </Button>
+                        <span className="w-10 text-center text-xs font-bold">{item.quantity}</span>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-full rounded-none px-2"
+                          onClick={() => updateQty(item.product_id, 1)}
+                        >
+                          <Plus className="h-3 w-3" />
+                        </Button>
+                      </div>
+                      <span className="font-bold text-sm">{formatCurrency(item.subtotal_cents)}</span>
+                    </div>
+                    <Separator className="mt-2" />
+                  </div>
+                ))}
+                {cart.length === 0 && (
+                  <div className="py-20 text-center space-y-4">
+                    <div className="bg-muted p-4 rounded-full w-fit mx-auto">
+                      <ShoppingCart className="h-8 w-8 text-muted-foreground" />
+                    </div>
+                    <p className="text-sm text-muted-foreground px-8">Selecione produtos ao lado para iniciar a venda.</p>
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </CardContent>
+
+          <CardFooter className="flex-none flex flex-col p-6 space-y-4 bg-muted/30 border-t">
+            <div className="w-full space-y-2">
+              <div className="flex justify-between text-sm text-muted-foreground">
+                <span>Subtotal</span>
+                <span>{formatCurrency(cartTotal)}</span>
+              </div>
+              <div className="flex justify-between text-2xl font-black text-primary">
+                <span>Total</span>
+                <span>{formatCurrency(cartTotal)}</span>
+              </div>
+            </div>
+
+            <Button 
+              className="w-full h-14 text-lg font-bold shadow-lg shadow-primary/20 group"
+              disabled={cart.length === 0}
+              onClick={() => setIsFinalizing(true)}
+            >
+              Finalizar Venda
+              <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+            </Button>
+          </CardFooter>
+        </Card>
       </div>
 
-      {/* Confirmation Dialog */}
-      <AlertDialog open={isConfirming} onOpenChange={setIsConfirming}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Finalizar a venda?</AlertDialogTitle>
-            <AlertDialogDescription>
-              O total da compra é de <span className="font-bold">{formatCurrency(cartTotal)}</span>. Selecione a forma de pagamento para concluir.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="grid grid-cols-3 gap-4 py-4">
-              <Button variant="outline" size="lg" onClick={() => handleFinalizeSale('cash')}>
-                  <Coins className="mr-2" /> Dinheiro
-              </Button>
-               <Button variant="outline" size="lg" onClick={() => handleFinalizeSale('pix')}>
-                  <PiggyBank className="mr-2" /> Pix
-              </Button>
-               <Button variant="outline" size="lg" onClick={() => handleFinalizeSale('card')}>
-                  <CreditCard className="mr-2" /> Cartão
-              </Button>
+      {/* Modal de Finalização */}
+      <Dialog open={isFinalizing} onOpenChange={setIsFinalizing}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Forma de Pagamento</DialogTitle>
+            <DialogDescription>
+              Selecione como o cliente irá pagar o valor de <span className="font-bold text-foreground">{formatCurrency(cartTotal)}</span>.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid grid-cols-1 gap-3 py-4">
+            <Button 
+              variant="outline" 
+              className="h-16 justify-start text-lg gap-4 border-2 hover:border-primary hover:bg-primary/5"
+              onClick={() => handleFinalize('cash')}
+              disabled={isSubmitting}
+            >
+              <div className="bg-green-100 p-2 rounded-lg text-green-600"><Coins className="h-6 w-6" /></div>
+              <div className="flex flex-col items-start">
+                <span>Dinheiro</span>
+                <span className="text-xs text-muted-foreground font-normal">Pagamento em espécie</span>
+              </div>
+            </Button>
+
+            <Button 
+              variant="outline" 
+              className="h-16 justify-start text-lg gap-4 border-2 hover:border-primary hover:bg-primary/5"
+              onClick={() => handleFinalize('pix')}
+              disabled={isSubmitting}
+            >
+              <div className="bg-cyan-100 p-2 rounded-lg text-cyan-600"><PiggyBank className="h-6 w-6" /></div>
+              <div className="flex flex-col items-start">
+                <span>PIX</span>
+                <span className="text-xs text-muted-foreground font-normal">Transferência instantânea</span>
+              </div>
+            </Button>
+
+            <Button 
+              variant="outline" 
+              className="h-16 justify-start text-lg gap-4 border-2 hover:border-primary hover:bg-primary/5"
+              onClick={() => handleFinalize('card')}
+              disabled={isSubmitting}
+            >
+              <div className="bg-blue-100 p-2 rounded-lg text-blue-600"><CreditCard className="h-6 w-6" /></div>
+              <div className="flex flex-col items-start">
+                <span>Cartão</span>
+                <span className="text-xs text-muted-foreground font-normal">Débito ou Crédito</span>
+              </div>
+            </Button>
           </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Voltar</AlertDialogCancel>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+
+          {isSubmitting && (
+            <div className="absolute inset-0 bg-background/80 flex items-center justify-center rounded-lg z-50">
+              <div className="text-center space-y-2">
+                <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto" />
+                <p className="font-bold">Processando venda...</p>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="sm:justify-start">
+            <Button type="button" variant="ghost" onClick={() => setIsFinalizing(false)} disabled={isSubmitting}>
+              Voltar ao carrinho
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
