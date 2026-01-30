@@ -136,6 +136,7 @@ export type StoreAccessStatus = {
     acesso_liberado: boolean;
     data_fim_acesso: string | null;
     plano_nome: string;
+    plano_tipo: 'free' | 'semanal' | 'mensal' | 'anual' | 'vitalicio';
     mensagem: string;
 }
 

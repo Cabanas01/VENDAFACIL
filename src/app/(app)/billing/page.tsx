@@ -35,7 +35,7 @@ const getStatusInfo = (accessStatus: import('@/lib/types').StoreAccessStatus | n
         }
     }
 
-    if (accessStatus.plano_nome === 'Sem Plano' || accessStatus.plano_nome === 'Trial Expirado') {
+    if (accessStatus.plano_nome === 'Sem Plano' || accessStatus.plano_nome === 'Trial Expirado' || accessStatus.plano_nome === 'Nenhum') {
          return {
             icon: <Info className="h-5 w-5 text-blue-500" />,
             text: accessStatus.plano_nome,
@@ -144,7 +144,6 @@ export default function BillingPage() {
             title: 'Avaliação iniciada!',
             description: 'Você agora tem 7 dias de acesso gratuito.',
         });
-        // Refresh all auth data, including accessStatus and trial status
         if(user) {
             await fetchStoreData(user.id);
         }
@@ -172,7 +171,13 @@ export default function BillingPage() {
   }
 
   const statusInfo = getStatusInfo(accessStatus);
-  const planOrder: PlanID[] = ['free', 'weekly', 'monthly', 'yearly'];
+  const planOrder: PlanID[] = ['free', 'semanal', 'mensal', 'anual'];
+  
+  // Regra de negócio: Apenas planos pagos (semanal, mensal, anual) bloqueiam o checkout.
+  // Ter o plano 'free' (Avaliação) NÃO bloqueia os demais planos.
+  const paidPlans: PlanID[] = ['semanal', 'mensal', 'anual'];
+  const hasActivePaidPlan = accessStatus && paidPlans.includes(accessStatus.plano_tipo as PlanID);
+  const canShowHotmartPlans = !hasActivePaidPlan;
 
   return (
     <div className="max-w-7xl mx-auto p-4 sm:p-8">
@@ -206,6 +211,14 @@ export default function BillingPage() {
                 const plan = PLANS_CONFIG[planId];
                 if (!plan) return null;
                 
+                const isPaidPlan = paidPlans.includes(planId);
+                
+                // Se for um plano pago e o usuário já tiver um plano pago ativo, não mostramos os demais checkouts
+                if (isPaidPlan && !canShowHotmartPlans) {
+                    // Opcionalmente poderíamos mostrar o plano como "Plano Atual" mas por regra escondemos o checkout
+                    return null;
+                }
+
                 if (plan.isFree) {
                     return (
                         <Card key={planId} className="flex flex-col">
@@ -241,17 +254,17 @@ export default function BillingPage() {
                                     size="lg" 
                                     variant={'secondary'}
                                     onClick={handleStartTrial}
-                                    disabled={store.trial_used || isStartingTrial}
+                                    disabled={store.trial_used || isStartingTrial || accessStatus?.plano_tipo === 'free'}
                                 >
                                     {isStartingTrial && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                    {store.trial_used ? 'Avaliação já utilizada' : 'Começar avaliação'}
+                                    {accessStatus?.plano_tipo === 'free' ? 'Avaliação Ativa' : store.trial_used ? 'Avaliação já utilizada' : 'Começar avaliação'}
                                 </Button>
                             </CardFooter>
                         </Card>
                     );
                 }
                 
-                const isRecommended = planId === 'yearly';
+                const isRecommended = planId === 'anual';
 
                 return (
                     <Card key={planId} className={cn(
