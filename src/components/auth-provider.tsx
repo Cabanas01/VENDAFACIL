@@ -1,3 +1,4 @@
+
 'use client';
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -137,12 +138,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const initAuth = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const res = await supabase.auth.getSession();
         if (!mounted) return;
 
-        const sessionUser = session?.user ?? null;
+        const sessionUser = res.data.session?.user ?? null;
         setUser(sessionUser);
-        setLoading(false); // Libera o AppLayout imediatamente
+        setLoading(false);
 
         if (sessionUser) {
           fetchStoreData(sessionUser.id);
@@ -155,7 +156,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     initAuth();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+    const authListener = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (!mounted) return;
         const newUser = session?.user ?? null;
@@ -176,7 +177,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       mounted = false;
-      subscription.unsubscribe();
+      authListener.data.subscription.unsubscribe();
     };
   }, [fetchStoreData]);
 
