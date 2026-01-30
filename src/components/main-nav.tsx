@@ -43,20 +43,21 @@ import { useAuth } from '@/components/auth-provider';
 
 const mainNavItems = [
   { href: '/dashboard', label: 'Visão Geral', icon: Home, exact: true },
-  { href: '/sales', label: 'Vendas', icon: ShoppingCart, exact: false },
-  { href: '/products', label: 'Produtos', icon: Package, exact: true },
-  { href: '/clients', label: 'Clientes', icon: Users, exact: true },
-  { href: '/cash', label: 'Caixa', icon: Wallet, exact: true },
+  { href: '/sales/new', label: 'Frente de Caixa (PDV)', icon: ShoppingCart, exact: false },
+  { href: '/sales', label: 'Histórico de Vendas', icon: LineChart, exact: false },
+  { href: '/dashboard/products', label: 'Produtos e Estoque', icon: Package, exact: true },
+  { href: '/clients', label: 'Meus Clientes', icon: Users, exact: true },
+  { href: '/cash', label: 'Caixa do Dia', icon: Wallet, exact: true },
 ];
 
 const managementNavItems = [
-  { href: '/cmv', label: 'CMV', icon: Target, exact: true },
-  { href: '/reports', label: 'Relatórios', icon: BarChart3, exact: true },
-  { href: '/team', label: 'Equipe', icon: Users2, exact: true },
+  { href: '/dashboard/cmv', label: 'Análise de CMV', icon: Target, exact: true },
+  { href: '/reports', label: 'Relatórios IA', icon: BarChart3, exact: true },
+  { href: '/team', label: 'Equipe e Acessos', icon: Users2, exact: true },
 ];
 
 const configNavItems = [
-  { href: '/billing', label: 'Plano', icon: CreditCard, exact: true },
+  { href: '/billing', label: 'Minha Assinatura', icon: CreditCard, exact: true },
   { href: '/settings', label: 'Configurações', icon: Settings, exact: true },
 ];
 
@@ -81,7 +82,7 @@ export function MainNav() {
           </Avatar>
           <div className="flex flex-col overflow-hidden">
             <h2 className="text-sm font-bold truncate text-sidebar-primary">VendaFácil</h2>
-            <p className="text-xs text-sidebar-foreground/60 truncate italic">Sistema PDV</p>
+            <p className="text-xs text-sidebar-foreground/60 truncate italic">{store?.name || 'Minha Loja'}</p>
           </div>
         </div>
       </SidebarHeader>
@@ -106,7 +107,7 @@ export function MainNav() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>Gestão</SidebarGroupLabel>
+          <SidebarGroupLabel>Gestão Financeira</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {managementNavItems.map((item) => (
@@ -124,7 +125,7 @@ export function MainNav() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>Ajustes</SidebarGroupLabel>
+          <SidebarGroupLabel>Sistema</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {configNavItems.map((item) => (
@@ -153,7 +154,7 @@ export function MainNav() {
                 </Avatar>
                 <div className="flex flex-col items-start overflow-hidden">
                   <span className="text-xs font-bold truncate w-full">{user?.email}</span>
-                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Usuário</span>
+                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Perfil</span>
                 </div>
               </div>
               <ChevronDown className="h-4 w-4 text-muted-foreground" />
