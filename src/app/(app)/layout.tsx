@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useAuth } from '@/components/auth-provider';
@@ -46,11 +45,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [user, loading, storeStatus, accessStatus, pathname, router]);
 
   // Mostrar Loader enquanto decide o destino ou carrega sessão inicial
-  if (loading || (user && storeStatus === 'loading' && pathname !== '/onboarding')) {
+  if (loading || storeStatus === 'unknown' || (user && storeStatus === 'loading' && pathname !== '/onboarding')) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground animate-pulse">Sincronizando acesso...</p>
+        <p className="text-sm text-muted-foreground animate-pulse">
+          {storeStatus === 'unknown' ? 'Sincronizando acesso...' : 'Carregando dados da loja...'}
+        </p>
       </div>
     );
   }
@@ -66,16 +67,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   // Se não houver usuário, o useEffect cuidará do redirecionamento
   if (!user) return null;
-
-  // Se a loja não estiver carregada ainda, mostramos o loader para evitar tela branca
-  if (storeStatus === 'loading' || storeStatus === 'unknown') {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
-        <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground animate-pulse">Carregando dados da loja...</p>
-      </div>
-    );
-  }
 
   // Área Protegida Padrão
   return (

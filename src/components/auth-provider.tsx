@@ -1,4 +1,3 @@
-
 'use client';
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -140,8 +139,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const createStore = useCallback(async (storeData: any) => {
     if (!user) return null;
     
-    // Call the database function using strictly the parameters expected by the signature
-    // PGRST202 indicated that p_user_id is not expected by the function.
+    // Garantir que a sessão esteja ativa antes de chamar a RPC
+    await supabase.auth.getSession();
+
     const { data, error } = await (supabase.rpc as any)('create_new_store', {
       p_name: storeData.name,
       p_legal_name: storeData.legal_name,
