@@ -1,8 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { useEffect } from 'react';
-import { usePathname, redirect } from 'next/navigation';
+import { redirect } from 'next/navigation';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { MainNav } from '@/components/main-nav';
 import { useAuth } from '@/components/auth-provider';
@@ -14,9 +13,8 @@ import { Loader2 } from 'lucide-react';
  */
 export default function AppLayout({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
-  const pathname = usePathname();
 
-  // 1. Aguarda carregamento inicial
+  // 1. Aguarda carregamento inicial do AuthProvider
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background">
@@ -26,13 +24,12 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     );
   }
 
-  // 2. Decide se redireciona para login
+  // 2. Se não houver usuário após o loading, redireciona para login
   if (!user) {
     redirect('/login');
   }
 
-  // 3. Usuário autenticado → Renderiza layout e conteúdo
-  // Nota: Lógica de Onboarding/Billing permanece síncrona com o render para evitar efeitos colaterais
+  // 3. Usuário autenticado → Renderiza layout completo da aplicação
   return (
     <SidebarProvider>
       <div className="flex min-h-screen">

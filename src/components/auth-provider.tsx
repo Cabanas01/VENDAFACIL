@@ -25,7 +25,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         setUser(data.session?.user ?? null);
       } catch (error) {
-        console.error('Erro ao buscar sessão:', error);
+        console.error('Erro ao buscar sessão inicial:', error);
       } finally {
         if (mounted) setLoading(false);
       }
@@ -35,8 +35,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, session) => {
-        if (!mounted) return;
-        setUser(session?.user ?? null);
+        if (mounted) {
+          setUser(session?.user ?? null);
+        }
       }
     );
 
@@ -55,6 +56,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
+  if (!ctx) throw new Error('useAuth deve ser usado dentro de um AuthProvider');
   return ctx;
 }

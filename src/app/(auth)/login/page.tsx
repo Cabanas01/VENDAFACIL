@@ -49,6 +49,8 @@ export default function LoginPage() {
       setError(err.message || 'Ocorreu um erro inesperado.');
     } finally {
       setLoading(false);
+      // NUNCA redirecionar manualmente aqui. 
+      // O AppLayout cuidará da navegação assim que o estado global atualizar.
     }
   };
 
@@ -66,7 +68,7 @@ export default function LoginPage() {
       </CardHeader>
 
       <CardContent>
-        <Tabs value={mode} onValueChange={(val) => setMode(val as any)}>
+        <Tabs value={mode} onValueChange={(val) => setMode(val as 'login' | 'signup')}>
           <TabsList className="grid w-full grid-cols-2 mb-6">
             <TabsTrigger value="login">Entrar</TabsTrigger>
             <TabsTrigger value="signup">Cadastrar</TabsTrigger>
