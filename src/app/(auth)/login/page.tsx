@@ -10,10 +10,6 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 
-/**
- * LoginPage (Componente Burro)
- * Apenas dispara o login. A navegação é gerida pelo AuthLayout.
- */
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -36,9 +32,9 @@ export default function LoginPage() {
         if (authError) throw authError;
         setError("Cadastro realizado! Verifique seu e-mail para ativar.");
       }
+      // NUNCA redirecionar aqui. O AuthLayout cuidará disso ao detectar o user.
     } catch (err: any) {
       setError(err.message || 'Falha na autenticação.');
-    } finally {
       setLoading(false);
     }
   };
@@ -66,21 +62,42 @@ export default function LoginPage() {
           <form onSubmit={handleAuth} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="seu@email.com" />
+              <Input 
+                id="email" 
+                type="email" 
+                required 
+                value={email} 
+                onChange={e => setEmail(e.target.value)} 
+                placeholder="seu@email.com" 
+                autoComplete="username"
+              />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="password">Senha</Label>
               <div className="relative">
-                <Input id="password" type={showPassword ? 'text' : 'password'} required value={password} onChange={e => setPassword(e.target.value)} />
-                <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2" onClick={() => setShowPassword(!showPassword)}>
+                <Input 
+                  id="password" 
+                  type={showPassword ? 'text' : 'password'} 
+                  required 
+                  value={password} 
+                  onChange={e => setPassword(e.target.value)} 
+                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                />
+                <Button 
+                  type="button" 
+                  variant="ghost" 
+                  size="icon" 
+                  className="absolute right-1 top-1/2 -translate-y-1/2" 
+                  onClick={() => setShowPassword(!showPassword)}
+                >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
               </div>
             </div>
 
             {error && (
-              <p className={`text-sm p-2 rounded ${error.includes('Verifique') ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'}`}>
+              <p className={`text-sm p-3 rounded-md border ${error.includes('Verifique') ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-destructive/10 border-destructive/20 text-destructive'}`}>
                 {error}
               </p>
             )}

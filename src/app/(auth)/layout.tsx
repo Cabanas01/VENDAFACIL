@@ -5,15 +5,12 @@ import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
 
-/**
- * AuthLayout (Guardião da Área de Login)
- * Resolve o problema do "não prosseguir". Se estiver logado, manda para o dashboard.
- */
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
+    // Se o usuário já estiver logado nesta área (Login/Signup), move para a App
     if (!loading && user) {
       router.replace('/dashboard');
     }
@@ -27,8 +24,14 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
     );
   }
 
-  // Se estiver logado, useEffect redireciona. Renderizamos null para evitar flash de tela.
-  if (user) return null;
+  // Enquanto redireciona, mostra o loader para evitar tela branca ou flash do form
+  if (user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-background p-4">
