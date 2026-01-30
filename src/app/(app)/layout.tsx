@@ -1,10 +1,10 @@
 'use client';
 
 /**
- * @fileOverview AppLayout (O ÚNICO Guardião)
+ * @fileOverview AppLayout (O ÚNICO Guardião de Navegação)
  * 
- * Toda decisão de navegação acontece aqui. 
- * Centraliza logs de diagnóstico e proteção de rotas.
+ * Centraliza toda a inteligência de fluxo do SaaS. 
+ * Respeita a premissa de AuthProvider passivo e máquina de estados oficial.
  */
 
 import { useAuth } from '@/components/auth-provider';
@@ -23,78 +23,92 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const isAdminPath = pathname.startsWith('/admin');
 
-  // ✅ PROBLEMA 2: Log de diagnóstico para provar o estado do guardião
   useEffect(() => {
-    console.log('[APP LAYOUT]', { user: user?.email, storeStatus, pathname });
-  }, [user, storeStatus, pathname]);
-
-  useEffect(() => {
-    // ✋ REGRA ABSOLUTA: Não decidir enquanto o estado é intermediário
+    // 1. Aguardar sincronização inicial (Auth e Store)
     if (loading || storeStatus === 'loading_auth' || storeStatus === 'loading_store') {
       return;
     }
 
-    // 1. Falta de Sessão
+    // 2. Barreira de Autenticação: Sem usuário vai para o Login
     if (!user) {
       router.replace('/login');
       return;
     }
 
-    // 2. Gestão de Tenant (Somente estados terminais decidem)
+    // 3. Barreira de Tenant (Loja):
+    // Se não tem loja, deve ir para Onboarding (exceto se já estiver lá ou for admin)
     if (storeStatus === 'no_store' && pathname !== '/onboarding' && !isAdminPath) {
       router.replace('/onboarding');
       return;
     }
 
+    // Se já tem loja, nunca deve ver a página de Onboarding
     if (storeStatus === 'has_store' && pathname === '/onboarding') {
       router.replace('/dashboard');
       return;
     }
 
-    // 3. Paywall
-    const isLiberado = accessStatus?.acesso_liberado ?? false;
-    const isSafePath = pathname === '/billing' || pathname === '/settings' || pathname === '/onboarding' || isAdminPath;
+    // 4. Barreira de Acesso (Paywall):
+    // Se tem loja mas o acesso não está liberado (expirado ou sem plano)
+    if (storeStatus === 'has_store') {
+      const isLiberado = accessStatus?.acesso_liberado ?? false;
+      
+      // Rotas que não sofrem bloqueio de paywall (onde o usuário resolve o problema)
+      const isSafePath = pathname === '/billing' || pathname === '/settings' || isAdminPath;
 
-    if (storeStatus === 'has_store' && !isLiberado && !isSafePath) {
-      router.replace('/billing');
-      return;
+      if (!isLiberado && !isSafePath) {
+        console.log('[APP LAYOUT] Acesso bloqueado. Redirecionando para faturamento.');
+        router.replace('/billing');
+        return;
+      }
     }
 
   }, [user, loading, storeStatus, accessStatus, pathname, router, isAdminPath]);
 
-  // ✅ RENDER DE CARREGAMENTO (Impede flashes de conteúdo errado)
+  // RENDER: Estados de Carregamento (Previne flashes)
   if (loading || storeStatus === 'loading_auth' || storeStatus === 'loading_store') {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground animate-pulse">Sincronizando dados do sistema...</p>
+        <p className="text-sm text-muted-foreground animate-pulse font-medium">
+          Sincronizando sua conta...
+        </p>
       </div>
     );
   }
 
-  // RENDER DE ERRO TÉCNICO (RLS / REDE)
+  // RENDER: Erro de Sincronização (RLS, Rede, Permissão)
   if (storeStatus === 'error') {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center">
-        <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
-        <h1 className="text-xl font-bold mb-2">Erro de Sincronização</h1>
-        <p className="text-muted-foreground mb-6">Não conseguimos validar os dados da sua conta no momento.</p>
+        <div className="bg-destructive/10 p-4 rounded-full mb-4">
+          <AlertTriangle className="h-12 w-12 text-destructive" />
+        </div>
+        <h1 className="text-xl font-bold mb-2">Falha na Comunicação</h1>
+        <p className="text-muted-foreground mb-6 max-w-sm">
+          Ocorreu um erro ao carregar os dados da sua loja. Isso pode ser instabilidade na conexão ou permissão de acesso.
+        </p>
         <Button onClick={() => user && fetchStoreData(user.id)} variant="outline">
-          <RefreshCcw className="mr-2 h-4 w-4" /> Tentar Novamente
+          <RefreshCcw className="mr-2 h-4 w-4" /> Tentar Reconectar
         </Button>
       </div>
     );
   }
 
-  // No Onboarding não usamos sidebar
-  if (pathname === '/onboarding') return <main className="min-h-screen p-4 flex items-center justify-center bg-muted/5">{children}</main>;
+  // RENDER: Fluxo de Onboarding (Sem Sidebars)
+  if (pathname === '/onboarding') {
+    return <main className="min-h-screen p-4 flex items-center justify-center bg-muted/5">{children}</main>;
+  }
 
+  // RENDER: Dashboard e Aplicação (Fluxo Normal)
   return (
     <SidebarProvider>
-      <div className="flex min-h-screen">
+      <div className="flex min-h-screen w-full overflow-hidden">
         {isAdminPath ? <AdminSidebar /> : <MainNav />}
-        <SidebarInset>
-          <div className="flex-1 p-4 sm:p-6 lg:p-8 bg-muted/5">{children}</div>
+        <SidebarInset className="flex-1 overflow-auto">
+          <div className="p-4 sm:p-6 lg:p-8 bg-muted/5 min-h-full">
+            {children}
+          </div>
         </SidebarInset>
       </div>
     </SidebarProvider>
