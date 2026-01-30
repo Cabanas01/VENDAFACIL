@@ -19,17 +19,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let mounted = true;
 
     const init = async () => {
-      // 1. Busca a sessão inicial de forma atômica
-      const { data } = await supabase.auth.getSession();
-      if (!mounted) return;
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (!mounted) return;
 
-      setUser(data.session?.user ?? null);
-      setLoading(false); // Só libera o carregamento após a resposta definitiva
+        setUser(data.session?.user ?? null);
+      } catch (error) {
+        console.error('Erro ao buscar sessão:', error);
+      } finally {
+        if (mounted) setLoading(false);
+      }
     };
 
     init();
 
-    // 2. Escuta mudanças de estado (login/logout)
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         if (!mounted) return;

@@ -1,16 +1,22 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { redirect } from 'next/navigation';
+import { useEffect } from 'react';
+import { usePathname, redirect } from 'next/navigation';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { MainNav } from '@/components/main-nav';
 import { useAuth } from '@/components/auth-provider';
 import { Loader2 } from 'lucide-react';
 
+/**
+ * AppLayout (Guardião Único)
+ * Centraliza a lógica de proteção de rotas e carregamento inicial.
+ */
 export default function AppLayout({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
+  const pathname = usePathname();
 
-  // 🚨 GUARDIÃO ÚNICO: Decide quem acessa a aplicação.
+  // 1. Aguarda carregamento inicial
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background">
@@ -20,11 +26,13 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     );
   }
 
+  // 2. Decide se redireciona para login
   if (!user) {
     redirect('/login');
   }
 
-  // Usuário autenticado: Renderiza a UI da aplicação
+  // 3. Usuário autenticado → Renderiza layout e conteúdo
+  // Nota: Lógica de Onboarding/Billing permanece síncrona com o render para evitar efeitos colaterais
   return (
     <SidebarProvider>
       <div className="flex min-h-screen">
