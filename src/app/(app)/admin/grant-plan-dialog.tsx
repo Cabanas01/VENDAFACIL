@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -15,13 +16,13 @@ import type { StoreRow } from './stores';
 
 const PLAN_OPTIONS = [
   { label: 'Avaliação (7 dias)', value: 'free' },
-  { label: 'Semanal', value: 'semanal' },
-  { label: 'Mensal', value: 'mensal' },
-  { label: 'Anual', value: 'anual' },
+  { label: 'Semanal', value: 'weekly' },
+  { label: 'Mensal', value: 'monthly' },
+  { label: 'Anual', value: 'yearly' },
 ] as const;
 
 const grantPlanSchema = z.object({
-  plan: z.enum(['free', 'semanal', 'mensal', 'anual'], { required_error: 'Selecione um plano.' }),
+  plan: z.enum(['free', 'weekly', 'monthly', 'yearly'], { required_error: 'Selecione um plano.' }),
   durationMonths: z.coerce.number().int().min(1, 'Duração deve ser de no mínimo 1 mês.'),
 });
 
@@ -41,7 +42,7 @@ export function GrantPlanDialog({ store, isOpen, onOpenChange, onSuccess }: Gran
   const form = useForm<GrantPlanFormValues>({
     resolver: zodResolver(grantPlanSchema),
     defaultValues: {
-      plan: 'mensal',
+      plan: 'monthly',
       durationMonths: 1,
     },
   });
@@ -50,15 +51,13 @@ export function GrantPlanDialog({ store, isOpen, onOpenChange, onSuccess }: Gran
     if (!store) return;
     setIsSubmitting(true);
 
-    // Conversão de meses para dias. 
-    // Se for o plano 'free' (avaliação), fixamos em 7 dias independente da UI.
     const calculatedDays = values.plan === 'free' ? 7 : Number(values.durationMonths) * 30;
 
     const payload = {
       storeId: store.id,
       planoTipo: values.plan,
       duracaoDias: calculatedDays,
-      origem: 'manual_admin',
+      origem: 'manual_admin', // Valor original esperado pela constraint
       renovavel: true
     };
 
@@ -102,7 +101,7 @@ export function GrantPlanDialog({ store, isOpen, onOpenChange, onSuccess }: Gran
         <DialogHeader>
           <DialogTitle>Conceder Plano para "{store.name}"</DialogTitle>
           <DialogDescription>
-            Esta ação concederá acesso manual. O plano será registrado no banco conforme a constraint permitida.
+            Esta ação concederá acesso manual respeitando as origens permitidas no banco.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>

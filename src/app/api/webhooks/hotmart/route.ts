@@ -1,3 +1,4 @@
+
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase/admin';
 import crypto from 'crypto';
@@ -42,7 +43,7 @@ export async function POST(request: Request) {
   const payload = JSON.parse(rawBody);
 
   try {
-    // Check if event was already processed
+    // Idempotency check
     const { data: existingEvent, error: checkError } = await supabaseAdmin
         .from('subscription_events')
         .select('id')
@@ -69,7 +70,7 @@ export async function POST(request: Request) {
 
     let durationDays: number;
     let planName: string;
-    let finalPlanType: "semanal" | "mensal" | "anual" | "free";
+    let finalPlanType: "weekly" | "monthly" | "yearly" | "free";
 
     switch (event) {
       case 'PURCHASE_APPROVED':
@@ -80,17 +81,17 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: true, message: 'Acknowledged, but invalid external_reference' });
         }
         
-        // Normalização dos identificadores da Hotmart para o banco de dados
+        // Uso das chaves originais (Inglês) para respeitar as constraints do banco
         switch (plan_id) {
           case 'weekly':
           case 'semanal': 
-            durationDays = 7; planName = 'Semanal'; finalPlanType = 'semanal'; break;
+            durationDays = 7; planName = 'Semanal'; finalPlanType = 'weekly'; break;
           case 'monthly':
           case 'mensal': 
-            durationDays = 30; planName = 'Mensal'; finalPlanType = 'mensal'; break;
+            durationDays = 30; planName = 'Mensal'; finalPlanType = 'monthly'; break;
           case 'yearly':
           case 'anual': 
-            durationDays = 365; planName = 'Anual'; finalPlanType = 'anual'; break;
+            durationDays = 365; planName = 'Anual'; finalPlanType = 'yearly'; break;
           default:
             await logEvent(payload, 'error_unknown_plan');
             return NextResponse.json({ success: true, message: 'Acknowledged, but unknown plan_id' });

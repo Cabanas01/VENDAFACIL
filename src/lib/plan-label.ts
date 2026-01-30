@@ -1,9 +1,9 @@
+
 'use client';
 
 /**
  * Retorna o rótulo de exibição amigável para um tipo de plano do banco de dados.
- * @param planoTipo O valor do campo 'plano_tipo' do banco (ex: 'mensal', 'anual').
- * @returns O rótulo formatado para a UI (ex: 'Mensal', 'Anual').
+ * Mapeia as chaves originais em inglês para rótulos em português.
  */
 export function getPlanLabel(planoTipo?: string | null): string {
   if (!planoTipo) {
@@ -11,15 +11,17 @@ export function getPlanLabel(planoTipo?: string | null): string {
   }
   
   switch (planoTipo) {
-    case 'mensal':
+    case 'monthly':
       return 'Mensal';
-    case 'anual':
+    case 'yearly':
       return 'Anual';
-    case 'semanal':
+    case 'weekly':
       return 'Semanal';
     case 'free':
       return 'Avaliação';
+    case 'vitalicio':
+      return 'Vitalício';
     default:
-      return 'N/A';
+      return planoTipo.charAt(0).toUpperCase() + planoTipo.slice(1);
   }
 }

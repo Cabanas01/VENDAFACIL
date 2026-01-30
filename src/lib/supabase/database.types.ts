@@ -1,3 +1,4 @@
+
 export type Json =
   | string
   | number
@@ -210,7 +211,7 @@ export interface Database {
         Row: {
           store_id: string
           plano_nome: string
-          plano_tipo: "free" | "semanal" | "mensal" | "anual"
+          plano_tipo: "free" | "weekly" | "monthly" | "yearly" | "vitalicio"
           data_inicio_acesso: string
           data_fim_acesso: string
           status_acesso:
@@ -225,7 +226,6 @@ export interface Database {
             | "admin"
             | "onboarding"
             | "manual_admin"
-            | "trial"
             | null
           renovavel: boolean
           updated_at: string
@@ -235,7 +235,7 @@ export interface Database {
         Insert: {
           store_id: string
           plano_nome: string
-          plano_tipo: "free" | "semanal" | "mensal" | "anual"
+          plano_tipo: "free" | "weekly" | "monthly" | "yearly" | "vitalicio"
           data_inicio_acesso?: string
           data_fim_acesso: string
           status_acesso:
@@ -250,7 +250,6 @@ export interface Database {
             | "admin"
             | "onboarding"
             | "manual_admin"
-            | "trial"
             | null
           renovavel?: boolean
           updated_at?: string
@@ -260,7 +259,7 @@ export interface Database {
         Update: {
           store_id?: string
           plano_nome?: string
-          plano_tipo?: "free" | "semanal" | "mensal" | "anual"
+          plano_tipo?: "free" | "weekly" | "monthly" | "yearly" | "vitalicio"
           data_inicio_acesso?: string
           data_fim_acesso?: string
           status_acesso?:
@@ -275,7 +274,6 @@ export interface Database {
             | "admin"
             | "onboarding"
             | "manual_admin"
-            | "trial"
             | null
           renovavel?: boolean
           updated_at?: string
@@ -542,7 +540,7 @@ export interface Database {
         Returns: undefined
       }
       start_trial: {
-        Args: { p_store_id: string; p_user_id: string }
+        Args: { p_store_id: string }
         Returns: Json
       }
     }
