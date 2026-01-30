@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { ReactNode } from 'react';
@@ -31,7 +32,7 @@ type AuthContextType = {
   store: Store | null;
   session: Session | null;
   isAuthenticated: boolean;
-  isLoading: boolean; // Inicial check de autenticação (rápido)
+  isLoading: boolean;
   storeStatus: StoreStatus;
   storeError: string | null;
   accessStatus: StoreAccessStatus | null;
@@ -108,23 +109,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const fetchStoreData = useCallback(async (userId: string) => {
     setStoreStatus('loading');
     try {
-      let storeId: string | null = null;
+      const { data: ownerStore } = await supabase.from('stores').select('id').eq('user_id', userId).maybeSingle();
+      let storeId = ownerStore?.id;
 
-      const { data: ownerStore } = await supabase
-        .from('stores')
-        .select('id')
-        .eq('user_id', userId)
-        .maybeSingle();
-
-      if (ownerStore) {
-        storeId = ownerStore.id;
-      } else {
-        const { data: memberEntry } = await supabase
-          .from('store_members')
-          .select('store_id')
-          .eq('user_id', userId)
-          .maybeSingle();
-        if (memberEntry) storeId = memberEntry.store_id;
+      if (!storeId) {
+        const { data: memberEntry } = await supabase.from('store_members').select('store_id').eq('user_id', userId).maybeSingle();
+        storeId = memberEntry?.store_id;
       }
 
       if (!storeId) {
@@ -133,16 +123,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      // Rodar verificação de acesso e carregamento de detalhes em paralelo para ganhar tempo
       await Promise.all([
         fetchAccessStatus(storeId),
         (async () => {
-          const { data: storeDetails } = await supabase
-            .from('stores')
-            .select('*, trial_used, trial_started_at')
-            .eq('id', storeId)
-            .single();
-
+          const { data: storeDetails } = await supabase.from('stores').select('*, trial_used, trial_started_at').eq('id', storeId).single();
           const [productsRes, salesRes, cashRes, membersRes] = await Promise.all([
             supabase.from('products').select('*').eq('store_id', storeId).order('name'),
             supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeId).order('created_at', { ascending: false }),
@@ -181,46 +165,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    // 1. Check initial session proativamente
-    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
+    const initializeAuth = async () => {
+      const { data: { session: initialSession } } = await supabase.auth.getSession();
+      
       if (mounted) {
         setSession(initialSession);
         if (initialSession?.user) {
-          // Busca perfil rápido
-          supabase.from('users').select('id, email, name, avatar_url, is_admin').eq('id', initialSession.user.id).single()
-            .then(({ data: profile }) => {
-              if (mounted && profile) setUser(profile as User);
-            });
-          // Busca dados da loja em background
-          fetchStoreData(initialSession.user.id);
+          const { data: profile } = await supabase.from('users').select('id, email, name, avatar_url, is_admin').eq('id', initialSession.user.id).single();
+          if (mounted && profile) setUser(profile as User);
+          await fetchStoreData(initialSession.user.id);
         }
-        setIsLoading(false); // Libera o layout principal assim que a sessão é confirmada
+        setIsLoading(false);
+      }
+    };
+
+    initializeAuth();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+      if (!mounted) return;
+
+      if (event === 'SIGNED_OUT') {
+        setSession(null);
+        setUser(null);
+        setStore(null);
+        setStoreStatus('unknown');
+        setIsLoading(false);
+      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        setSession(newSession);
+        if (newSession?.user) {
+          const { data: profile } = await supabase.from('users').select('id, email, name, avatar_url, is_admin').eq('id', newSession.user.id).single();
+          if (mounted && profile) setUser(profile as User);
+          await fetchStoreData(newSession.user.id);
+        }
+        setIsLoading(false);
       }
     });
-
-    // 2. Listen for auth changes
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (event, newSession) => {
-        if (!mounted) return;
-
-        if (event === 'SIGNED_OUT') {
-          setSession(null);
-          setUser(null);
-          setStore(null);
-          setAccessStatus(null);
-          setStoreStatus('unknown');
-          setIsLoading(false);
-        } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          setSession(newSession);
-          if (newSession?.user) {
-            const { data: profile } = await supabase.from('users').select('id, email, name, avatar_url, is_admin').eq('id', newSession.user.id).single();
-            if (mounted) setUser(profile as User);
-            fetchStoreData(newSession.user.id);
-          }
-          setIsLoading(false);
-        }
-      }
-    );
 
     return () => {
       mounted = false;

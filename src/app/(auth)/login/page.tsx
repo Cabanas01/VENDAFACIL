@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -59,7 +60,6 @@ export default function LoginPage() {
   const [mode, setMode] = useState<AuthModeWithConfirm>('login');
   const [lastSignupEmail, setLastSignupEmail] = useState<string>('');
 
-  // Redirecionamento reativo (backup caso o manual falhe)
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
       const next = searchParams.get('next') || '/dashboard';
@@ -99,7 +99,8 @@ export default function LoginPage() {
           description: result.error.message,
         });
       } else if (result?.success) {
-        // Redirecionamento imperativo imediato para performance máxima
+        // Importante: refresh() garante que o AppRouter leia os novos cookies antes da navegação
+        router.refresh();
         const next = searchParams.get('next') || '/dashboard';
         router.replace(next);
       }

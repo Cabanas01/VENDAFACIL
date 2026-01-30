@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { ReactNode } from 'react';
@@ -45,8 +46,11 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   // Enquanto verifica a identidade (Supabase Auth)
   if (isLoading) {
     return (
-      <div className="flex min-h-screen w-full items-center justify-center">
-        <Skeleton className="h-12 w-12 rounded-full" />
+      <div className="flex min-h-screen w-full items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <Skeleton className="h-12 w-12 rounded-full" />
+          <p className="text-sm text-muted-foreground animate-pulse">Sincronizando acesso...</p>
+        </div>
       </div>
     );
   }
