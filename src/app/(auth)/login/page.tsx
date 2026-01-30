@@ -18,8 +18,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 
 /**
- * LoginPage (Burra)
- * Apenas executa a ação de login. Não navega nem reage a estado global.
+ * LoginPage (Dumb Component)
+ * Apenas executa a ação de login. 
+ * A navegação é decidida pelo AppLayout reativamente.
  */
 export default function LoginPage() {
   const [email, setEmail] = useState('');

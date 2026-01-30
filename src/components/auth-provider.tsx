@@ -11,7 +11,8 @@ import type {
   StoreStatus, 
   StoreAccessStatus,
   Customer,
-  CartItem
+  CartItem,
+  SaleItem
 } from '@/lib/types';
 
 type AuthContextType = {
@@ -47,7 +48,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Data states
   const [store, setStore] = useState<Store | null>(null);
   const [storeStatus, setStoreStatus] = useState<StoreStatus>('unknown');
   const [storeError, setStoreError] = useState<string | null>(null);
@@ -57,7 +57,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [cashRegisters, setCashRegistersState] = useState<CashRegister[]>([]);
 
   const fetchAccessStatus = useCallback(async (storeId: string) => {
-    const { data, error } = await supabase.rpc('get_store_access_status', { p_store_id: storeId });
+    // Cast to any to bypass TS error if database.types is mismatched with the call
+    const { data, error } = await (supabase.rpc as any)('get_store_access_status', { p_store_id: storeId });
     if (error) {
       setAccessStatus({ acesso_liberado: false, data_fim_acesso: null, plano_nome: 'Erro', mensagem: 'Erro de acesso' });
       return;
@@ -79,6 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (!storeId) {
         setStoreStatus('none');
+        setStore(null);
         return;
       }
 
@@ -113,11 +115,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const sessionUser = session?.user ?? null;
         setUser(sessionUser);
         if (sessionUser) {
-          fetchStoreData(sessionUser.id);
+          await fetchStoreData(sessionUser.id);
         }
         setLoading(false);
       } catch (error) {
-        console.error('[AUTH] erro ao iniciar sessão:', error);
+        console.error('[AUTH] Erro ao iniciar:', error);
         if (mounted) setLoading(false);
       }
     };
@@ -125,18 +127,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     initAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      async (event, session) => {
         if (!mounted) return;
         const newUser = session?.user ?? null;
         setUser(newUser);
+        
         if (newUser) {
-          fetchStoreData(newUser.id);
+          await fetchStoreData(newUser.id);
         } else {
           setStore(null);
           setStoreStatus('unknown');
           setProducts([]);
           setSales([]);
           setCashRegistersState([]);
+          setAccessStatus(null);
         }
       }
     );
@@ -149,9 +153,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     await supabase.auth.signOut();
-    setUser(null);
-    setStore(null);
-    setStoreStatus('unknown');
   };
 
   const deleteAccount = async () => {
@@ -160,17 +161,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error };
   };
 
-  // Funções de data (mantidas para compatibilidade com o resto do sistema)
   const createStore = async (data: any) => {
     const { data: newStore } = await supabase.rpc('create_new_store', data).select().single();
-    if (newStore) await fetchStoreData(user!.id);
+    if (newStore && user) await fetchStoreData(user.id);
     return newStore as Store;
   };
 
   const updateStore = async (data: any) => {
-    if (store) {
+    if (store && user) {
       await supabase.from('stores').update(data).eq('id', store.id);
-      await fetchStoreData(user!.id);
+      await fetchStoreData(user.id);
     }
   };
 
@@ -179,62 +179,79 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const removeStoreMember = async (userId: string) => {
-    const { error } = await supabase.from('store_members').delete().eq('user_id', userId).eq('store_id', store!.id);
-    if (!error) await fetchStoreData(user!.id);
+    if (!store || !user) return { error: new Error('Sessão inválida') };
+    const { error } = await supabase.from('store_members').delete().eq('user_id', userId).eq('store_id', store.id);
+    if (!error) await fetchStoreData(user.id);
     return { error };
   };
 
   const addProduct = async (product: any) => {
-    await supabase.from('products').insert({ ...product, store_id: store!.id });
-    await fetchStoreData(user!.id);
+    if (!store || !user) return;
+    await supabase.from('products').insert({ ...product, store_id: store.id });
+    await fetchStoreData(user.id);
   };
 
   const addCustomer = async (customer: any) => {
-    await supabase.from('customers').insert({ ...customer, store_id: store!.id });
-    await fetchStoreData(user!.id);
+    if (!store || !user) return;
+    await supabase.from('customers').insert({ ...customer, store_id: store.id });
+    await fetchStoreData(user.id);
   };
 
   const updateProduct = async (id: string, product: any) => {
+    if (!store || !user) return;
     await supabase.from('products').update(product).eq('id', id);
-    await fetchStoreData(user!.id);
+    await fetchStoreData(user.id);
   };
 
   const updateProductStock = async (id: string, qty: number) => {
+    if (!store || !user) return;
     await supabase.from('products').update({ stock_qty: qty }).eq('id', id);
-    await fetchStoreData(user!.id);
+    await fetchStoreData(user.id);
   };
 
   const removeProduct = async (id: string) => {
+    if (!store || !user) return;
     await supabase.from('products').delete().eq('id', id);
-    await fetchStoreData(user!.id);
+    await fetchStoreData(user.id);
   };
 
   const findProductByBarcode = async (barcode: string) => {
-    const { data } = await supabase.from('products').select('*').eq('store_id', store!.id).eq('barcode', barcode).maybeSingle();
-    return data;
+    if (!store) return null;
+    const { data } = await supabase.from('products').select('*').eq('store_id', store.id).eq('barcode', barcode).maybeSingle();
+    return data as Product | null;
   };
 
   const setCashRegisters = async (action: any) => {
+    if (!store || !user) return;
     const next = typeof action === 'function' ? action(cashRegisters) : action;
     for (const cr of next) {
       if (cashRegisters.find(c => c.id === cr.id)) {
         await supabase.from('cash_registers').update(cr).eq('id', cr.id);
       } else {
-        await supabase.from('cash_registers').insert({ ...cr, store_id: store!.id });
+        await supabase.from('cash_registers').insert({ ...cr, store_id: store.id });
       }
     }
-    await fetchStoreData(user!.id);
+    await fetchStoreData(user.id);
   };
 
   const addSale = async (cart: CartItem[], paymentMethod: any) => {
+    if (!store || !user) return null;
     const total = cart.reduce((s, i) => s + i.subtotal_cents, 0);
-    const { data: sale } = await supabase.from('sales').insert({ store_id: store!.id, total_cents: total, payment_method: paymentMethod }).select().single();
+    const { data: sale } = await supabase.from('sales').insert({ store_id: store.id, total_cents: total, payment_method: paymentMethod }).select().single();
     if (sale) {
       for (const item of cart) {
-        await supabase.from('sale_items').insert({ sale_id: sale.id, ...item });
+        await supabase.from('sale_items').insert({
+          sale_id: sale.id,
+          product_id: item.product_id,
+          product_name_snapshot: item.product_name_snapshot,
+          product_barcode_snapshot: item.product_barcode_snapshot,
+          quantity: item.quantity,
+          unit_price_cents: item.unit_price_cents,
+          subtotal_cents: item.subtotal_cents,
+        });
         await supabase.rpc('decrement_stock', { p_product_id: item.product_id, p_quantity: item.quantity });
       }
-      await fetchStoreData(user!.id);
+      await fetchStoreData(user.id);
       return sale as Sale;
     }
     return null;
