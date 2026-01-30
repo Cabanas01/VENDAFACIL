@@ -27,7 +27,6 @@ type AuthContextType = {
   sales: Sale[];
   cashRegisters: CashRegister[];
   
-  // Funções de Negócio (PASSIVAS - NÃO NAVEGAM)
   fetchStoreData: (userId: string) => Promise<void>;
   createStore: (storeData: any) => Promise<Store | null>;
   updateStore: (data: any) => Promise<void>;
@@ -58,7 +57,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [cashRegisters, setCashRegistersState] = useState<CashRegister[]>([]);
 
   const fetchStoreData = useCallback(async (userId: string) => {
-    setStoreStatus('loading');
     try {
       const { data: ownerStore } = await supabase.from('stores').select('id').eq('user_id', userId).maybeSingle();
       let storeId = ownerStore?.id;
@@ -74,7 +72,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // Buscar status de acesso via RPC
       const { data: statusData } = await (supabase.rpc as any)('get_store_access_status', { p_store_id: storeId });
       setAccessStatus(statusData?.[0] || null);
 
@@ -118,11 +115,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(sessionUser);
       setLoading(false);
       if (sessionUser) fetchStoreData(sessionUser.id);
+      else setStoreStatus('none');
     };
 
     initAuth();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
       const newUser = session?.user ?? null;
       setUser(newUser);
@@ -139,11 +137,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [fetchStoreData]);
 
-  // IMPLEMENTAÇÃO DAS FUNÇÕES DE NEGÓCIO (PASSIVAS)
-
   const createStore = useCallback(async (storeData: any) => {
     if (!user) return null;
+    
+    // Forçar verificação de sessão para garantir headers de auth
+    await supabase.auth.getUser();
+
     const { data, error } = await (supabase.rpc as any)('create_new_store', {
+      p_user_id: user.id, // Explicitamente passando o ID para evitar violação de not-null
       p_name: storeData.name,
       p_legal_name: storeData.legal_name,
       p_cnpj: storeData.cnpj,
@@ -168,7 +169,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!user) return;
     const { error } = await supabase.from('users').update(data).eq('id', user.id);
     if (error) throw error;
-    // Update local user state
     const { data: updated } = await supabase.from('users').select('*').eq('id', user.id).single();
     if (updated) setUser(updated as any);
   }, [user]);
@@ -225,7 +225,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!store || !user) return null;
     const total = cart.reduce((sum, item) => sum + item.subtotal_cents, 0);
     
-    // 1. Criar Venda
     const { data: sale, error: saleError } = await (supabase as any).from('sales').insert({
       store_id: store.id,
       total_cents: total,
@@ -234,7 +233,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (saleError) throw saleError;
 
-    // 2. Criar Itens e Baixar Estoque
     for (const item of cart) {
       await (supabase as any).from('sale_items').insert({
         sale_id: sale.id,
@@ -259,7 +257,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const setCashRegisters = useCallback(async (action: any) => {
     if (!store || !user) return;
     const next = typeof action === 'function' ? action(cashRegisters) : action;
-    // Simples persistência para o exemplo, idealmente seria um por um ou batch
     for (const cr of next) {
       if (cashRegisters.find(c => c.id === cr.id)) {
         await (supabase as any).from('cash_registers').update(cr).eq('id', cr.id);

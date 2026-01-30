@@ -60,7 +60,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   // Se estiver no onboarding, renderiza apenas o conteúdo (sem sidebar)
   if (pathname === '/onboarding') {
-    return <main className="min-h-screen bg-background p-4 flex items-center justify-center">{children}</main>;
+    return <main className="min-h-screen bg-background p-4 flex items-center justify-center w-full">{children}</main>;
   }
 
   // Área Protegida Padrão
