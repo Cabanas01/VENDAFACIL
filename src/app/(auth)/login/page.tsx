@@ -4,23 +4,23 @@
  * @fileOverview LoginPage (Dumb Form)
  * 
  * Apenas dispara o signIn do Supabase. 
- * NÃO executa redirecionamentos (REGRA DE OURO).
  * O AppLayout redirecionará automaticamente após o AuthProvider detectar a sessão.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Loader2, Eye, EyeOff, LogIn } from 'lucide-react';
+import { Loader2, LogIn, Eye, EyeOff } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/components/auth-provider';
 
 const loginSchema = z.object({
   email: z.string().email('E-mail inválido'),
@@ -30,9 +30,16 @@ const loginSchema = z.object({
 type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
+  const { user } = useAuth();
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Se o usuário já está logado, enviamos ele para o portal onde o AppLayout assumirá
+  useEffect(() => {
+    if (user) router.push('/dashboard');
+  }, [user, router]);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -50,15 +57,12 @@ export default function LoginPage() {
       });
 
       if (error) {
-        if (error.message === 'Email not confirmed') {
-          setErrorMsg('Por favor, confirme seu e-mail antes de entrar.');
-        } else {
-          setErrorMsg('E-mail ou senha incorretos.');
-        }
+        setErrorMsg(error.message === 'Invalid login credentials' ? 'E-mail ou senha incorretos.' : error.message);
       }
-      // SUCESSO: Não fazemos nada. O AuthProvider e o AppLayout cuidam do resto.
+      // SUCESSO: O onAuthStateChange no AuthProvider será disparado, 
+      // o estado 'user' mudará, e o useEffect acima fará o router.push('/dashboard').
     } catch (err) {
-      setErrorMsg('Ocorreu um erro inesperado.');
+      setErrorMsg('Erro inesperado ao entrar.');
     } finally {
       setLoading(false);
     }
@@ -125,7 +129,7 @@ export default function LoginPage() {
               </div>
             )}
 
-            <Button type="submit" className="w-full h-12" disabled={loading}>
+            <Button type="submit" className="w-full h-12 font-bold" disabled={loading}>
               {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LogIn className="mr-2 h-4 w-4" />}
               Entrar na conta
             </Button>

@@ -1,11 +1,11 @@
 'use client';
 
 /**
- * @fileOverview AuthProvider (Cérebro Passivo)
+ * @fileOverview AuthProvider (Motor de Estado Passivo)
  * 
- * Este componente gerencia estritamente o estado e a sincronização com o Supabase.
- * Ele NÃO executa redirecionamentos (REGRA DE OURO). 
- * Reporta a verdade do banco através da máquina de estados 'storeStatus'.
+ * REGRA DE OURO: Este componente NÃO decide navegação.
+ * Ele apenas sincroniza a sessão e os dados do tenant com o Supabase
+ * e expõe a máquina de estados oficial para o AppLayout.
  */
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -55,7 +55,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true); // Controla a espera da sessão inicial
+  const [loading, setLoading] = useState(true); 
   const [store, setStore] = useState<Store | null>(null);
   const [storeStatus, setStoreStatus] = useState<StoreStatus>('loading_auth');
   const [accessStatus, setAccessStatus] = useState<StoreAccessStatus | null>(null);
@@ -64,10 +64,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [cashRegisters, setCashRegistersState] = useState<CashRegister[]>([]);
 
-  /**
-   * Sincroniza dados da loja de forma protegida.
-   * Não confia em resultados nulos se houver erro técnico.
-   */
   const fetchStoreData = useCallback(async (userId: string) => {
     setStoreStatus('loading_store');
     
@@ -80,14 +76,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle();
 
       if (ownerError) {
-        console.error('[AUTH] Falha técnica (RLS/Rede) ao buscar owner:', ownerError);
         setStoreStatus('error');
         return;
       }
 
       let storeId = ownerStore?.id;
 
-      // 2. Se não for dono, tentar localizar como Membro da Equipe
+      // 2. Tentar localizar como Equipe
       if (!storeId) {
         const { data: memberEntry, error: memberError } = await supabase
           .from('store_members')
@@ -96,21 +91,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .maybeSingle();
 
         if (memberError) {
-          console.error('[AUTH] Falha técnica (RLS/Rede) ao buscar membership:', memberError);
           setStoreStatus('error');
           return;
         }
         storeId = memberEntry?.store_id;
       }
 
-      // 3. Se conclusivamente não existir vínculo
+      // 3. Ausência Conclusiva
       if (!storeId) {
-        setStoreStatus('no_store');
         setStore(null);
+        setStoreStatus('no_store');
         return;
       }
 
-      // 4. Se existir, carregar todo o contexto operacional
+      // 4. Carregamento Full
       const [statusRes, storeRes, productsRes, salesRes, cashRes, membersRes, customersRes] = await Promise.all([
         supabase.rpc('get_store_access_status', { p_store_id: storeId }),
         supabase.from('stores').select('*').eq('id', storeId).single(),
@@ -123,51 +117,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (storeRes.error) throw storeRes.error;
 
-      // Hidratar membros com perfis de usuários
-      let members: StoreMember[] = [];
-      if (membersRes.data && membersRes.data.length > 0) {
-        const memberUserIds = membersRes.data.map(m => m.user_id);
-        const { data: profiles } = await supabase.from('users').select('*').in('id', memberUserIds);
-        const profilesMap = new Map((profiles || []).map(p => [p.id, p]));
-        members = membersRes.data.map(m => ({
-          ...m,
-          name: profilesMap.get(m.user_id)?.name ?? null,
-          email: profilesMap.get(m.user_id)?.email ?? null,
-          avatar_url: profilesMap.get(m.user_id)?.avatar_url ?? null,
-        })) as StoreMember[];
-      }
-
       setAccessStatus(statusRes.data?.[0] || null);
-      setStore({ ...storeRes.data, members } as Store);
+      setStore(storeRes.data as Store);
       setProducts(productsRes.data as Product[] || []);
       setSales(salesRes.data as Sale[] || []);
       setCustomers(customersRes.data as Customer[] || []);
       setCashRegistersState(cashRes.data as CashRegister[] || []);
       
-      // Estado Final Sucesso
       setStoreStatus('has_store');
 
     } catch (err) {
-      console.error('[AUTH] Falha crítica ao hidratar loja:', err);
+      console.error('[AUTH_PROVIDER] Sync error:', err);
       setStoreStatus('error');
     }
   }, []);
 
-  /**
-   * Monitoramento de Sessão (Supabase Auth)
-   */
   useEffect(() => {
-    let mounted = true;
-
     const initAuth = async () => {
-      setStoreStatus('loading_auth');
       const { data } = await supabase.auth.getSession();
-      
-      if (!mounted) return;
-
       const sessionUser = data.session?.user ?? null;
       setUser(sessionUser);
-      setLoading(false); // Libera o bloqueio inicial de carregamento de página
+      setLoading(false);
 
       if (sessionUser) {
         fetchStoreData(sessionUser.id);
@@ -179,36 +149,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     initAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!mounted) return;
       const newUser = session?.user ?? null;
+      setUser(newUser);
       
-      if (event === 'SIGNED_IN' || (event === 'INITIAL_SESSION' && newUser)) {
-        setUser(newUser);
-        fetchStoreData(newUser!.id);
-      } else if (event === 'SIGNED_OUT') {
-        setUser(null);
+      if (newUser) {
+        fetchStoreData(newUser.id);
+      } else {
         setStore(null);
         setStoreStatus('no_store');
         setAccessStatus(null);
-        setProducts([]);
-        setSales([]);
-        setCustomers([]);
-        setCashRegistersState([]);
       }
     });
 
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
+    return () => subscription.unsubscribe();
   }, [fetchStoreData]);
 
-  /**
-   * Operações de Mutação (Passivas)
-   */
   const createStore = useCallback(async (storeData: any) => {
     if (!user) return null;
-    
     const { data, error } = await supabase.rpc('create_new_store', {
       p_name: storeData.name,
       p_legal_name: storeData.legal_name,
@@ -217,27 +174,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       p_phone: storeData.phone,
       p_timezone: storeData.timezone,
     });
-
-    if (error) {
-      console.error('[AUTH] Erro ao criar loja:', error);
-      throw error;
-    }
-
+    if (error) throw error;
     await fetchStoreData(user.id);
     return data as Store;
   }, [user, fetchStoreData]);
 
   const updateStore = useCallback(async (data: any) => {
     if (!store || !user) return;
-    const { error } = await supabase.from('stores').update(data).eq('id', store.id);
-    if (error) throw error;
+    await supabase.from('stores').update(data).eq('id', store.id);
     await fetchStoreData(user.id);
   }, [store, user, fetchStoreData]);
 
   const updateUser = useCallback(async (data: any) => {
     if (!user) return;
-    const { error } = await supabase.from('users').update(data).eq('id', user.id);
-    if (error) throw error;
+    await supabase.from('users').update(data).eq('id', user.id);
   }, [user]);
 
   const removeStoreMember = useCallback(async (userId: string) => {
@@ -249,43 +199,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const addProduct = useCallback(async (product: any) => {
     if (!store || !user) return;
-    const { error } = await supabase.from('products').insert({ ...product, store_id: store.id });
-    if (error) throw error;
+    await supabase.from('products').insert({ ...product, store_id: store.id });
     await fetchStoreData(user.id);
   }, [store, user, fetchStoreData]);
 
   const addCustomer = useCallback(async (customer: any) => {
     if (!store || !user) return;
     const { error } = await supabase.from('customers').insert({ ...customer, store_id: store.id });
-    
-    if (error) {
-      if (error.message?.includes('trial_customer_limit')) {
-        throw new Error('Limite de clientes do plano atingido. Faça o upgrade para continuar.');
-      }
-      throw error;
-    }
-    
+    if (error) throw error;
     await fetchStoreData(user.id);
   }, [store, user, fetchStoreData]);
 
   const updateProduct = useCallback(async (id: string, product: any) => {
     if (!store || !user) return;
-    const { error } = await supabase.from('products').update(product).eq('id', id).eq('store_id', store.id);
-    if (error) throw error;
+    await supabase.from('products').update(product).eq('id', id).eq('store_id', store.id);
     await fetchStoreData(user.id);
   }, [store, user, fetchStoreData]);
 
   const updateProductStock = useCallback(async (id: string, qty: number) => {
     if (!store || !user) return;
-    const { error } = await supabase.from('products').update({ stock_qty: qty }).eq('id', id).eq('store_id', store.id);
-    if (error) throw error;
+    await supabase.from('products').update({ stock_qty: qty }).eq('id', id).eq('store_id', store.id);
     await fetchStoreData(user.id);
   }, [store, user, fetchStoreData]);
 
   const removeProduct = useCallback(async (id: string) => {
     if (!store || !user) return;
-    const { error } = await supabase.from('products').delete().eq('id', id).eq('store_id', store.id);
-    if (error) throw error;
+    await supabase.from('products').delete().eq('id', id).eq('store_id', store.id);
     await fetchStoreData(user.id);
   }, [store, user, fetchStoreData]);
 
@@ -297,55 +236,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const addSale = useCallback(async (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => {
     if (!store || !user) return null;
-    
     const total = cart.reduce((sum, item) => sum + item.subtotal_cents, 0);
-
     try {
-      const { data: sale, error: saleError } = await supabase
-        .from('sales')
-        .insert({
-          store_id: store.id,
-          total_cents: total,
-          payment_method: paymentMethod
-        })
-        .select()
-        .single();
-
-      if (saleError) {
-        if (saleError.message?.includes('trial_sales_limit')) {
-          throw new Error('Limite de vendas do plano atingido. Faça o upgrade para continuar.');
-        }
-        throw saleError;
-      }
-
+      const { data: sale } = await supabase.from('sales').insert({ store_id: store.id, total_cents: total, payment_method: paymentMethod }).select().single();
       for (const item of cart) {
-        const { error: itemError } = await supabase.from('sale_items').insert({
-          sale_id: sale.id,
-          product_id: item.product_id,
-          product_name_snapshot: item.product_name_snapshot,
-          product_barcode_snapshot: item.product_barcode_snapshot,
-          quantity: item.quantity,
-          unit_price_cents: item.unit_price_cents,
-          subtotal_cents: item.subtotal_cents
+        await supabase.from('sale_items').insert({
+          sale_id: sale.id, product_id: item.product_id, product_name_snapshot: item.product_name_snapshot,
+          product_barcode_snapshot: item.product_barcode_snapshot, quantity: item.quantity,
+          unit_price_cents: item.unit_price_cents, subtotal_cents: item.subtotal_cents
         });
-
-        if (itemError) throw itemError;
-
-        const { error: stockError } = await supabase.rpc('decrement_stock', { 
-          p_product_id: item.product_id, 
-          p_quantity: item.quantity 
-        });
-        
-        if (stockError) throw stockError;
+        await supabase.rpc('decrement_stock', { p_product_id: item.product_id, p_quantity: item.quantity });
       }
-
       await fetchStoreData(user.id);
       return sale as Sale;
-
-    } catch (err: any) {
-      console.error('[SALE_ERROR]', err);
-      throw err; 
-    }
+    } catch (err) { throw err; }
   }, [store, user, fetchStoreData]);
 
   const setCashRegisters = useCallback(async (action: any) => {
@@ -368,9 +272,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     await supabase.auth.signOut();
-    setUser(null);
-    setStore(null);
-    setStoreStatus('no_store');
   };
 
   return (

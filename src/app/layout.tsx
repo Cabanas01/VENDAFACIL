@@ -1,20 +1,19 @@
 import type { Metadata, Viewport } from "next";
 import { Suspense } from "react";
 import Script from "next/script";
-import { Toaster } from "@/components/ui/toaster";
-import { AuthProvider } from "@/components/auth-provider";
+import { Providers } from "./providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "VendaFacil",
   description: "Seu ponto de venda fácil e inteligente.",
 };
+
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
 };
-
 
 export default function RootLayout({
   children,
@@ -45,10 +44,9 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased min-h-screen">
         <Suspense fallback={null}>
-          <AuthProvider>
+          <Providers>
             {children}
-            <Toaster />
-          </AuthProvider>
+          </Providers>
         </Suspense>
         <Script src="https://www.googletagmanager.com/gtag/js?id=G-FZGT4B73XF" />
         <Script id="google-analytics">
@@ -56,7 +54,6 @@ export default function RootLayout({
             window.dataLayer = window.dataLayer || [];
             function gtag(){dataLayer.push(arguments);}
             gtag('js', new Date());
-  
             gtag('config', 'G-FZGT4B73XF');
           `}
         </Script>
