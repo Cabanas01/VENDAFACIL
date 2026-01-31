@@ -26,33 +26,35 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const isAdminPath = pathname.startsWith('/admin');
 
+  // Lógica de Redirecionamento Centralizada
   useEffect(() => {
-    // 1. Aguarda resolução da autenticação
+    // 1. Aguarda resolução da autenticação inicial
     if (loading || storeStatus === 'loading_auth') return;
 
-    // 2. Se não há usuário, manda para o login
+    // 2. Se não há usuário logado, manda para o login
     if (!user) {
       router.replace('/login');
       return;
     }
 
-    // 3. Aguarda resolução dos dados da loja
+    // 3. Aguarda resolução da busca de loja no servidor
     if (storeStatus === 'loading_store') return;
 
-    // 4. Lógica de Redirecionamento de Onboarding
+    // 4. Usuário NOVO (Sem loja): Deve obrigatoriamente ir para o onboarding
     if (storeStatus === 'no_store') {
-      // Usuário novo (sem loja): Deve estar no Onboarding
       if (pathname !== '/onboarding' && !isAdminPath) {
         router.replace('/onboarding');
       }
-    } else if (storeStatus === 'has_store') {
-      // Usuário existente (com loja): NÃO PODE estar no Onboarding
+    } 
+    
+    // 5. Usuário EXISTENTE (Com loja): Não pode ver o onboarding e deve ter acesso validado
+    if (storeStatus === 'has_store') {
       if (pathname === '/onboarding') {
         router.replace('/dashboard');
         return;
       }
 
-      // 5. Paywall (Acesso bloqueado por expiração)
+      // Validação de Paywall (Plano expirado)
       const isLiberado = accessStatus?.acesso_liberado ?? false;
       const isSafePath = pathname === '/billing' || pathname === '/settings' || isAdminPath;
       
@@ -75,8 +77,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return revenue > 0 ? (cost / revenue) * 100 : 0;
   }, [sales, products]);
 
-  // Tela de Carregamento Global (Bootstrap)
-  if (loading || storeStatus === 'loading_auth' || storeStatus === 'loading_store') {
+  // BLOQUEIO CRÍTICO: Não renderiza NADA se o status não for definitivo
+  // Isso evita que o Dashboard apareça antes do Onboarding em casos de redirecionamento
+  const isTransitioning = loading || 
+                          storeStatus === 'loading_auth' || 
+                          storeStatus === 'loading_store' ||
+                          (!user && pathname !== '/login') ||
+                          (user && storeStatus === 'no_store' && pathname !== '/onboarding') ||
+                          (user && storeStatus === 'has_store' && pathname === '/onboarding');
+
+  if (isTransitioning) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
@@ -108,12 +118,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   // Se estiver no onboarding e não tiver loja, renderiza limpo (sem sidebar)
   if (pathname === '/onboarding' && storeStatus === 'no_store') {
-    return <main className="min-h-screen flex items-center justify-center bg-muted/5">{children}</main>;
-  }
-
-  // Se o usuário está sendo redirecionado para fora do onboarding, não renderiza nada para evitar flash de conteúdo
-  if (pathname === '/onboarding' && storeStatus === 'has_store') {
-    return null;
+    return <main className="min-h-screen flex items-center justify-center bg-muted/5 w-full">{children}</main>;
   }
 
   return (

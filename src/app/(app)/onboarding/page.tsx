@@ -48,12 +48,10 @@ export default function OnboardingPage() {
   const [isLoadingCnpj, setIsLoadingCnpj] = useState(false);
   const [step, setStep] = useState(1);
 
-  // Guarda adicional de página: Se o AuthProvider já confirmou a loja, sai daqui.
-  useEffect(() => {
-    if (storeStatus === 'has_store') {
-      router.replace('/dashboard');
-    }
-  }, [storeStatus, router]);
+  // Guarda rígida: Se o usuário já tem uma loja, não permite nem renderizar o formulário
+  if (storeStatus === 'has_store') {
+    return null; 
+  }
 
   const form = useForm<OnboardingValues>({
     resolver: zodResolver(onboardingSchema),
@@ -142,7 +140,7 @@ export default function OnboardingPage() {
       });
 
       toast({ title: 'Configuração concluída!', description: 'Sua loja está pronta para operar.' });
-      // O AppLayout cuidará do redirecionamento assim que storeStatus mudar para has_store
+      // O AppLayout cuidará do redirecionamento automático assim que o status mudar para has_store
     } catch (error: any) {
       console.error('[ONBOARDING_SUBMIT_ERROR]', error);
       toast({
@@ -154,8 +152,6 @@ export default function OnboardingPage() {
       setIsSubmitting(false);
     }
   };
-
-  if (storeStatus === 'has_store') return null;
 
   return (
     <Card className="shadow-2xl w-full border-border/50 max-w-lg mx-auto">
