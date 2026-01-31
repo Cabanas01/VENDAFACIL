@@ -1,3 +1,4 @@
+
 'use client';
 
 /**
@@ -234,23 +235,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   /**
    * PROXY PARA SERVER ACTION
-   * Resolve definitivamente o problema de auth.uid() ser nulo no RLS.
-   * O cliente apenas chama a função e o servidor processa com contexto de cookies.
+   * Passa o store.id do estado global para garantir consistência no RLS.
    */
   const addSale = useCallback(async (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => {
-    const result = await processSaleAction(cart, paymentMethod);
+    if (!store?.id) {
+      throw new Error('Loja não identificada. Por favor, recarregue o portal.');
+    }
+
+    const result = await processSaleAction(store.id, cart, paymentMethod);
     
     if (!result.success) {
       throw new Error(result.error);
     }
 
-    // Recarregar dados em segundo plano para refletir estoque e nova venda
+    // Sincroniza em background
     if (user) {
       fetchStoreData(user.id, true).catch(err => console.warn('[SYNC_WARN]', err));
     }
 
     return result;
-  }, [user, fetchStoreData]);
+  }, [user, store, fetchStoreData]);
 
   const setCashRegisters = useCallback(async (action: any) => {
     if (!store || !user) return;

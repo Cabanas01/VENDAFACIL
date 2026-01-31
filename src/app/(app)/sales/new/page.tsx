@@ -1,3 +1,4 @@
+
 'use client';
 
 /**
@@ -19,7 +20,8 @@ import {
   PiggyBank, 
   Loader2, 
   Package,
-  ArrowRight
+  ArrowRight,
+  AlertCircle
 } from 'lucide-react';
 import { useAuth } from '@/components/auth-provider';
 import { useToast } from '@/hooks/use-toast';
@@ -30,6 +32,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import {
   Dialog,
   DialogContent,
@@ -45,7 +48,7 @@ const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value / 100);
 
 export default function NewSalePage() {
-  const { products, addSale } = useAuth();
+  const { products, addSale, store } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -119,9 +122,13 @@ export default function NewSalePage() {
   const handleFinalize = async (method: 'cash' | 'pix' | 'card') => {
     if (cart.length === 0 || isSubmitting) return;
     
+    if (!store?.id) {
+      toast({ variant: 'destructive', title: 'Erro de Loja', description: 'Identidade da loja não carregada. Recarregue a página.' });
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      // addSale agora chama a Server Action por baixo dos panos
       await addSale(cart, method);
       
       toast({ 
@@ -145,9 +152,19 @@ export default function NewSalePage() {
     }
   };
 
+  // Se a loja não estiver carregada, bloqueia a operação para evitar o erro 42501
+  if (!store) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="text-muted-foreground">Carregando contexto da loja...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)]">
-      <PageHeader title="Ponto de Venda" subtitle="Registre vendas de forma rápida e prática." />
+      <PageHeader title="Ponto de Venda" subtitle={`Operando em: ${store.name}`} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 overflow-hidden">
         
