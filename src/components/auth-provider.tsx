@@ -4,7 +4,7 @@
  * @fileOverview AuthProvider (Protocolo de Bootstrap Determinístico)
  * 
  * Ordem Rigorosa:
- * 1. ResolvAuth (getUser) -> 2. SyncStore (RLS Seguro) -> 3. LoadAccess
+ * 1. ResolvAuth (getUser) -> 2. LoadProfile (Sync DB) -> 3. SyncStore (RLS Seguro)
  */
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -63,12 +63,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [cashRegisters, setCashRegistersState] = useState<CashRegister[]>([]);
 
+  const fetchProfile = useCallback(async (userId: string) => {
+    try {
+      const { data: profile, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
+      
+      if (error) throw error;
+      return profile as User;
+    } catch (err) {
+      console.error('[AUTH_PROVIDER] Erro ao buscar perfil:', err);
+      return null;
+    }
+  }, []);
+
   const fetchStoreData = useCallback(async (userId: string, silent: boolean = false) => {
     if (!userId) return;
     if (!silent) setStoreStatus('loading_store');
     
     try {
-      // 1. Localiza o ID do Tenant (Garante auth.uid funcional no RLS)
       const { data: ownerStore, error: ownerError } = await supabase
         .from('stores')
         .select('id')
@@ -76,7 +91,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle();
 
       if (ownerError) {
-        console.error('[BOOTSTRAP] Erro RLS Detectado:', ownerError.code);
         if (!silent) setStoreStatus('error');
         return;
       }
@@ -98,7 +112,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // 2. Carga Paralela de Dados (Agora com contexto auth.uid garantido)
       const [statusRes, storeRes, productsRes, salesRes, cashRes, customersRes] = await Promise.all([
         supabase.rpc('get_store_access_status', { p_store_id: storeId }),
         supabase.from('stores').select('*').eq('id', storeId).single(),
@@ -129,7 +142,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const initAuth = async () => {
       setLoading(true);
       try {
-        // Ponto crítico: getUser valida o JWT no servidor do Supabase
         const { data: { user: sessionUser } } = await supabase.auth.getUser();
         
         if (!sessionUser) {
@@ -138,10 +150,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
         
-        const { data: profile } = await supabase.from('users').select('*').eq('id', sessionUser.id).maybeSingle();
+        const profile = await fetchProfile(sessionUser.id);
         setUser(profile || ({ id: sessionUser.id, email: sessionUser.email || '' } as User));
         
-        // Só busca dados da loja APÓS confirmar identidade
         await fetchStoreData(sessionUser.id);
       } catch (err) {
         setStoreStatus('error');
@@ -152,10 +163,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     initAuth();
 
-    // Listener para mudanças de login/logout
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
-        setUser({ id: session.user.id, email: session.user.email || '' } as User);
+        const profile = await fetchProfile(session.user.id);
+        setUser(profile || ({ id: session.user.id, email: session.user.email || '' } as User));
         await fetchStoreData(session.user.id, true);
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
@@ -166,13 +177,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => subscription.unsubscribe();
-  }, [fetchStoreData]);
+  }, [fetchStoreData, fetchProfile]);
 
   const createStore = useCallback(async (storeData: any) => {
     const { data: { user: currentUser } } = await supabase.auth.getUser();
     if (!currentUser) throw new Error('Identidade não confirmada.');
 
-    // Upsert preventivo para evitar erros de FK
     await supabase.from('users').upsert({ id: currentUser.id, email: currentUser.email }, { onConflict: 'id' });
 
     const { data, error } = await supabase.rpc('create_new_store', {
@@ -209,8 +219,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const updateUser = useCallback(async (data: any) => {
     if (!user) return;
     const { error } = await supabase.from('users').update(data).eq('id', user.id);
-    if (!error) setUser(prev => prev ? { ...prev, ...data } : null);
-  }, [user]);
+    if (!error) {
+      const updatedProfile = await fetchProfile(user.id);
+      if (updatedProfile) setUser(updatedProfile);
+    }
+  }, [user, fetchProfile]);
 
   const removeStoreMember = useCallback(async (userId: string) => {
     if (!store || !user) return { error: new Error('Sessão inválida') };
