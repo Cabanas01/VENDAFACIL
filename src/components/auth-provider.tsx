@@ -9,7 +9,7 @@
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/client';
-import type { User } from '@supabase/supabase-js';
+import type { User as SupabaseUser } from '@supabase/supabase-js';
 import type { 
   Store, 
   Product, 
@@ -18,7 +18,8 @@ import type {
   StoreStatus, 
   StoreAccessStatus,
   CartItem,
-  Customer
+  Customer,
+  User
 } from '@/lib/types';
 import { processSaleAction } from '@/app/actions/sales-actions';
 
@@ -70,8 +71,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       console.log('[BOOTSTRAP] Iniciando carregamento de dados do tenant:', userId);
 
-      // 1. Resolver o ID da loja (Tenant)
-      // Usamos uma query robusta para encontrar se o usuário é proprietário ou membro
       const { data: ownerStore, error: ownerError } = await supabase
         .from('stores')
         .select('id')
@@ -79,7 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle();
 
       if (ownerError) {
-        console.error('[BOOTSTRAP] Erro 42501 (RLS) ao ler lojas. O JWT pode não estar pronto:', ownerError.code);
+        console.error('[BOOTSTRAP] Erro RLS ao ler lojas:', ownerError.code);
         if (!silent) setStoreStatus('error');
         return;
       }
@@ -108,8 +107,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // 2. Com storeId resolvido, carregar snapshot completo do tenant
-      // Executamos em lote para eficiência, mas com tratamento de erro individual se necessário
       const [statusRes, storeRes, productsRes, salesRes, cashRes, customersRes] = await Promise.all([
         supabase.rpc('get_store_access_status', { p_store_id: storeId }),
         supabase.from('stores').select('*').eq('id', storeId).single(),
@@ -141,23 +138,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const initAuth = async () => {
       try {
         console.log('[AUTH] Validando identidade do usuário...');
-        
-        // Protocolo robusto de hidratação de sessão:
-        // 1. Pega sessão leve
-        // 2. Valida identidade pesada via getUser() para garantir que auth.uid() no DB seja reconhecido
         const { data: { user: sessionUser }, error: authErr } = await supabase.auth.getUser();
         
-        if (authErr) {
+        if (authErr || !sessionUser) {
           console.warn('[AUTH] Usuário não logado ou sessão expirada.');
           setStoreStatus('no_store');
           setLoading(false);
           return;
         }
         
-        setUser(sessionUser);
+        // Fetch full profile
+        const { data: profile } = await supabase.from('users').select('*').eq('id', sessionUser.id).single();
+        if (profile) {
+          setUser(profile as User);
+        } else {
+          // Fallback minimal user if profile entry doesn't exist yet
+          setUser({ id: sessionUser.id, email: sessionUser.email || '' } as User);
+        }
         
         if (sessionUser) {
-          // Pequeno delay para garantir que os cookies persistidos pelo SSR estejam disponíveis para o Fetch
           setTimeout(() => fetchStoreData(sessionUser.id), 50);
         } else {
           setStoreStatus('no_store'); 
@@ -172,15 +171,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     initAuth();
 
-    // Listener para mudanças de estado (Logout/Login em outra aba)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('[AUTH] Evento detectado:', event);
-      const newUser = session?.user ?? null;
-      setUser(newUser);
-      
-      if (event === 'SIGNED_IN' && newUser) {
-        await fetchStoreData(newUser.id, true);
+      if (event === 'SIGNED_IN' && session?.user) {
+        setUser({ id: session.user.id, email: session.user.email || '' } as User);
+        await fetchStoreData(session.user.id, true);
       } else if (event === 'SIGNED_OUT') {
+        setUser(null);
         setStore(null);
         setStoreStatus('no_store');
         setAccessStatus(null);
@@ -194,6 +191,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { user: currentUser } } = await supabase.auth.getUser();
     if (!currentUser) throw new Error('Sessão inválida. Faça login novamente.');
 
+    console.log('[ONBOARDING] Garantindo perfil do usuário...');
+    // 🛡️ CRITICAL FIX: Ensure the user record exists in public.users 
+    // before the RPC tries to insert into public.stores (which has a FK to users).
+    // This avoids: "insert or update on table 'stores' violates foreign key constraint 'stores_user_id_fkey'"
+    const { error: profileError } = await supabase.from('users').upsert({
+      id: currentUser.id,
+      email: currentUser.email,
+    }, { onConflict: 'id' });
+
+    if (profileError) {
+      console.error('[ONBOARDING] Falha ao sincronizar perfil:', profileError);
+      // We continue as the RPC might still work if the FK constraint is somehow deferred or if profile actually exists
+    }
+
+    console.log('[ONBOARDING] Chamando RPC create_new_store...');
     const { data, error } = await supabase.rpc('create_new_store', {
       p_name: storeData.name,
       p_legal_name: storeData.legal_name,
@@ -203,7 +215,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       p_timezone: storeData.timezone || 'America/Sao_Paulo',
     });
 
-    if (error) throw error;
+    if (error) {
+      console.error('[ONBOARDING] Erro no RPC create_new_store:', error);
+      throw error;
+    }
 
     await fetchStoreData(currentUser.id);
     return data as Store;

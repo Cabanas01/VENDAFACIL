@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * @fileOverview OnboardingPage (Controlled Form + Active Session Sync)
+ * @fileOverview OnboardingPage (Formulário Controlado + Sincronização de Sessão)
  * 
  * Coleta os dados comerciais para a criação da primeira loja.
  * Implementa sincronização forçada de sessão para garantir que auth.uid() não seja null.
@@ -46,7 +46,6 @@ export default function OnboardingPage() {
   const [isLoadingCnpj, setIsLoadingCnpj] = useState(false);
   const [step, setStep] = useState(1);
 
-  // Premissa: Todos os inputs começam com string vazia
   const form = useForm<OnboardingValues>({
     resolver: zodResolver(onboardingSchema),
     defaultValues: { 
@@ -66,11 +65,9 @@ export default function OnboardingPage() {
 
   const { setValue, watch, trigger } = form;
 
-  // CNPJ sem máscara para monitoramento
   const cnpjValue = watch('cnpj') || '';
   const cleanCnpj = cnpjValue.replace(/\D/g, '');
 
-  // Efeito de busca automática (Somente BrasilAPI - mais completo)
   useEffect(() => {
     if (cleanCnpj.length !== 14) return;
 
@@ -82,7 +79,6 @@ export default function OnboardingPage() {
         
         const data = await response.json();
         
-        // Populando campos controlados
         setValue('legal_name', data.razao_social || '');
         setValue('name', data.nome_fantasia || data.razao_social || '');
         setValue('phone', data.ddd_telefone_1 || '');
@@ -96,7 +92,6 @@ export default function OnboardingPage() {
         toast({ title: 'Dados localizados!', description: 'Campos preenchidos automaticamente via BrasilAPI.' });
       } catch (err) {
         console.warn('[ONBOARDING_CNPJ_AUTOFILL]', err);
-        toast({ variant: 'destructive', title: 'Aviso', description: 'Não foi possível localizar os dados deste CNPJ automaticamente.' });
       } finally {
         setIsLoadingCnpj(false);
       }
@@ -109,7 +104,8 @@ export default function OnboardingPage() {
     setIsSubmitting(true);
     
     try {
-      // Garantia de Sessão: Força o browser a hidratar o JWT antes do RPC
+      console.log('[ONBOARDING] Iniciando criação de loja...');
+      
       const { data: { user: activeUser }, error: userError } = await supabase.auth.getUser();
 
       if (userError || !activeUser) {
@@ -139,7 +135,6 @@ export default function OnboardingPage() {
       });
 
       toast({ title: 'Configuração concluída!', description: 'Sua loja está pronta para operar.' });
-      // A navegação é gerida passivamente pelo AppLayout ao detectar storeStatus: has_store
     } catch (error: any) {
       console.error('[ONBOARDING_SUBMIT_ERROR]', error);
       toast({
