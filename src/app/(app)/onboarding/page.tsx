@@ -4,10 +4,10 @@
  * @fileOverview OnboardingPage
  * 
  * Coleta os dados comerciais para a criação da primeira loja.
- * Bloqueia renderização se o usuário já possuir uma loja ou for admin.
+ * Bloqueia renderização síncrona se o usuário já possuir acesso ao sistema.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -46,12 +46,18 @@ export default function OnboardingPage() {
   const [isLoadingCnpj, setIsLoadingCnpj] = useState(false);
   const [step, setStep] = useState(1);
 
-  // Redirecionamento de segurança para evitar acesso indevido de usuários existentes
+  // Verificação de Segurança Síncrona
+  // Se o usuário já é parte do sistema, não renderizamos nada enquanto o layout processa o redirecionamento.
+  const isExistingUser = useMemo(() => {
+    if (!bootstrap) return false;
+    return bootstrap.has_store || bootstrap.is_member || bootstrap.is_admin;
+  }, [bootstrap]);
+
   useEffect(() => {
-    if (!loading && bootstrap && (bootstrap.has_store || bootstrap.is_member || bootstrap.is_admin)) {
+    if (!loading && isExistingUser) {
       router.replace('/dashboard');
     }
-  }, [bootstrap, loading, router]);
+  }, [isExistingUser, loading, router]);
 
   const form = useForm<OnboardingValues>({
     resolver: zodResolver(onboardingSchema),
@@ -134,8 +140,8 @@ export default function OnboardingPage() {
     }
   };
 
-  // Se o usuário já tem acesso ou é admin, bloqueia a renderização para evitar flashes
-  if (bootstrap && (bootstrap.has_store || bootstrap.is_member || bootstrap.is_admin)) {
+  // Se o usuário for existente ou estiver carregando, bloqueamos a renderização do formulário.
+  if (loading || isExistingUser) {
     return null;
   }
 
