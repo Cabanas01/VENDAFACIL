@@ -2,6 +2,9 @@
 
 /**
  * @fileOverview Fluxo de IA para análise estratégica do VendaFácil.
+ * 
+ * Este fluxo valida a existência da chave de API no momento da execução (Runtime)
+ * para evitar falhas silenciosas do Genkit.
  */
 
 import { ai } from '@/ai/genkit';
@@ -27,11 +30,13 @@ const AiChatOutputSchema = z.object({
 export type AiChatOutput = z.infer<typeof AiChatOutputSchema>;
 
 export async function askAi(input: AiChatInput): Promise<AiChatOutput> {
+  // Validação Crítica de Runtime
   const apiKey = process.env.GOOGLE_GENAI_API_KEY || 
                  process.env.GEMINI_API_KEY || 
                  process.env.GOOGLE_API_KEY;
   
   if (!apiKey) {
+    console.error('[AI_FLOW_ERROR] Chave de API ausente no momento da chamada da Server Action.');
     throw new Error('API_KEY_MISSING');
   }
 
@@ -62,7 +67,6 @@ const aiChatFlow = ai.defineFlow(
     const lastUserMessage = input.messages[input.messages.length - 1]?.content || 'Resuma meus dados.';
 
     const { text } = await ai.generate({
-      model: 'googleai/gemini-1.5-flash',
       system: systemPrompt,
       messages: [
         ...history,
@@ -73,7 +77,13 @@ const aiChatFlow = ai.defineFlow(
             { text: `PERGUNTA DO USUÁRIO: ${lastUserMessage}` }
           ]
         }
-      ]
+      ],
+      config: {
+        safetySettings: [
+          { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+          { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' }
+        ]
+      }
     });
 
     if (!text) throw new Error('A IA retornou uma resposta vazia.');
