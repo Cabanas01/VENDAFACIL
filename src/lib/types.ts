@@ -1,9 +1,15 @@
 export type User = {
-  id: string; // Corresponds to auth.users.id
+  id: string;
   email: string;
   name?: string;
   avatar_url?: string;
   is_admin?: boolean;
+};
+
+export type BootstrapStatus = {
+  has_store: boolean;
+  is_member: boolean;
+  is_admin: boolean;
 };
 
 export type StoreSettings = {
@@ -27,12 +33,12 @@ export type StoreMember = {
 
 export type Store = {
   id: string;
-  user_id: string; // Owner
+  user_id: string;
   name: string;
   cnpj: string;
   legal_name: string;
   logo_url?: string;
-  address: { // This is a JSONB field in Supabase
+  address: {
     cep: string;
     street: string;
     number: string;
@@ -43,8 +49,8 @@ export type Store = {
   };
   phone?: string;
   timezone: string;
-  settings: StoreSettings; // This is a JSONB field in Supabase
-  members?: StoreMember[]; // This is a joined relation, not a real column
+  settings: StoreSettings;
+  members?: StoreMember[];
   business_type: string;
   status: 'active' | 'trial' | 'suspended' | 'blocked' | 'deleted';
   trial_used: boolean;
@@ -114,31 +120,12 @@ export type Customer = {
     created_at: string;
 };
 
-/**
- * Máquina de Estados Oficial do SaaS
- */
 export type StoreStatus = 
-  | 'loading_auth'     // Resolvendo sessão inicial
-  | 'loading_store'    // Buscando dados no banco
-  | 'has_store'        // Loja encontrada e carregada
-  | 'no_store'         // Certeza absoluta que não existe loja vinculada
-  | 'error';           // Erro técnico crítico (RLS, Rede, Timeout)
-
-
-// Types for Time-based Access Control
-export type StoreAccess = {
-    store_id: string;
-    plano_nome: string;
-    plano_tipo: 'free' | 'semanal' | 'mensal' | 'anual' | 'vitalicio';
-    data_inicio_acesso: string;
-    data_fim_acesso: string;
-    status_acesso: 'ativo' | 'expirado' | 'bloqueado' | 'aguardando_liberacao';
-    origem?: 'hotmart' | 'kiwify' | 'perfectpay' | 'admin' | 'onboarding' | 'manual_admin' | 'trial';
-    renovavel: boolean;
-    updated_at: string;
-    limits?: { max_sales: number; max_customers: number; };
-    features?: Record<string, boolean>;
-}
+  | 'loading_auth'
+  | 'loading_status'
+  | 'ready'
+  | 'no_store'
+  | 'error';
 
 export type StoreAccessStatus = {
     acesso_liberado: boolean;
@@ -147,50 +134,3 @@ export type StoreAccessStatus = {
     plano_tipo: string | null;
     mensagem: string;
 }
-
-// Types for Subscriptions & Billing
-export type SubscriptionEvent = {
-    id: number;
-    created_at: string;
-    provider: 'hotmart' | 'kiwify' | 'perfectpay' | 'admin';
-    event_type: string;
-    event_id: string; 
-    store_id?: string;
-    user_id?: string;
-    plan_id?: string;
-    status: string;
-    raw_payload: Record<string, any>;
-};
-
-
-// Types for Analytics
-export type UserSession = {
-  session_id: string;
-  store_id: string;
-  user_id: string;
-  user_agent?: string;
-  ip?: string;
-  device_type?: 'desktop' | 'mobile' | 'tablet';
-  started_at: string;
-  last_seen_at: string;
-};
-
-export type UserEvent = {
-  id: string;
-  store_id: string;
-  user_id: string;
-  session_id: string;
-  event_name: string;
-  event_group: string;
-  metadata: Record<string, any>;
-  created_at: string;
-};
-
-export type AnalyticsSummary = {
-  total_profile_views: number;
-  total_unique_clicks: number;
-  total_reports_opened: number;
-  total_events: number;
-  top_event_names: { event_name: string; count: number }[];
-  events_by_day: { day: string; count: number }[];
-};

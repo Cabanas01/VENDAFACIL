@@ -3,124 +3,89 @@
 /**
  * @fileOverview AppLayout (Guardião Determinístico de Navegação)
  * 
- * Implementa regras de redirecionamento baseadas no status da loja e acesso.
- * Garante que usuários com loja nunca vejam o onboarding e usuários sem loja 
- * sejam forçados a configurá-la.
+ * Centraliza a lógica de redirecionamento baseada exclusivamente no BootstrapStatus.
  */
 
 import { useAuth } from '@/components/auth-provider';
 import { useRouter, usePathname } from 'next/navigation';
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { MainNav } from '@/components/main-nav';
 import { AdminSidebar } from '@/components/admin-sidebar';
-import { Loader2, AlertTriangle, RefreshCcw, LogOut, User as UserIcon } from 'lucide-react';
+import { Loader2, LogOut, User as UserIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading, store, storeStatus, accessStatus, fetchStoreData, logout, sales, products } = useAuth();
+  const { user, loading, bootstrap, store, accessStatus, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
   const isAdminPath = pathname.startsWith('/admin');
 
-  // Lógica de Redirecionamento Centralizada
   useEffect(() => {
     if (loading) return;
 
-    // 1. Se não há usuário logado, manda para o login
+    // 1. Sem usuário -> Login
     if (!user) {
       router.replace('/login');
       return;
     }
 
-    // 2. Usuário NOVO (Sem loja): Deve obrigatoriamente ir para o onboarding
-    if (storeStatus === 'no_store') {
-      if (pathname !== '/onboarding' && !isAdminPath) {
+    // 2. Erro no bootstrap ou RPC falhou -> Login (Segurança)
+    if (!bootstrap) {
+      router.replace('/login');
+      return;
+    }
+
+    // 3. Regra: Sem loja e sem vínculo -> Onboarding
+    const needsOnboarding = !bootstrap.has_store && !bootstrap.is_member;
+    if (needsOnboarding) {
+      if (pathname !== '/onboarding') {
         router.replace('/onboarding');
       }
-    } 
-    
-    // 3. Usuário EXISTENTE (Com loja): Redireciona para o dashboard se tentar acessar o onboarding
-    if (storeStatus === 'has_store') {
-      if (pathname === '/onboarding') {
-        router.replace('/dashboard');
-        return;
-      }
-
-      // Validação de Paywall (Plano expirado)
-      const isLiberado = accessStatus?.acesso_liberado ?? false;
-      const isSafePath = pathname === '/billing' || pathname === '/settings' || isAdminPath;
-      
-      if (!isLiberado && !isSafePath) {
-        router.replace('/billing');
-      }
+      return;
     }
-  }, [user, loading, storeStatus, accessStatus, pathname, router, isAdminPath]);
 
-  // CMV Global para o TopBar
-  const cmvGlobal = useMemo(() => {
-    const safeSales = Array.isArray(sales) ? sales : [];
-    const safeProducts = Array.isArray(products) ? products : [];
-    if (!safeSales.length || !safeProducts.length) return 0;
-    const revenue = safeSales.reduce((acc, s) => acc + (s.total_cents || 0), 0);
-    const cost = safeSales.flatMap(s => s.items || []).reduce((acc, item) => {
-      const p = safeProducts.find(prod => prod.id === item.product_id);
-      return acc + ((p?.cost_cents || 0) * (item.quantity || 0));
-    }, 0);
-    return revenue > 0 ? (cost / revenue) * 100 : 0;
-  }, [sales, products]);
+    // 4. Regra: Tem loja -> Proíbe Onboarding
+    if (pathname === '/onboarding') {
+      router.replace('/dashboard');
+      return;
+    }
 
-  // BLOQUEIO CRÍTICO: Se estiver carregando, mostra apenas o loader central
-  if (loading || storeStatus === 'loading_auth' || storeStatus === 'loading_store') {
+    // 5. Regra: Admin
+    if (isAdminPath && !bootstrap.is_admin) {
+      router.replace('/dashboard');
+      return;
+    }
+
+    // 6. Paywall (Apenas para rotas comerciais)
+    const isPaywallPath = !['/billing', '/settings', '/ai'].some(p => pathname.startsWith(p)) && !isAdminPath;
+    if (isPaywallPath && accessStatus && !accessStatus.acesso_liberado) {
+      router.replace('/billing');
+    }
+
+  }, [user, loading, bootstrap, accessStatus, pathname, router, isAdminPath]);
+
+  // Loading Central
+  if (loading || (user && !bootstrap)) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground animate-pulse font-medium">Sincronizando ambiente comercial...</p>
+        <p className="text-sm text-muted-foreground animate-pulse font-medium">Validando credenciais comerciais...</p>
       </div>
     );
   }
 
-  // Verificação de Identidade
-  if (!user && pathname !== '/login') return null;
+  // Curto-circuito de renderização para evitar flashes
+  if (!user || !bootstrap) return null;
 
-  // CURTO-CIRCUITO DE SEGURANÇA: Impede renderizar filhos se o status da loja exigir redirecionamento
-  const isExistingUserOnOnboarding = storeStatus === 'has_store' && pathname === '/onboarding';
-  const isNewUserOnSystem = storeStatus === 'no_store' && pathname !== '/onboarding' && !isAdminPath;
+  const needsOnboarding = !bootstrap.has_store && !bootstrap.is_member;
+  if (needsOnboarding && pathname !== '/onboarding') return null;
+  if (!needsOnboarding && pathname === '/onboarding') return null;
 
-  if (isExistingUserOnOnboarding || isNewUserOnSystem) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
-        <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground">Redirecionando...</p>
-      </div>
-    );
-  }
-
-  // Tela de Erro Crítico
-  if (storeStatus === 'error') {
-    return (
-      <div className="min-h-screen w-full flex items-center justify-center bg-[#fcfcfc] p-6">
-        <div className="max-w-md w-full flex flex-col items-center text-center">
-          <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mb-8">
-            <AlertTriangle className="h-10 w-10 text-red-500 stroke-[1.5]" />
-          </div>
-          <h1 className="text-2xl font-headline font-bold text-slate-900 mb-4">Falha na Comunicação</h1>
-          <div className="text-slate-500 text-base mb-10">Ocorreu um erro ao carregar os dados da sua loja. Verifique sua conexão.</div>
-          <div className="flex flex-col gap-3">
-            <Button onClick={() => user && fetchStoreData(user.id)} className="h-12 px-8 font-semibold gap-2 shadow-sm">
-              <RefreshCcw className="h-4 w-4" /> Tentar Reconectar
-            </Button>
-            <Button variant="ghost" onClick={() => logout()} className="text-slate-400">Sair da conta</Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Layout Especial para Onboarding (Sem sidebar)
+  // Layout Especial para Onboarding
   if (pathname === '/onboarding') {
     return <main className="min-h-screen flex items-center justify-center bg-muted/5 w-full">{children}</main>;
   }
@@ -139,15 +104,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <div className="flex items-center gap-1.5">
                   <Badge variant="outline" className="text-[8px] h-3.5 px-1.5 font-black uppercase tracking-widest bg-muted/30 border-primary/10 text-primary">
                     {accessStatus?.plano_nome || 'Free'}
-                  </Badge>
-                  <Badge 
-                    variant="secondary" 
-                    className={cmvGlobal > 40 
-                      ? "text-[8px] h-3.5 px-1.5 font-black uppercase tracking-widest bg-red-50 text-red-600 border-red-100" 
-                      : "text-[8px] h-3.5 px-1.5 font-black uppercase tracking-widest bg-green-50 text-green-600 border-green-100"
-                    }
-                  >
-                    CMV {cmvGlobal.toFixed(0)}%
                   </Badge>
                 </div>
               </div>
