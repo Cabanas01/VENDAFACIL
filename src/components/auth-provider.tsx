@@ -1,10 +1,10 @@
 'use client';
 
 /**
- * @fileOverview AuthProvider (Protocolo de Bootstrap Determinístico)
+ * @fileOverview AuthProvider (Protocolo de Bootstrap Atômico)
  * 
- * Ordem Rigorosa:
- * 1. ResolvAuth (getUser) -> 2. LoadProfile (Sync DB) -> 3. SyncStore (RLS Seguro)
+ * Garante que o estado 'loading' só seja liberado após a confirmação 
+ * simultânea da Autenticação e do Vínculo com a Loja.
  */
 
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
@@ -167,8 +167,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const profile = await fetchProfile(sessionUser.id);
         setUser(profile || ({ id: sessionUser.id, email: sessionUser.email || '' } as User));
         
+        // Só liberamos o loading APÓS a busca da loja
         await fetchStoreData(sessionUser.id);
       } catch (err) {
+        console.error('[INIT_AUTH_ERROR]', err);
         setStoreStatus('error');
       } finally {
         setLoading(false);

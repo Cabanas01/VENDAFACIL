@@ -43,14 +43,17 @@ type OnboardingValues = z.infer<typeof onboardingSchema>;
 export default function OnboardingPage() {
   const { createStore, storeStatus } = useAuth();
   const { toast } = useToast();
+  const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingCnpj, setIsLoadingCnpj] = useState(false);
   const [step, setStep] = useState(1);
 
-  // Guarda rígida: Se o usuário já tem uma loja, não permite nem renderizar o formulário
-  if (storeStatus === 'has_store') {
-    return null; 
-  }
+  // Guarda rígida: Se o usuário já tem uma loja, redireciona imediatamente
+  useEffect(() => {
+    if (storeStatus === 'has_store') {
+      router.replace('/dashboard');
+    }
+  }, [storeStatus, router]);
 
   const form = useForm<OnboardingValues>({
     resolver: zodResolver(onboardingSchema),
@@ -150,6 +153,10 @@ export default function OnboardingPage() {
       setIsSubmitting(false);
     }
   };
+
+  if (storeStatus === 'has_store') {
+    return null;
+  }
 
   return (
     <Card className="shadow-2xl w-full border-border/50 max-w-lg mx-auto">

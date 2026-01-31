@@ -28,7 +28,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   // Lógica de Redirecionamento Centralizada
   useEffect(() => {
-    if (loading || storeStatus === 'loading_auth' || storeStatus === 'loading_store') return;
+    if (loading) return;
 
     // 1. Se não há usuário logado, manda para o login
     if (!user) {
@@ -73,19 +73,28 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return revenue > 0 ? (cost / revenue) * 100 : 0;
   }, [sales, products]);
 
-  // BLOQUEIO CRÍTICO: Não renderiza NADA se o status não for definitivo
-  const isTransitioning = loading || 
-                          storeStatus === 'loading_auth' || 
-                          storeStatus === 'loading_store' ||
-                          (!user && pathname !== '/login') ||
-                          (user && storeStatus === 'no_store' && pathname !== '/onboarding') ||
-                          (user && storeStatus === 'has_store' && pathname === '/onboarding');
-
-  if (isTransitioning) {
+  // BLOQUEIO CRÍTICO: Se estiver carregando, mostra apenas o loader central
+  if (loading || storeStatus === 'loading_auth' || storeStatus === 'loading_store') {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
         <p className="text-sm text-muted-foreground animate-pulse font-medium">Sincronizando ambiente comercial...</p>
+      </div>
+    );
+  }
+
+  // Verificação de Identidade
+  if (!user && pathname !== '/login') return null;
+
+  // CURTO-CIRCUITO DE SEGURANÇA: Impede renderizar filhos se o status da loja exigir redirecionamento
+  const isExistingUserOnOnboarding = storeStatus === 'has_store' && pathname === '/onboarding';
+  const isNewUserOnSystem = storeStatus === 'no_store' && pathname !== '/onboarding' && !isAdminPath;
+
+  if (isExistingUserOnOnboarding || isNewUserOnSystem) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">Redirecionando...</p>
       </div>
     );
   }
@@ -111,7 +120,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (pathname === '/onboarding' && storeStatus === 'no_store') {
+  // Layout Especial para Onboarding (Sem sidebar)
+  if (pathname === '/onboarding') {
     return <main className="min-h-screen flex items-center justify-center bg-muted/5 w-full">{children}</main>;
   }
 
