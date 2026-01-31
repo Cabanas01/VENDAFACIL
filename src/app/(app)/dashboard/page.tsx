@@ -4,7 +4,7 @@
  * @fileOverview Visão Geral do Dashboard (Home)
  * 
  * Centraliza os KPIs de saúde financeira, alertas de estoque e caixa.
- * Incluindo importações de UI necessárias para evitar client-side exceptions.
+ * Implementação defensiva para evitar client-side exceptions.
  */
 
 import { useState, useMemo } from 'react';
@@ -19,7 +19,7 @@ import {
   Users,
   ArrowUpRight,
   AlertCircle,
-  Info
+  Loader2
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -80,7 +80,7 @@ export default function DashboardOverviewPage() {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] gap-4 text-muted-foreground">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="animate-pulse">Sincronizando ambiente comercial...</p>
+        <p className="animate-pulse font-medium text-sm">Sincronizando ambiente comercial...</p>
       </div>
     );
   }
@@ -189,27 +189,4 @@ export default function DashboardOverviewPage() {
       </div>
     </div>
   );
-}
-
-function Loader2({ className }: { className?: string }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={cn("animate-spin", className)}
-    >
-      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-    </svg>
-  );
-}
-
-function cn(...classes: string[]) {
-  return classes.filter(Boolean).join(' ');
 }
