@@ -4,6 +4,7 @@
  * @fileOverview Visão Geral do Dashboard (Home)
  * 
  * Centraliza os KPIs de saúde financeira, alertas de estoque e caixa.
+ * Incluindo importações de UI necessárias para evitar client-side exceptions.
  */
 
 import { useState, useMemo } from 'react';
@@ -17,7 +18,8 @@ import {
   Target, 
   Users,
   ArrowUpRight,
-  AlertCircle
+  AlertCircle,
+  Info
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -77,6 +79,7 @@ export default function DashboardOverviewPage() {
   if (storeStatus === 'loading_auth' || storeStatus === 'loading_store') {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] gap-4 text-muted-foreground">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
         <p className="animate-pulse">Sincronizando ambiente comercial...</p>
       </div>
     );
@@ -89,34 +92,32 @@ export default function DashboardOverviewPage() {
       </PageHeader>
 
       {/* Alertas Críticos */}
-      {(lowStockCount > 0 || !openCash) && (
-        <div className="grid gap-4 md:grid-cols-2">
-          {lowStockCount > 0 && (
-            <Card className="border-yellow-500/50 bg-yellow-50/5">
-              <CardContent className="flex items-center gap-4 py-4">
-                <AlertCircle className="h-5 w-5 text-yellow-600" />
-                <div className="flex-1">
-                  <p className="text-sm font-bold text-yellow-900">{lowStockCount} produtos com estoque crítico</p>
-                  <p className="text-xs text-yellow-700">Evite rupturas no seu faturamento.</p>
-                </div>
-                <Button variant="outline" size="sm" onClick={() => router.push('/dashboard/products')}>Ver Lista</Button>
-              </CardContent>
-            </Card>
-          )}
-          {!openCash && (
-            <Card className="border-red-500/50 bg-red-50/5">
-              <CardContent className="flex items-center gap-4 py-4">
-                <Wallet className="h-5 w-5 text-red-600" />
-                <div className="flex-1">
-                  <p className="text-sm font-bold text-red-900">Seu caixa está fechado</p>
-                  <p className="text-xs text-red-700">Abra o turno para iniciar as vendas físicas.</p>
-                </div>
-                <Button variant="destructive" size="sm" onClick={() => router.push('/cash')}>Abrir Caixa</Button>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      )}
+      <div className="grid gap-4 md:grid-cols-2">
+        {lowStockCount > 0 && (
+          <Card className="border-yellow-500/50 bg-yellow-50/5">
+            <CardContent className="flex items-center gap-4 py-4">
+              <AlertCircle className="h-5 w-5 text-yellow-600" />
+              <div className="flex-1">
+                <p className="text-sm font-bold text-yellow-900">{lowStockCount} produtos com estoque crítico</p>
+                <p className="text-xs text-yellow-700">Evite rupturas no seu faturamento.</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => router.push('/dashboard/products')}>Ver Lista</Button>
+            </CardContent>
+          </Card>
+        )}
+        {!openCash && (
+          <Card className="border-red-500/50 bg-red-50/5">
+            <CardContent className="flex items-center gap-4 py-4">
+              <Wallet className="h-5 w-5 text-red-600" />
+              <div className="flex-1">
+                <p className="text-sm font-bold text-red-900">Seu caixa está fechado</p>
+                <p className="text-xs text-red-700">Abra o turno para iniciar as vendas físicas.</p>
+              </div>
+              <Button variant="destructive" size="sm" onClick={() => router.push('/cash')}>Abrir Caixa</Button>
+            </CardContent>
+          </Card>
+        )}
+      </div>
 
       {/* KPIs Financeiros */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
@@ -144,7 +145,7 @@ export default function DashboardOverviewPage() {
           </CardContent>
         </Card>
 
-        <Card className="bg-primary text-primary-foreground">
+        <Card className="bg-primary text-primary-foreground shadow-lg shadow-primary/20">
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
             <CardTitle className="text-xs font-black uppercase opacity-80">Lucro Bruto</CardTitle>
             <TrendingUp className="h-4 w-4 opacity-80" />
@@ -188,4 +189,27 @@ export default function DashboardOverviewPage() {
       </div>
     </div>
   );
+}
+
+function Loader2({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={cn("animate-spin", className)}
+    >
+      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+    </svg>
+  );
+}
+
+function cn(...classes: string[]) {
+  return classes.filter(Boolean).join(' ');
 }

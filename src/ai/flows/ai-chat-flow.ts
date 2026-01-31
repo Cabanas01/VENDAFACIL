@@ -3,7 +3,7 @@
 /**
  * @fileOverview Fluxo de IA para análise estratégica do VendaFácil.
  * 
- * Implementação robusta para o Genkit v1.x focada em análise passiva de dados comerciais.
+ * Implementação resiliente que valida a configuração antes da execução.
  */
 
 import { ai } from '@/ai/genkit';
@@ -32,7 +32,7 @@ export async function askAi(input: AiChatInput): Promise<AiChatOutput> {
   const apiKey = process.env.GOOGLE_GENAI_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
   
   if (!apiKey) {
-    throw new Error('Configuração de IA Pendente: A chave de API do Google não foi encontrada no ambiente do servidor. Verifique o arquivo .env.');
+    throw new Error('API_KEY_MISSING');
   }
 
   return aiChatFlow(input);
@@ -49,10 +49,10 @@ const aiChatFlow = ai.defineFlow(
       ? `Você é o ANALISTA ESTRATÉGICO do SaaS VendaFácil. 
          Analise métricas GLOBAIS de faturamento e tenants fornecidas.
          REGRA DE OURO: Responda apenas com base nos DADOS FORNECIDOS.
-         NÃO sugira ações destrutivas. Use Markdown.`
+         Use Markdown.`
       : `Você é o CONSULTOR DE NEGÓCIOS do VendaFácil.
-         Foco em: Lucratividade (CMV), Gestão de Estoque e Vendas.
-         Analise os dados da loja e responda de forma consultiva e direta.
+         Foco em: Lucratividade, Gestão de Estoque e Vendas.
+         Analise os dados da loja e responda de forma direta.
          REGRA DE OURO: Responda apenas com base nos DADOS FORNECIDOS. Use Markdown.`;
 
     const history = (input.messages || []).slice(0, -1).map(m => ({
@@ -68,12 +68,6 @@ const aiChatFlow = ai.defineFlow(
         system: systemPrompt,
         config: {
           temperature: 0.7,
-          safetySettings: [
-            { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
-            { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
-            { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
-            { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
-          ],
         },
         messages: [
           ...history,
@@ -87,14 +81,12 @@ const aiChatFlow = ai.defineFlow(
         ]
       });
 
-      if (!text) {
-        throw new Error('A IA não gerou uma resposta textual válida.');
-      }
+      if (!text) throw new Error('EMPTY_RESPONSE');
 
       return { text };
     } catch (err: any) {
-      console.error('[AI_FLOW_CRITICAL_ERROR]', err);
-      throw new Error(`Falha técnica na análise: ${err.message}`);
+      console.error('[AI_FLOW_ERROR]', err);
+      throw new Error(`Erro no processamento da IA: ${err.message}`);
     }
   }
 );

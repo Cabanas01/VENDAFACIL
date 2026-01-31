@@ -1,28 +1,20 @@
-import { config } from 'dotenv';
-config(); // Força o carregamento do .env antes de qualquer plugin
-
 import { genkit } from 'genkit';
 import { googleAI } from '@genkit-ai/google-genai';
 
 /**
  * @fileOverview Configuração Central do Genkit v1.x
  * 
- * Inicialização robusta que garante o carregamento da chave de API
- * antes de qualquer fluxo ser executado.
+ * Inicialização que permite o uso dinâmico da chave de API.
+ * As chaves secretas não são expostas ao cliente.
  */
 
-// Tentamos obter a chave de múltiplas variáveis de ambiente comuns
 const apiKey = process.env.GOOGLE_GENAI_API_KEY || 
                process.env.GEMINI_API_KEY || 
                process.env.GOOGLE_API_KEY;
 
-if (!apiKey) {
-  console.warn('[GENKIT] Aviso: Nenhuma chave de API (GOOGLE_GENAI_API_KEY ou GEMINI_API_KEY) foi detectada no ambiente.');
-}
-
 export const ai = genkit({
   plugins: [
-    googleAI({ apiKey: apiKey || 'MISSING_KEY' })
+    googleAI({ apiKey: apiKey || 'UNDEFINED' })
   ],
   model: 'googleai/gemini-1.5-flash',
 });

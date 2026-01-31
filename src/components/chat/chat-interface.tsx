@@ -6,7 +6,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Bot, User, Send, Loader2, Sparkles } from 'lucide-react';
+import { Bot, User, Send, Loader2, Sparkles, AlertCircle, Settings } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { askAi } from '@/ai/flows/ai-chat-flow';
 
@@ -21,9 +21,10 @@ type ChatInterfaceProps = {
   contextData: any;
   scope: 'store' | 'admin';
   suggestions: string[];
+  isAiConfigured?: boolean;
 };
 
-export function ChatInterface({ title, subtitle, contextData, scope, suggestions }: ChatInterfaceProps) {
+export function ChatInterface({ title, subtitle, contextData, scope, suggestions, isAiConfigured = true }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -36,7 +37,7 @@ export function ChatInterface({ title, subtitle, contextData, scope, suggestions
   }, [messages, isLoading]);
 
   const handleSend = async (text: string) => {
-    if (!text.trim() || isLoading) return;
+    if (!text.trim() || isLoading || !isAiConfigured) return;
 
     const userMsg: Message = { role: 'user', content: text };
     const newMessages: Message[] = [...messages, userMsg];
@@ -54,15 +55,37 @@ export function ChatInterface({ title, subtitle, contextData, scope, suggestions
 
       setMessages([...newMessages, { role: 'model', content: result.text }]);
     } catch (error: any) {
-      console.error('[CHAT_INTERFACE_ERROR]', error);
-      setMessages([...newMessages, { 
-        role: 'model', 
-        content: '⚠️ Ocorreu um erro ao processar sua análise. Por favor, verifique sua conexão ou tente novamente.' 
-      }]);
+      console.error('[CHAT_UI_ERROR]', error);
+      const errorMsg = error.message === 'API_KEY_MISSING' 
+        ? '⚠️ A chave de API da IA não está configurada no servidor.'
+        : '⚠️ Falha técnica na análise. Tente novamente em alguns instantes.';
+      
+      setMessages([...newMessages, { role: 'model', content: errorMsg }]);
     } finally {
       setIsLoading(false);
     }
   };
+
+  if (!isAiConfigured) {
+    return (
+      <Card className="border-yellow-500/20 bg-yellow-50/5">
+        <CardContent className="flex flex-col items-center justify-center py-20 text-center space-y-6">
+          <div className="p-4 bg-yellow-100 rounded-full">
+            <Settings className="h-12 w-12 text-yellow-600 animate-pulse" />
+          </div>
+          <div className="space-y-2 max-w-md">
+            <h3 className="text-xl font-bold text-yellow-900">Configuração de IA Necessária</h3>
+            <p className="text-sm text-yellow-700">
+              Para ativar o assistente inteligente, você precisa configurar a chave <strong>GOOGLE_GENAI_API_KEY</strong> no seu arquivo <code>.env.local</code>.
+            </p>
+          </div>
+          <Button variant="outline" className="border-yellow-300 text-yellow-800 hover:bg-yellow-100" onClick={() => window.location.reload()}>
+            Verificar Novamente
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="flex flex-col h-[calc(100vh-12rem)] border-primary/10 shadow-xl overflow-hidden">

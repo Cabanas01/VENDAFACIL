@@ -1,65 +1,25 @@
-'use client';
+import { Metadata } from 'next';
+import StoreAiContent from './ai-content';
+
+export const metadata: Metadata = {
+  title: 'Assistente de Negócios | VendaFácil',
+};
 
 /**
- * @fileOverview Página de Inteligência Artificial para o Lojista.
+ * @fileOverview Página de IA (Server Component)
  * 
- * Provê insights sobre a operação da loja (Vendas, CMV, Estoque).
+ * Valida a configuração do ambiente no servidor antes de renderizar a interface.
  */
-
-import { useAuth } from '@/components/auth-provider';
-import { ChatInterface } from '@/components/chat/chat-interface';
-import { useMemo } from 'react';
-
-export default function StoreAiPage() {
-  const { store, products, sales, customers, accessStatus } = useAuth();
-
-  const dataSnapshot = useMemo(() => {
-    // Limitamos o snapshot para evitar estouro de payload em Server Actions
-    const limitedProducts = products.slice(0, 100).map(p => ({
-      nome: p.name,
-      categoria: p.category,
-      preco: p.price_cents / 100,
-      custo: (p.cost_cents || 0) / 100,
-      qtd: p.stock_qty,
-      min: p.min_stock_qty
-    }));
-
-    const limitedSales = sales.slice(0, 30).map(s => ({
-      data: s.created_at,
-      total: s.total_cents / 100,
-      metodo: s.payment_method,
-      itens: s.items?.length
-    }));
-
-    return {
-      loja: {
-        nome: store?.name,
-        plano: accessStatus?.plano_nome,
-        data_expiracao: accessStatus?.data_fim_acesso,
-      },
-      resumo_estoque: limitedProducts,
-      vendas_recentes: limitedSales,
-      clientes_count: customers.length
-    };
-  }, [store, products, sales, customers, accessStatus]);
-
-  const suggestions = [
-    "Qual minha margem de lucro média?",
-    "Quais produtos estão acabando?",
-    "Resuma meu faturamento desta semana.",
-    "Quem são meus clientes mais ativos?",
-    "Sugira formas de melhorar meu CMV."
-  ];
+export default async function StoreAiPage() {
+  const isAiConfigured = !!(
+    process.env.GOOGLE_GENAI_API_KEY || 
+    process.env.GEMINI_API_KEY || 
+    process.env.GOOGLE_API_KEY
+  );
 
   return (
     <div className="space-y-6">
-      <ChatInterface 
-        title="Assistente de Negócios"
-        subtitle="Insights baseados no seu estoque, vendas e faturamento real."
-        contextData={dataSnapshot}
-        scope="store"
-        suggestions={suggestions}
-      />
+      <StoreAiContent isAiConfigured={isAiConfigured} />
     </div>
   );
 }
