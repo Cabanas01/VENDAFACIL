@@ -2,42 +2,50 @@
 'use server';
 
 /**
- * @fileOverview Server Action para Processamento de Vendas (PDV)
+ * @fileOverview Server Action definitiva para Processamento de Vendas (PDV).
  * 
- * Centraliza a transação no servidor para garantir que o auth.uid() seja propagado.
- * Recebe o storeId explicitamente para evitar falhas de RLS.
+ * Segue o padrão obrigatório @supabase/ssr para garantir que auth.uid() 
+ * seja propagado corretamente para o banco de dados.
  */
 
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { cookies } from 'next/headers';
+import { createServerClient } from '@supabase/ssr';
 import { getSupabaseAdmin } from '@/lib/supabase/admin';
-import type { CartItem } from '@/lib/types';
+import type { CartItem, Database } from '@/lib/types';
 
 export async function processSaleAction(storeId: string, cart: CartItem[], paymentMethod: string) {
-  const supabase = createSupabaseServerClient();
-  const supabaseAdmin = getSupabaseAdmin();
+  // 1. Instanciação OBRIGATÓRIA do client dentro da Action com cookies
+  const cookieStore = cookies();
+  const supabase = createServerClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value;
+        },
+      },
+    }
+  );
 
-  // 1. Garantia de Identidade no Servidor
+  // 2. Teste de Identidade (Vital para RLS)
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   
   if (authError || !user) {
-    console.error('[SERVER_ACTION_AUTH_FAIL]', authError);
-    return { success: false, error: 'Sessão expirada. Por favor, saia e entre novamente.' };
+    console.error('[SERVER_ACTION] AUTH UID NULL – sessão não propagada');
+    return { success: false, error: 'Sessão expirada ou não propagada. Por favor, faça login novamente.' };
   }
 
+  console.log('[SERVER_ACTION] AUTH USER IDENTIFICADO:', user.id);
+
   if (!storeId) {
-    return { success: false, error: 'ID da loja não fornecido. Operação abortada.' };
+    return { success: false, error: 'ID da loja não fornecido. Operação bloqueada.' };
   }
 
   const totalCents = cart.reduce((sum, item) => sum + item.subtotal_cents, 0);
 
-  console.log('[SALE_PROCESING]', {
-    store_id: storeId,
-    user_id: user.id,
-    items_count: cart.length,
-    total: totalCents
-  });
-
-  // 2. Inserção da Venda (Validada pelas Policies de Member + Active Access)
+  // 3. Inserção do Cabeçalho da Venda
+  // Aqui o WITH CHECK do RLS validará store_id + store_access + auth.uid()
   const { data: sale, error: saleError } = await supabase
     .from('sales')
     .insert({
@@ -49,26 +57,25 @@ export async function processSaleAction(storeId: string, cart: CartItem[], payme
     .single();
 
   if (saleError) {
-    console.error('[SERVER_ACTION_INSERT_SALE_FAIL]', {
+    console.error('[SERVER_ACTION] ERRO NO INSERT SALES:', {
       code: saleError.code,
       message: saleError.message,
-      payload: { store_id: storeId, total_cents: totalCents }
+      storeId
     });
 
-    let friendlyMessage = 'Acesso Negado: Verifique se sua loja possui um plano ativo.';
+    let friendlyMessage = 'Erro de permissão: Verifique se seu plano está ativo.';
     
-    // Tratamento específico para triggers de limite do banco
     if (saleError.message.includes('trial_sales_limit')) {
       friendlyMessage = 'Limite de 5 vendas atingido no Plano de Avaliação. Faça o upgrade para continuar.';
     } else if (saleError.code === '42501') {
-      friendlyMessage = 'Permissão negada. Sua identidade não foi reconhecida ou o plano expirou.';
+      friendlyMessage = 'Acesso Negado (RLS). Sua identidade não foi reconhecida pelo banco ou o plano expirou.';
     }
     
     return { success: false, error: friendlyMessage, code: saleError.code };
   }
 
   try {
-    // 3. Inserção dos Itens (Batch)
+    // 4. Inserção dos Itens em Batch
     const itemsToInsert = cart.map(item => ({
       sale_id: sale.id,
       product_id: item.product_id,
@@ -82,7 +89,7 @@ export async function processSaleAction(storeId: string, cart: CartItem[], payme
     const { error: itemsError } = await supabase.from('sale_items').insert(itemsToInsert);
     if (itemsError) throw itemsError;
 
-    // 4. Baixa de Estoque via RPC
+    // 5. Baixa de Estoque via RPC (Operação Atômica)
     for (const item of cart) {
       await supabase.rpc('decrement_stock', {
         p_product_id: item.product_id,
@@ -93,9 +100,10 @@ export async function processSaleAction(storeId: string, cart: CartItem[], payme
     return { success: true, saleId: sale.id };
 
   } catch (err: any) {
-    console.error('[SERVER_ACTION_ITEMS_FAIL] Executando rollback manual...', err);
-    // Remove a venda "pai" se os itens falharem para manter integridade
+    console.error('[SERVER_ACTION] FALHA NA TRANSAÇÃO - Executando estorno...', err);
+    // Rollback manual do cabeçalho caso os itens falhem
+    const supabaseAdmin = getSupabaseAdmin();
     await supabaseAdmin.from('sales').delete().eq('id', sale.id);
-    return { success: false, error: 'Falha ao registrar itens da venda. Operação cancelada.' };
+    return { success: false, error: 'Falha ao registrar itens da venda. A transação foi revertida.' };
   }
 }

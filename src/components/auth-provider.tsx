@@ -4,8 +4,7 @@
 /**
  * @fileOverview AuthProvider (MOTOR DE ESTADO PASSIVO)
  * 
- * Sincroniza sessão e dados do tenant. 
- * Proxy de ações críticas para Server Actions para garantir auth.uid().
+ * Centraliza o estado da aplicação e delega ações pesadas para Server Actions.
  */
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -234,23 +233,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [store]);
 
   /**
-   * PROXY PARA SERVER ACTION
-   * Passa o store.id do estado global para garantir consistência no RLS.
+   * Proxy Seguro para Server Action de Vendas
    */
   const addSale = useCallback(async (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => {
     if (!store?.id) {
-      throw new Error('Loja não identificada. Por favor, recarregue o portal.');
+      throw new Error('Loja não identificada no estado global. Recarregue o portal.');
     }
 
+    // Chamada direta para a Server Action injetando o store_id do estado autenticado
     const result = await processSaleAction(store.id, cart, paymentMethod);
     
     if (!result.success) {
       throw new Error(result.error);
     }
 
-    // Sincroniza em background
+    // Sincronização pós-sucesso
     if (user) {
-      fetchStoreData(user.id, true).catch(err => console.warn('[SYNC_WARN]', err));
+      await fetchStoreData(user.id, true);
     }
 
     return result;
