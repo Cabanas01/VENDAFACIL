@@ -4,7 +4,6 @@
  * @fileOverview Visão Geral do Dashboard (Home)
  * 
  * Centraliza os KPIs de saúde financeira, alertas de estoque e caixa.
- * Corrigido: Adicionada importação de Badge e tratamento de NaN no formatCurrency.
  */
 
 import { useState, useMemo } from 'react';
@@ -38,7 +37,7 @@ const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((value || 0) / 100);
 
 export default function DashboardOverviewPage() {
-  const { user, storeStatus, products, sales, cashRegisters, accessStatus, customers } = useAuth();
+  const { user, storeStatus, products, sales, cashRegisters, customers } = useAuth();
   const router = useRouter();
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
@@ -51,7 +50,7 @@ export default function DashboardOverviewPage() {
     const from = startOfDay(dateRange.from);
     const to = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
 
-    return sales.filter((sale) => {
+    return (sales || []).filter((sale) => {
       const saleDate = parseISO(sale.created_at);
       return saleDate >= from && saleDate <= to;
     });
@@ -70,8 +69,8 @@ export default function DashboardOverviewPage() {
     return { revenue, cost, profit, cmvPercent };
   }, [filteredSales, products]);
 
-  const openCash = useMemo(() => cashRegisters.find(cr => !cr.closed_at), [cashRegisters]);
-  const lowStockCount = useMemo(() => products.filter(p => p.stock_qty <= (p.min_stock_qty || 0)).length, [products]);
+  const openCash = useMemo(() => (cashRegisters || []).find(cr => !cr.closed_at), [cashRegisters]);
+  const lowStockCount = useMemo(() => (products || []).filter(p => p.stock_qty <= (p.min_stock_qty || 0)).length, [products]);
 
   if (storeStatus === 'loading_auth' || storeStatus === 'loading_store') {
     return <div className="p-8 text-center text-muted-foreground">Sincronizando seu painel profissional...</div>;
@@ -156,7 +155,7 @@ export default function DashboardOverviewPage() {
             <Users className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-black">{customers.length}</div>
+            <div className="text-2xl font-black">{(customers || []).length}</div>
             <p className="text-[10px] text-muted-foreground font-bold mt-1">Ativos na base</p>
           </CardContent>
         </Card>
