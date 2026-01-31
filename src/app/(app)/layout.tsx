@@ -10,56 +10,52 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 /**
- * @fileOverview AppLayout (SERVER-SIDE GATEKEEPER)
+ * @fileOverview AppLayout (SERVER-SIDE PRIVATE GATEKEEPER)
  * 
- * Este layout é o único responsável pelo roteamento inicial do SaaS.
- * Ele decide no SERVIDOR se o usuário deve ver o Onboarding ou o Sistema.
+ * Este layout protege as rotas privadas.
+ * A decisão de acesso ocorre no SERVIDOR antes de renderizar qualquer HTML.
  */
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = createSupabaseServerClient();
   const headerList = headers();
   const pathname = headerList.get('x-pathname') || '/dashboard';
 
-  // 1. Validar Sessão (Síncrono no Servidor)
+  // 1. Validar Sessão
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) {
     redirect('/login');
   }
 
-  // 2. Buscar Status Atômico via RPC
+  // 2. Buscar Status Atômico
   const { data: status, error: rpcError } = await supabase.rpc('get_user_bootstrap_status');
   
   if (rpcError || !status) {
-    console.error('[SERVER_BOOTSTRAP_ERROR]', rpcError);
+    console.error('[BOOTSTRAP_ERROR]', rpcError);
     redirect('/login');
   }
 
-  /**
-   * 🚨 REGRA DE OURO DO VENDAFÁCIL
-   * Onboarding é uma EXCEÇÃO. Só entra quem não tem nada vinculado.
-   */
   const isNewUser = !status.has_store && !status.is_member && !status.is_admin;
 
-  // 3. EXECUÇÃO DOS REDIRECTS SÍNCRONOS (HTTP 307)
+  // 3. EXECUÇÃO DOS REDIRECTS SÍNCRONOS
   
-  // Caso 1: Novo usuário tentando acessar o sistema -> Força Onboarding
+  // Novo usuário DEVE estar no onboarding
   if (isNewUser && !pathname.startsWith('/onboarding')) {
     redirect('/onboarding');
   }
 
-  // Caso 2: Usuário existente (Admin/Dono/Membro) no onboarding -> Força Dashboard
+  // Usuário com acesso NÃO PODE estar no onboarding
   if (!isNewUser && pathname.startsWith('/onboarding')) {
     redirect('/dashboard');
   }
 
-  // Caso 3: Proteção de rota admin
+  // Proteção de rota admin
   if (pathname.startsWith('/admin') && !status.is_admin) {
     redirect('/dashboard');
   }
 
   const isAdminPath = pathname.startsWith('/admin');
 
-  // Buscar nome da loja apenas se necessário para o Header
+  // Buscar nome da loja para o Header (se não for admin)
   let storeName = 'VendaFácil';
   if (!isNewUser && !status.is_admin) {
     const { data: storeData } = await supabase

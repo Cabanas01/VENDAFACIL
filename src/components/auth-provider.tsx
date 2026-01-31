@@ -70,7 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (status) setBootstrap(status);
 
       if (status?.has_store || status?.is_member) {
-        // Busca a loja ativa (dono ou membro)
+        // Busca a loja ativa
         const { data: ownerStore } = await supabase.from('stores').select('id').eq('user_id', userId).maybeSingle();
         let storeId = ownerStore?.id;
 
@@ -98,7 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
     } catch (err) {
-      console.error('[AUTH_PROVIDER_DATA_SYNC_ERROR]', err);
+      console.error('[DATA_SYNC_ERROR]', err);
     }
   }, []);
 
@@ -147,7 +147,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       p_timezone: storeData.timezone || 'America/Sao_Paulo',
     });
     if (error) throw error;
-    // Força refresh total após criar loja para o Server Layout detectar a mudança
     window.location.href = '/dashboard';
   };
 

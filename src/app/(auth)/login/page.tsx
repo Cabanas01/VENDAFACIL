@@ -1,13 +1,6 @@
 'use client';
 
-/**
- * @fileOverview LoginPage (Dumb Form)
- * 
- * Apenas dispara o signIn do Supabase. 
- * O AppLayout redirecionará automaticamente após o AuthProvider detectar a sessão.
- */
-
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -19,8 +12,6 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/components/auth-provider';
 
 const loginSchema = z.object({
   email: z.string().email('E-mail inválido'),
@@ -30,16 +21,9 @@ const loginSchema = z.object({
 type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
-  const { user } = useAuth();
-  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
-  // Se o usuário já está logado, enviamos ele para o portal onde o AppLayout assumirá
-  useEffect(() => {
-    if (user) router.push('/dashboard');
-  }, [user, router]);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -58,12 +42,13 @@ export default function LoginPage() {
 
       if (error) {
         setErrorMsg(error.message === 'Invalid login credentials' ? 'E-mail ou senha incorretos.' : error.message);
+        setLoading(false);
+      } else {
+        // Sucesso: Redirecionamento é feito automaticamente pelo layout do Next.js após a mudança de cookies
+        window.location.href = '/dashboard';
       }
-      // SUCESSO: O onAuthStateChange no AuthProvider será disparado, 
-      // o estado 'user' mudará, e o useEffect acima fará o router.push('/dashboard').
     } catch (err) {
       setErrorMsg('Erro inesperado ao entrar.');
-    } finally {
       setLoading(false);
     }
   };
@@ -78,7 +63,7 @@ export default function LoginPage() {
           </Avatar>
         </div>
         <div className="space-y-1">
-          <CardTitle className="text-3xl font-headline font-bold">Bem-vindo</CardTitle>
+          <CardTitle className="text-3xl font-headline font-bold">VendaFácil</CardTitle>
           <CardDescription>Gerencie suas vendas com inteligência.</CardDescription>
         </div>
       </CardHeader>

@@ -3,8 +3,8 @@
 /**
  * @fileOverview OnboardingPage (Dumb Form)
  * 
- * Esta página é focada apenas na coleta dos dados.
- * A decisão de acesso é 100% responsabilidade do AppLayout (Server).
+ * Esta página é focada APENAS na coleta dos dados.
+ * A segurança e o acesso são 100% responsabilidade do AppLayout (Server).
  */
 
 import { useState, useEffect } from 'react';
@@ -99,14 +99,13 @@ export default function OnboardingPage() {
     setIsSubmitting(true);
     try {
       await createStore(values);
-      toast({ title: 'Configuração concluída!', description: 'Bem-vindo ao VendaFácil.' });
+      toast({ title: 'Loja Ativada!', description: 'Bem-vindo ao VendaFácil.' });
     } catch (error: any) {
       toast({
         variant: 'destructive',
         title: 'Erro no Cadastro',
         description: error.message || 'Falha ao criar loja.'
       });
-    } finally {
       setIsSubmitting(false);
     }
   };
