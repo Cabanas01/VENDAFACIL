@@ -1,11 +1,10 @@
-
 'use client';
 
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ShieldCheck } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -13,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import type { StoreRow } from './stores';
+import { grantPlanAction } from '@/app/actions/admin-actions';
 
 const PLAN_OPTIONS = [
   { label: 'Avaliação (7 dias)', value: 'free' },
@@ -53,40 +53,31 @@ export function GrantPlanDialog({ store, isOpen, onOpenChange, onSuccess }: Gran
 
     const calculatedDays = values.plan === 'free' ? 7 : Number(values.durationMonths) * 30;
 
-    const payload = {
-      storeId: store.id,
-      planoTipo: values.plan,
-      duracaoDias: calculatedDays,
-      origem: 'manual_admin', // Valor original esperado pela constraint
-      renovavel: true
-    };
-
     try {
-      const response = await fetch('/api/admin/grant-plan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        credentials: 'include',
+      // Chamada direta para a Server Action
+      const result = await grantPlanAction({
+        storeId: store.id,
+        planoTipo: values.plan,
+        duracaoDias: calculatedDays,
       });
 
-      const result = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(result.message || result.error || `Erro desconhecido (${response.status})`);
+      if (!result.success) {
+        throw new Error(result.error);
       }
 
       toast({
-        title: 'Plano concedido com sucesso!',
-        description: `A loja "${store.name}" recebeu o plano ${values.plan}.`,
+        title: 'Sucesso!',
+        description: `O plano ${values.plan} foi aplicado à loja "${store.name}".`,
       });
+      
       onSuccess();
       onOpenChange(false);
       form.reset();
     } catch (error: any) {
       toast({
         variant: 'destructive',
-        title: 'Erro ao conceder plano',
-        description: error.message,
+        title: 'Falha na Operação',
+        description: error.message || 'Erro inesperado ao processar a concessão.',
       });
     } finally {
       setIsSubmitting(false);
@@ -97,13 +88,18 @@ export function GrantPlanDialog({ store, isOpen, onOpenChange, onSuccess }: Gran
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Conceder Plano para "{store.name}"</DialogTitle>
-          <DialogDescription>
-            Esta ação concederá acesso manual respeitando as origens permitidas no banco.
+          <div className="mx-auto bg-primary/10 p-3 rounded-full w-fit mb-4">
+            <ShieldCheck className="h-6 w-6 text-primary" />
+          </div>
+          <DialogTitle className="text-center">Conceder Acesso Manual</DialogTitle>
+          <DialogDescription className="text-center">
+            Ajuste a licença da loja <span className="font-bold text-foreground">"{store.name}"</span>. 
+            Esta ação será registrada nos logs de auditoria.
           </DialogDescription>
         </DialogHeader>
+        
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 py-4">
             <FormField
@@ -111,11 +107,11 @@ export function GrantPlanDialog({ store, isOpen, onOpenChange, onSuccess }: Gran
               name="plan"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Tipo de Plano</FormLabel>
+                  <FormLabel>Tipo de Licença</FormLabel>
                   <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione o tipo de plano" />
+                      <SelectTrigger className="h-12">
+                        <SelectValue placeholder="Selecione o plano" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
@@ -130,28 +126,42 @@ export function GrantPlanDialog({ store, isOpen, onOpenChange, onSuccess }: Gran
                 </FormItem>
               )}
             />
+            
             {form.watch('plan') !== 'free' && (
               <FormField
                 control={form.control}
                 name="durationMonths"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Duração (em meses)</FormLabel>
+                    <FormLabel>Duração do Acesso (Meses)</FormLabel>
                     <FormControl>
-                      <Input type="number" {...field} />
+                      <Input type="number" className="h-12" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
             )}
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
+
+            <DialogFooter className="flex-col sm:flex-row gap-2">
+              <Button 
+                type="button" 
+                variant="ghost" 
+                className="flex-1"
+                onClick={() => onOpenChange(false)} 
+                disabled={isSubmitting}
+              >
                 Cancelar
               </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Conceder Acesso
+              <Button type="submit" className="flex-1 h-11 font-bold" disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Validando...
+                  </>
+                ) : (
+                  'Confirmar Concessão'
+                )}
               </Button>
             </DialogFooter>
           </form>
