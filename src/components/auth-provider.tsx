@@ -68,7 +68,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!silent) setStoreStatus('loading_store');
     
     try {
+      console.log('[BOOTSTRAP] Iniciando carregamento de dados do tenant:', userId);
+
       // 1. Resolver o ID da loja (Tenant)
+      // Usamos uma query robusta para encontrar se o usuário é proprietário ou membro
       const { data: ownerStore, error: ownerError } = await supabase
         .from('stores')
         .select('id')
@@ -76,8 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle();
 
       if (ownerError) {
-        // Erro 42501 aqui indica que o auth.uid() no banco é null ou o token falhou
-        console.error('[AUTH_PROVIDER] RLS Reject on stores:', ownerError.code);
+        console.error('[BOOTSTRAP] Erro 42501 (RLS) ao ler lojas. O JWT pode não estar pronto:', ownerError.code);
         if (!silent) setStoreStatus('error');
         return;
       }
@@ -92,7 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .maybeSingle();
 
         if (memberError) {
-          console.error('[AUTH_PROVIDER] RLS Reject on store_members:', memberError.code);
+          console.error('[BOOTSTRAP] Erro RLS ao ler membros:', memberError.code);
           if (!silent) setStoreStatus('error');
           return;
         }
@@ -100,12 +102,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (!storeId) {
+        console.log('[BOOTSTRAP] Usuário sem loja vinculada.');
         setStore(null);
         if (!silent) setStoreStatus('no_store');
         return;
       }
 
       // 2. Com storeId resolvido, carregar snapshot completo do tenant
+      // Executamos em lote para eficiência, mas com tratamento de erro individual se necessário
       const [statusRes, storeRes, productsRes, salesRes, cashRes, customersRes] = await Promise.all([
         supabase.rpc('get_store_access_status', { p_store_id: storeId }),
         supabase.from('stores').select('*').eq('id', storeId).single(),
@@ -124,10 +128,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setCustomers(customersRes.data as Customer[] || []);
       setCashRegistersState(cashRes.data as CashRegister[] || []);
       
+      console.log('[BOOTSTRAP] Snapshot do tenant carregado com sucesso.');
       if (!silent) setStoreStatus('has_store');
 
     } catch (err: any) {
-      console.error('[AUTH_PROVIDER] Critical Bootstrap Error:', err.message);
+      console.error('[BOOTSTRAP] Falha crítica no carregamento de dados:', err);
       if (!silent) setStoreStatus('error');
     }
   }, []);
@@ -135,20 +140,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        // Forçamos a validação do JWT para garantir que auth.uid() esteja preenchido
+        console.log('[AUTH] Validando identidade do usuário...');
+        
+        // Protocolo robusto de hidratação de sessão:
+        // 1. Pega sessão leve
+        // 2. Valida identidade pesada via getUser() para garantir que auth.uid() no DB seja reconhecido
         const { data: { user: sessionUser }, error: authErr } = await supabase.auth.getUser();
         
-        if (authErr) throw authErr;
+        if (authErr) {
+          console.warn('[AUTH] Usuário não logado ou sessão expirada.');
+          setStoreStatus('no_store');
+          setLoading(false);
+          return;
+        }
         
         setUser(sessionUser);
         
         if (sessionUser) {
-          await fetchStoreData(sessionUser.id);
+          // Pequeno delay para garantir que os cookies persistidos pelo SSR estejam disponíveis para o Fetch
+          setTimeout(() => fetchStoreData(sessionUser.id), 50);
         } else {
           setStoreStatus('no_store'); 
         }
       } catch (err) {
-        console.error('[AUTH_PROVIDER] Identity hydration failed');
+        console.error('[AUTH] Erro interno na hidratação de identidade:', err);
         setStoreStatus('no_store');
       } finally {
         setLoading(false);
@@ -157,13 +172,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     initAuth();
 
+    // Listener para mudanças de estado (Logout/Login em outra aba)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('[AUTH] Evento detectado:', event);
       const newUser = session?.user ?? null;
       setUser(newUser);
       
-      if (newUser) {
+      if (event === 'SIGNED_IN' && newUser) {
         await fetchStoreData(newUser.id, true);
-      } else {
+      } else if (event === 'SIGNED_OUT') {
         setStore(null);
         setStoreStatus('no_store');
         setAccessStatus(null);
@@ -173,10 +190,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, [fetchStoreData]);
 
-  // Restante das implementações (createStore, updateStore, addSale, etc)
   const createStore = useCallback(async (storeData: any) => {
     const { data: { user: currentUser } } = await supabase.auth.getUser();
-    if (!currentUser) throw new Error('Usuário não autenticado.');
+    if (!currentUser) throw new Error('Sessão inválida. Faça login novamente.');
 
     const { data, error } = await supabase.rpc('create_new_store', {
       p_name: storeData.name,
@@ -249,20 +265,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [store]);
 
   const addSale = useCallback(async (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => {
-    if (!store?.id) {
-      throw new Error('Loja não identificada. Verifique sua conexão.');
-    }
+    if (!store?.id) throw new Error('Loja não identificada.');
 
     const result = await processSaleAction(store.id, cart, paymentMethod);
-    
-    if (!result.success) {
-      throw new Error(result.error);
-    }
+    if (!result.success) throw new Error(result.error);
 
-    if (user) {
-      await fetchStoreData(user.id, true);
-    }
-
+    if (user) await fetchStoreData(user.id, true);
     return result;
   }, [user, store, fetchStoreData]);
 

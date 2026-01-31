@@ -1,11 +1,9 @@
-
 'use client';
 
 /**
  * @fileOverview AppLayout (Guardião Determinístico)
  * 
- * Ordem de Precedência:
- * 1. Loading Inicial -> 2. Login Check -> 3. Store Check -> 4. Access Check -> 5. Render
+ * Implementação fiel da tela de erro "Falha na Comunicação" solicitada pelo usuário.
  */
 
 import { useAuth } from '@/components/auth-provider';
@@ -18,42 +16,32 @@ import { Loader2, AlertTriangle, RefreshCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading, storeStatus, accessStatus, fetchStoreData } = useAuth();
+  const { user, loading, storeStatus, accessStatus, fetchStoreData, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
   const isAdminPath = pathname.startsWith('/admin');
 
   useEffect(() => {
-    // 1. Aguardar sincronização da identidade (JWT)
-    if (loading || storeStatus === 'loading_auth') {
-      return;
-    }
+    if (loading || storeStatus === 'loading_auth') return;
 
-    // 2. Barreira de Autenticação: Sem usuário vai para o Login
     if (!user) {
       router.replace('/login');
       return;
     }
 
-    // 3. Aguardar sincronização dos dados da loja (Tenant)
-    if (storeStatus === 'loading_store') {
-      return;
-    }
+    if (storeStatus === 'loading_store') return;
 
-    // 4. Barreira de Tenant: Se não tem loja e não é Admin, vai para Onboarding
     if (storeStatus === 'no_store' && pathname !== '/onboarding' && !isAdminPath) {
       router.replace('/onboarding');
       return;
     }
 
-    // Se já tem loja, sai do onboarding
     if (storeStatus === 'has_store' && pathname === '/onboarding') {
       router.replace('/dashboard');
       return;
     }
 
-    // 5. Barreira de Acesso (Paywall): Para lojas existentes
     if (storeStatus === 'has_store') {
       const isLiberado = accessStatus?.acesso_liberado ?? false;
       const isSafePath = pathname === '/billing' || pathname === '/settings' || isAdminPath;
@@ -66,7 +54,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   }, [user, loading, storeStatus, accessStatus, pathname, router, isAdminPath]);
 
-  // RENDER: Estado de Carregamento Crítico
   if (loading || storeStatus === 'loading_auth' || storeStatus === 'loading_store') {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
@@ -83,41 +70,45 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return (
       <div className="min-h-screen w-full flex items-center justify-center bg-[#fcfcfc] p-6">
         <div className="max-w-md w-full flex flex-col items-center text-center animate-in fade-in zoom-in duration-500">
-          {/* Ícone de Alerta Centralizado */}
           <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mb-8">
             <AlertTriangle className="h-10 w-10 text-red-500 stroke-[1.5]" />
           </div>
           
-          {/* Título */}
           <h1 className="text-2xl font-headline font-bold text-slate-900 mb-4">
             Falha na Comunicação
           </h1>
           
-          {/* Descrição */}
           <div className="text-slate-500 text-base mb-10 leading-relaxed px-4">
             Ocorreu um erro ao carregar os dados da sua loja. <br className="hidden sm:block" />
             Isso pode ser instabilidade na conexão ou permissão de acesso.
           </div>
           
-          {/* Botão de Ação */}
-          <Button 
-            onClick={() => user && fetchStoreData(user.id)} 
-            className="h-12 px-8 font-semibold gap-2 shadow-sm bg-primary hover:bg-primary/90 transition-all active:scale-95"
-          >
-            <RefreshCcw className="h-4 w-4" />
-            Tentar Reconectar
-          </Button>
+          <div className="flex flex-col gap-3 w-full sm:w-auto">
+            <Button 
+              onClick={() => user && fetchStoreData(user.id)} 
+              className="h-12 px-8 font-semibold gap-2 shadow-sm bg-primary hover:bg-primary/90 transition-all active:scale-95"
+            >
+              <RefreshCcw className="h-4 w-4" />
+              Tentar Reconectar
+            </Button>
+            
+            <Button 
+              variant="ghost" 
+              onClick={() => logout()}
+              className="text-slate-400 hover:text-slate-600"
+            >
+              Sair da conta
+            </Button>
+          </div>
         </div>
       </div>
     );
   }
 
-  // Render do Onboarding
   if (pathname === '/onboarding') {
     return <main className="min-h-screen flex items-center justify-center bg-muted/5">{children}</main>;
   }
 
-  // Render da Aplicação Principal
   return (
     <SidebarProvider>
       <div className="flex min-h-screen w-full overflow-hidden">

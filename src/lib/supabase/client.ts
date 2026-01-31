@@ -7,20 +7,22 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 /**
- * Garantia de Singleton para o Browser Client.
- * Evita múltiplas instâncias que podem dessincronizar o estado da sessão e causar erro 42501.
+ * Singleton Pattern para o Supabase Browser Client.
+ * Garante que a instância seja única durante todo o ciclo de vida do cliente,
+ * prevenindo falhas de sincronização de cookies e headers de autorização (JWT).
  */
-let client: ReturnType<typeof createBrowserClient<Database>> | undefined;
+let clientInstance: ReturnType<typeof createBrowserClient<Database>> | undefined;
 
 export function getSupabaseBrowserClient() {
-  if (client) return client;
+  if (clientInstance) return clientInstance;
 
   if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error('Supabase environment variables are missing.');
+    throw new Error('As variáveis de ambiente do Supabase não foram configuradas corretamente.');
   }
 
-  client = createBrowserClient<Database>(supabaseUrl, supabaseAnonKey);
-  return client;
+  clientInstance = createBrowserClient<Database>(supabaseUrl, supabaseAnonKey);
+  return clientInstance;
 }
 
+// Exportando a instância singleton padrão
 export const supabase = getSupabaseBrowserClient();
