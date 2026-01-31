@@ -3,7 +3,7 @@
 /**
  * @fileOverview Fluxo de IA para análise estratégica do VendaFácil.
  * 
- * Implementação resiliente que valida a configuração antes da execução.
+ * Implementação resiliente que valida a configuração no momento da chamada.
  */
 
 import { ai } from '@/ai/genkit';
@@ -28,14 +28,26 @@ const AiChatOutputSchema = z.object({
 
 export type AiChatOutput = z.infer<typeof AiChatOutputSchema>;
 
+/**
+ * Função principal para invocar a IA.
+ * Valida a existência da API KEY em runtime para evitar erros 500 silenciosos.
+ */
 export async function askAi(input: AiChatInput): Promise<AiChatOutput> {
-  const apiKey = process.env.GOOGLE_GENAI_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  const apiKey = process.env.GOOGLE_GENAI_API_KEY || 
+                 process.env.GEMINI_API_KEY || 
+                 process.env.GOOGLE_API_KEY;
   
   if (!apiKey) {
+    console.error('[AI_FLOW_CRITICAL] Tentativa de uso da IA sem API KEY configurada.');
     throw new Error('API_KEY_MISSING');
   }
 
-  return aiChatFlow(input);
+  try {
+    return await aiChatFlow(input);
+  } catch (error: any) {
+    console.error('[AI_FLOW_EXECUTION_ERROR]', error);
+    throw error;
+  }
 }
 
 const aiChatFlow = ai.defineFlow(
@@ -62,31 +74,26 @@ const aiChatFlow = ai.defineFlow(
 
     const lastUserMessage = input.messages[input.messages.length - 1]?.content || 'Resuma meus dados.';
 
-    try {
-      const { text } = await ai.generate({
-        model: 'googleai/gemini-1.5-flash',
-        system: systemPrompt,
-        config: {
-          temperature: 0.7,
-        },
-        messages: [
-          ...history,
-          {
-            role: 'user',
-            content: [
-              { text: `DADOS DA OPERAÇÃO:\n${input.contextData}\n\n` },
-              { text: `PERGUNTA DO USUÁRIO: ${lastUserMessage}` }
-            ]
-          }
-        ]
-      });
+    const { text } = await ai.generate({
+      model: 'googleai/gemini-1.5-flash',
+      system: systemPrompt,
+      config: {
+        temperature: 0.7,
+      },
+      messages: [
+        ...history,
+        {
+          role: 'user',
+          content: [
+            { text: `DADOS DA OPERAÇÃO:\n${input.contextData}\n\n` },
+            { text: `PERGUNTA DO USUÁRIO: ${lastUserMessage}` }
+          ]
+        }
+      ]
+    });
 
-      if (!text) throw new Error('EMPTY_RESPONSE');
+    if (!text) throw new Error('A IA retornou uma resposta vazia.');
 
-      return { text };
-    } catch (err: any) {
-      console.error('[AI_FLOW_ERROR]', err);
-      throw new Error(`Erro no processamento da IA: ${err.message}`);
-    }
+    return { text };
   }
 );

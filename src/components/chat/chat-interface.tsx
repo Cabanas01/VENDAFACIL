@@ -58,7 +58,7 @@ export function ChatInterface({ title, subtitle, contextData, scope, suggestions
       console.error('[CHAT_UI_ERROR]', error);
       const errorMsg = error.message === 'API_KEY_MISSING' 
         ? '⚠️ A chave de API da IA não está configurada no servidor.'
-        : '⚠️ Falha técnica na análise. Tente novamente em alguns instantes.';
+        : '⚠️ Falha técnica na análise. Verifique sua conexão ou tente novamente.';
       
       setMessages([...newMessages, { role: 'model', content: errorMsg }]);
     } finally {
@@ -76,7 +76,7 @@ export function ChatInterface({ title, subtitle, contextData, scope, suggestions
           <div className="space-y-3 max-w-md">
             <h3 className="text-2xl font-black text-yellow-900 font-headline uppercase tracking-tighter">Configuração de IA Necessária</h3>
             <p className="text-sm text-yellow-800/80 leading-relaxed px-4">
-              Para ativar o assistente inteligente, você precisa configurar a chave <strong className="text-yellow-900">GOOGLE_GENAI_API_KEY</strong> no seu arquivo <code className="bg-yellow-100 px-1 rounded">.env.local</code>.
+              Para ativar o assistente inteligente, você precisa configurar a chave <strong className="text-yellow-900">GOOGLE_GENAI_API_KEY</strong> no seu ambiente de hospedagem ou arquivo .env local.
             </p>
           </div>
           <Button 
