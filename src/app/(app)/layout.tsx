@@ -81,30 +81,30 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // RENDER: Falha na Comunicação (Representação fiel da imagem fornecida pelo usuário)
   if (storeStatus === 'error') {
     return (
-      <div className="min-h-screen w-full flex items-center justify-center bg-[#f8fafc] p-6">
+      <div className="min-h-screen w-full flex items-center justify-center bg-[#fcfcfc] p-6">
         <div className="max-w-md w-full flex flex-col items-center text-center animate-in fade-in zoom-in duration-500">
           {/* Ícone de Alerta Centralizado */}
-          <div className="w-24 h-24 bg-red-50 rounded-full flex items-center justify-center mb-8 shadow-sm">
-            <AlertTriangle className="h-12 w-12 text-red-500 stroke-[1.5]" />
+          <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mb-8">
+            <AlertTriangle className="h-10 w-10 text-red-500 stroke-[1.5]" />
           </div>
           
           {/* Título */}
-          <h1 className="text-3xl font-headline font-bold text-slate-900 mb-4 tracking-tight">
+          <h1 className="text-2xl font-headline font-bold text-slate-900 mb-4">
             Falha na Comunicação
           </h1>
           
           {/* Descrição */}
-          <p className="text-slate-600 text-lg mb-10 leading-relaxed">
-            Ocorreu um erro ao carregar os dados da sua loja. Isso pode ser instabilidade na conexão ou permissão de acesso.
-          </p>
+          <div className="text-slate-500 text-base mb-10 leading-relaxed px-4">
+            Ocorreu um erro ao carregar os dados da sua loja. <br className="hidden sm:block" />
+            Isso pode ser instabilidade na conexão ou permissão de acesso.
+          </div>
           
           {/* Botão de Ação */}
           <Button 
             onClick={() => user && fetchStoreData(user.id)} 
-            size="lg" 
-            className="h-12 px-10 font-bold gap-3 shadow-lg bg-primary hover:bg-primary/90 transition-all active:scale-95"
+            className="h-12 px-8 font-semibold gap-2 shadow-sm bg-primary hover:bg-primary/90 transition-all active:scale-95"
           >
-            <RefreshCcw className="h-5 w-5" />
+            <RefreshCcw className="h-4 w-4" />
             Tentar Reconectar
           </Button>
         </div>
