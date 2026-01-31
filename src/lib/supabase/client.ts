@@ -8,8 +8,7 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 /**
  * Singleton Pattern para o Supabase Browser Client.
- * Garante que a instância seja única durante todo o ciclo de vida do cliente,
- * prevenindo falhas de sincronização de cookies e headers de autorização (JWT).
+ * Garante que a instância seja única, prevenindo falhas de sincronização de JWT.
  */
 let clientInstance: ReturnType<typeof createBrowserClient<Database>> | undefined;
 
@@ -17,12 +16,11 @@ export function getSupabaseBrowserClient() {
   if (clientInstance) return clientInstance;
 
   if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error('As variáveis de ambiente do Supabase não foram configuradas corretamente.');
+    throw new Error('Variáveis SUPABASE_URL ou ANON_KEY não encontradas.');
   }
 
   clientInstance = createBrowserClient<Database>(supabaseUrl, supabaseAnonKey);
   return clientInstance;
 }
 
-// Exportando a instância singleton padrão
 export const supabase = getSupabaseBrowserClient();

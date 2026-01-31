@@ -1,15 +1,14 @@
 'use client';
 
 /**
- * @fileOverview AuthProvider (MOTOR DE ESTADO ROBUSTO)
+ * @fileOverview AuthProvider (Protocolo de Bootstrap Determinístico)
  * 
- * Ordem Crítica de Bootstrap: 
- * 1. Validar Identidade (getUser) -> 2. Carregar Loja (RLS Garantido) -> 3. Carregar Acesso
+ * Ordem Rigorosa:
+ * 1. ResolvAuth (getUser) -> 2. SyncStore (RLS Seguro) -> 3. LoadAccess
  */
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/client';
-import type { User as SupabaseUser } from '@supabase/supabase-js';
 import type { 
   Store, 
   Product, 
@@ -69,8 +68,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!silent) setStoreStatus('loading_store');
     
     try {
-      console.log('[BOOTSTRAP] Sincronizando dados do tenant:', userId);
-
+      // 1. Localiza o ID do Tenant (Garante auth.uid funcional no RLS)
       const { data: ownerStore, error: ownerError } = await supabase
         .from('stores')
         .select('id')
@@ -78,7 +76,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle();
 
       if (ownerError) {
-        console.error('[BOOTSTRAP] Erro RLS:', ownerError.code);
+        console.error('[BOOTSTRAP] Erro RLS Detectado:', ownerError.code);
         if (!silent) setStoreStatus('error');
         return;
       }
@@ -86,16 +84,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       let storeId = ownerStore?.id;
 
       if (!storeId) {
-        const { data: memberEntry, error: memberError } = await supabase
+        const { data: memberEntry } = await supabase
           .from('store_members')
           .select('store_id')
           .eq('user_id', userId)
           .maybeSingle();
-
-        if (memberError) {
-          if (!silent) setStoreStatus('error');
-          return;
-        }
         storeId = memberEntry?.store_id;
       }
 
@@ -105,6 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      // 2. Carga Paralela de Dados (Agora com contexto auth.uid garantido)
       const [statusRes, storeRes, productsRes, salesRes, cashRes, customersRes] = await Promise.all([
         supabase.rpc('get_store_access_status', { p_store_id: storeId }),
         supabase.from('stores').select('*').eq('id', storeId).single(),
@@ -118,22 +112,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       setAccessStatus(statusRes.data?.[0] || null);
       setStore(storeRes.data as Store);
-      setProducts(productsRes.data as Product[] || []);
-      setSales(salesRes.data as Sale[] || []);
-      setCustomers(customersRes.data as Customer[] || []);
-      setCashRegistersState(cashRes.data as CashRegister[] || []);
+      setProducts(productsRes.data || []);
+      setSales(salesRes.data || []);
+      setCustomers(customersRes.data || []);
+      setCashRegistersState(cashRes.data || []);
       
       if (!silent) setStoreStatus('has_store');
 
     } catch (err: any) {
-      console.error('[BOOTSTRAP] Falha técnica:', err);
+      console.error('[BOOTSTRAP_FATAL]', err);
       if (!silent) setStoreStatus('error');
     }
   }, []);
 
   useEffect(() => {
     const initAuth = async () => {
+      setLoading(true);
       try {
+        // Ponto crítico: getUser valida o JWT no servidor do Supabase
         const { data: { user: sessionUser } } = await supabase.auth.getUser();
         
         if (!sessionUser) {
@@ -142,12 +138,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
         
-        const { data: profile } = await supabase.from('users').select('*').eq('id', sessionUser.id).single();
-        setUser(profile ? (profile as User) : ({ id: sessionUser.id, email: sessionUser.email || '' } as User));
+        const { data: profile } = await supabase.from('users').select('*').eq('id', sessionUser.id).maybeSingle();
+        setUser(profile || ({ id: sessionUser.id, email: sessionUser.email || '' } as User));
         
+        // Só busca dados da loja APÓS confirmar identidade
         await fetchStoreData(sessionUser.id);
       } catch (err) {
-        setStoreStatus('no_store');
+        setStoreStatus('error');
       } finally {
         setLoading(false);
       }
@@ -155,6 +152,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     initAuth();
 
+    // Listener para mudanças de login/logout
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
         setUser({ id: session.user.id, email: session.user.email || '' } as User);
@@ -172,8 +170,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const createStore = useCallback(async (storeData: any) => {
     const { data: { user: currentUser } } = await supabase.auth.getUser();
-    if (!currentUser) throw new Error('Sessão inválida.');
+    if (!currentUser) throw new Error('Identidade não confirmada.');
 
+    // Upsert preventivo para evitar erros de FK
     await supabase.from('users').upsert({ id: currentUser.id, email: currentUser.email }, { onConflict: 'id' });
 
     const { data, error } = await supabase.rpc('create_new_store', {
@@ -191,6 +190,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return data as Store;
   }, [fetchStoreData]);
 
+  const addSale = useCallback(async (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => {
+    if (!store?.id || !user) throw new Error('Contexto de loja inválido.');
+
+    const result = await processSaleAction(store.id, cart, paymentMethod);
+    if (!result.success) throw new Error(result.error);
+
+    await fetchStoreData(user.id, true);
+    return result;
+  }, [user, store, fetchStoreData]);
+
   const updateStore = useCallback(async (data: any) => {
     if (!store || !user) return;
     await supabase.from('stores').update(data).eq('id', store.id);
@@ -199,7 +208,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const updateUser = useCallback(async (data: any) => {
     if (!user) return;
-    await supabase.from('users').update(data).eq('id', user.id);
+    const { error } = await supabase.from('users').update(data).eq('id', user.id);
+    if (!error) setUser(prev => prev ? { ...prev, ...data } : null);
   }, [user]);
 
   const removeStoreMember = useCallback(async (userId: string) => {
@@ -245,17 +255,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data } = await supabase.from('products').select('*').eq('store_id', store.id).eq('barcode', barcode).maybeSingle();
     return data as Product || null;
   }, [store]);
-
-  const addSale = useCallback(async (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => {
-    if (!store?.id || !user) throw new Error('Loja não identificada.');
-
-    const result = await processSaleAction(store.id, cart, paymentMethod);
-    if (!result.success) throw new Error(result.error);
-
-    // 🔥 Sincronização Obrigatória: Força o recarregamento imediato para atualizar Dashboard e Caixa
-    await fetchStoreData(user.id, true);
-    return result;
-  }, [user, store, fetchStoreData]);
 
   const setCashRegisters = useCallback(async (action: any) => {
     if (!store || !user) return;
