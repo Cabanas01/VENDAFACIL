@@ -1,10 +1,10 @@
 'use client';
 
 /**
- * @fileOverview AuthProvider (MOTOR DE ESTADO PASSIVO)
+ * @fileOverview AuthProvider (MOTOR DE ESTADO ROBUSTO)
  * 
- * Centraliza o estado da aplicação e delega ações pesadas para Server Actions.
- * Melhorado com logs de erro de RLS para diagnóstico de bootstrap.
+ * Ordem Crítica de Bootstrap: 
+ * 1. Validar Identidade (getUser) -> 2. Carregar Loja (RLS Garantido) -> 3. Carregar Acesso
  */
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -68,16 +68,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!silent) setStoreStatus('loading_store');
     
     try {
-      console.log('[BOOTSTRAP] Buscando dados do tenant para user:', userId);
-
+      // 1. Resolver o ID da loja (Tenant)
+      // Usamos a função do browser que já deve estar com o token anexado
       const { data: ownerStore, error: ownerError } = await supabase
         .from('stores')
         .select('id')
         .eq('user_id', userId)
         .maybeSingle();
 
+      // Erro 42501 aqui indica que o auth.uid() no banco é null ou o token falhou
       if (ownerError) {
-        console.error('[BOOTSTRAP] Erro ao ler stores:', ownerError.code, ownerError.message);
+        console.error('[AUTH_PROVIDER] RLS Reject on stores:', ownerError.code);
         if (!silent) setStoreStatus('error');
         return;
       }
@@ -92,7 +93,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .maybeSingle();
 
         if (memberError) {
-          console.error('[BOOTSTRAP] Erro ao ler store_members:', memberError.code, memberError.message);
+          console.error('[AUTH_PROVIDER] RLS Reject on store_members:', memberError.code);
           if (!silent) setStoreStatus('error');
           return;
         }
@@ -105,8 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      console.log('[BOOTSTRAP] Tenant identificado:', storeId);
-
+      // 2. Com storeId resolvido, carregar snapshot completo do tenant
       const [statusRes, storeRes, productsRes, salesRes, cashRes, customersRes] = await Promise.all([
         supabase.rpc('get_store_access_status', { p_store_id: storeId }),
         supabase.from('stores').select('*').eq('id', storeId).single(),
@@ -117,7 +117,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ]);
 
       if (storeRes.error) {
-        console.error('[BOOTSTRAP] Erro RLS em stores:', storeRes.error.code);
+        console.error('[AUTH_PROVIDER] Failed to fetch store details:', storeRes.error.code);
         throw storeRes.error;
       }
 
@@ -131,32 +131,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!silent) setStoreStatus('has_store');
 
     } catch (err: any) {
-      console.error('[BOOTSTRAP] Falha técnica crítica:', err.code || err.message);
+      console.error('[AUTH_PROVIDER] Critical Bootstrap Error:', err.message);
       if (!silent) setStoreStatus('error');
     }
   }, []);
 
   useEffect(() => {
     const initAuth = async () => {
+      // IMPORTANTE: getUser() é mais seguro que getSession() para garantir que o token está hidratado
       const { data: { user: sessionUser } } = await supabase.auth.getUser();
       setUser(sessionUser);
-      setLoading(false);
-
+      
       if (sessionUser) {
-        fetchStoreData(sessionUser.id);
+        await fetchStoreData(sessionUser.id);
       } else {
         setStoreStatus('no_store'); 
       }
+      
+      setLoading(false);
     };
 
     initAuth();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       const newUser = session?.user ?? null;
       setUser(newUser);
       
       if (newUser) {
-        fetchStoreData(newUser.id);
+        // Recarregar dados se o usuário mudou ou logou
+        await fetchStoreData(newUser.id, true);
       } else {
         setStore(null);
         setStoreStatus('no_store');
@@ -243,7 +246,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const addSale = useCallback(async (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => {
     if (!store?.id) {
-      throw new Error('Loja não identificada no estado global. Recarregue o portal.');
+      throw new Error('Loja não identificada. Verifique sua conexão.');
     }
 
     const result = await processSaleAction(store.id, cart, paymentMethod);

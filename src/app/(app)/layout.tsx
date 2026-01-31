@@ -1,10 +1,10 @@
 'use client';
 
 /**
- * @fileOverview AppLayout (O ÚNICO Guardião de Navegação)
+ * @fileOverview AppLayout (Guardião Determinístico)
  * 
- * Centraliza toda a inteligência de fluxo do SaaS. 
- * Respeita a premissa de AuthProvider passivo e máquina de estados oficial.
+ * Ordem de Precedência:
+ * 1. Loading Inicial -> 2. Login Check -> 3. Store Check -> 4. Access Check -> 5. Render
  */
 
 import { useAuth } from '@/components/auth-provider';
@@ -24,8 +24,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const isAdminPath = pathname.startsWith('/admin');
 
   useEffect(() => {
-    // 1. Aguardar sincronização inicial (Auth e Store)
-    if (loading || storeStatus === 'loading_auth' || storeStatus === 'loading_store') {
+    // 1. Aguardar sincronização da identidade (JWT)
+    if (loading || storeStatus === 'loading_auth') {
       return;
     }
 
@@ -35,29 +35,29 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // 3. Barreira de Tenant (Loja):
-    // Se não tem loja, deve ir para Onboarding (exceto se já estiver lá ou for admin)
+    // 3. Aguardar sincronização dos dados da loja (Tenant)
+    if (storeStatus === 'loading_store') {
+      return;
+    }
+
+    // 4. Barreira de Tenant: Se não tem loja e não é Admin, vai para Onboarding
     if (storeStatus === 'no_store' && pathname !== '/onboarding' && !isAdminPath) {
       router.replace('/onboarding');
       return;
     }
 
-    // Se já tem loja, nunca deve ver a página de Onboarding
+    // Se já tem loja, sai do onboarding
     if (storeStatus === 'has_store' && pathname === '/onboarding') {
       router.replace('/dashboard');
       return;
     }
 
-    // 4. Barreira de Acesso (Paywall):
-    // Se tem loja mas o acesso não está liberado (expirado ou sem plano)
+    // 5. Barreira de Acesso (Paywall): Para lojas existentes
     if (storeStatus === 'has_store') {
       const isLiberado = accessStatus?.acesso_liberado ?? false;
-      
-      // Rotas que não sofrem bloqueio de paywall (onde o usuário resolve o problema)
       const isSafePath = pathname === '/billing' || pathname === '/settings' || isAdminPath;
 
       if (!isLiberado && !isSafePath) {
-        console.log('[APP LAYOUT] Acesso bloqueado. Redirecionando para faturamento.');
         router.replace('/billing');
         return;
       }
@@ -65,42 +65,45 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   }, [user, loading, storeStatus, accessStatus, pathname, router, isAdminPath]);
 
-  // RENDER: Estados de Carregamento (Previne flashes)
+  // RENDER: Estado de Carregamento Crítico
   if (loading || storeStatus === 'loading_auth' || storeStatus === 'loading_store') {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
         <p className="text-sm text-muted-foreground animate-pulse font-medium">
-          Sincronizando sua conta...
+          Sincronizando ambiente seguro...
         </p>
       </div>
     );
   }
 
-  // RENDER: Erro de Sincronização (RLS, Rede, Permissão)
+  // RENDER: Erro de Comunicação (Geralmente RLS 42501 persistente)
   if (storeStatus === 'error') {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center">
         <div className="bg-destructive/10 p-4 rounded-full mb-4">
           <AlertTriangle className="h-12 w-12 text-destructive" />
         </div>
-        <h1 className="text-xl font-bold mb-2">Falha na Comunicação</h1>
+        <h1 className="text-xl font-bold mb-2">Erro de Identidade</h1>
         <p className="text-muted-foreground mb-6 max-w-sm">
-          Ocorreu um erro ao carregar os dados da sua loja. Isso pode ser instabilidade na conexão ou permissão de acesso.
+          O banco de dados não reconheceu sua identidade ou o acesso foi negado. Isso pode ocorrer por um token expirado ou falha nas permissões.
         </p>
-        <Button onClick={() => user && fetchStoreData(user.id)} variant="outline">
-          <RefreshCcw className="mr-2 h-4 w-4" /> Tentar Reconectar
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={() => user && fetchStoreData(user.id)} variant="outline">
+            <RefreshCcw className="mr-2 h-4 w-4" /> Tentar Novamente
+          </Button>
+          <Button onClick={() => window.location.reload()}>Recarregar App</Button>
+        </div>
       </div>
     );
   }
 
-  // RENDER: Fluxo de Onboarding (Sem Sidebars)
+  // Render do Onboarding
   if (pathname === '/onboarding') {
-    return <main className="min-h-screen p-4 flex items-center justify-center bg-muted/5">{children}</main>;
+    return <main className="min-h-screen flex items-center justify-center bg-muted/5">{children}</main>;
   }
 
-  // RENDER: Dashboard e Aplicação (Fluxo Normal)
+  // Render da Aplicação Principal
   return (
     <SidebarProvider>
       <div className="flex min-h-screen w-full overflow-hidden">
