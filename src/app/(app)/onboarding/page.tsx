@@ -20,7 +20,6 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Progress } from '@/components/ui/progress';
-import { supabase } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 
 const onboardingSchema = z.object({
@@ -177,10 +176,18 @@ export default function OnboardingPage() {
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="name" render={({ field }) => (
-                  <FormItem><FormLabel>Nome Fantasia</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                  <FormItem>
+                    <FormLabel>Nome Fantasia</FormLabel>
+                    <FormControl><Input {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
                 )} />
                 <FormField control={form.control} name="legal_name" render={({ field }) => (
-                  <FormItem><FormLabel>Razão Social</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormMessage>
+                  <FormItem>
+                    <FormLabel>Razão Social</FormLabel>
+                    <FormControl><Input {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
                 )} />
               </div>
             ) : (
