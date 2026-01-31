@@ -1,10 +1,9 @@
 'use server';
 
 /**
- * @fileOverview Fluxo de IA para análise de dados do VendaFácil.
+ * @fileOverview Fluxo de IA para análise estratégica do VendaFácil.
  * 
- * Este fluxo atua como um Analista de Negócios puramente passivo.
- * Ele recebe dados contextuais e responde perguntas sem nunca executar ações.
+ * Implementação robusta para o Genkit v1.x focada em análise passiva de dados comerciais.
  */
 
 import { ai } from '@/ai/genkit';
@@ -17,7 +16,7 @@ const MessageSchema = z.object({
 
 const AiChatInputSchema = z.object({
   messages: z.array(MessageSchema),
-  contextData: z.string().describe('Snapshot de dados reais do sistema para análise'),
+  contextData: z.string().describe('Snapshot JSON de dados reais do sistema para análise'),
   scope: z.enum(['store', 'admin']).describe('Define se a IA analisa uma loja ou o sistema global'),
 });
 
@@ -42,35 +41,28 @@ const aiChatFlow = ai.defineFlow(
   async (input) => {
     const systemPrompt = input.scope === 'admin' 
       ? `Você é o ANALISTA ESTRATÉGICO do SaaS VendaFácil. 
-         Seu objetivo é analisar métricas GLOBAIS de faturamento, logs e tenants.
-         RESTRIÇÕES:
-         1. NÃO execute ações.
-         2. NÃO sugira alterações de banco de dados.
-         3. Responda apenas com base nos DADOS FORNECIDOS abaixo.
-         4. Se não souber, diga que os dados atuais não permitem a conclusão.`
-      : `Você é o CONSULTOR DE NEGÓCIOS da loja no VendaFácil.
-         Seu objetivo é analisar VENDAS, CMV, PRODUTOS e CLIENTES.
-         Analise os dados fornecidos e responda de forma clara e estratégica.
-         RESTRIÇÕES:
-         1. Você é um LEITOR de dados. Nunca sugira deletar ou alterar nada.
-         2. Foco em lucratividade e gestão de estoque.
-         3. Use tom profissional e direto.
-         4. Responda apenas com base nos DADOS FORNECIDOS abaixo.`;
+         Analise métricas GLOBAIS de faturamento e tenants fornecidas.
+         REGRA DE OURO: Responda apenas com base nos DADOS FORNECIDOS.
+         NÃO sugira ações destrutivas. Use Markdown.`
+      : `Você é o CONSULTOR DE NEGÓCIOS do VendaFácil.
+         Foco em: Lucratividade (CMV), Gestão de Estoque e Vendas.
+         Analise os dados da loja e responda de forma consultiva e direta.
+         REGRA DE OURO: Responda apenas com base nos DADOS FORNECIDOS. Use Markdown.`;
 
-    // Pegamos a última pergunta do usuário
-    const userQuestion = input.messages[input.messages.length - 1].content;
-    
-    // Mapeamos o histórico anterior (se houver)
-    const history = input.messages.slice(0, -1).map(m => ({
+    // Filtramos o histórico para garantir a estrutura correta do Genkit 1.x
+    const history = (input.messages || []).slice(0, -1).map(m => ({
       role: m.role,
       content: [{ text: m.content }]
     }));
 
+    const lastUserMessage = input.messages[input.messages.length - 1]?.content || 'Resuma meus dados.';
+
     try {
-      const response = await ai.generate({
+      const { text } = await ai.generate({
         model: 'googleai/gemini-1.5-flash',
         system: systemPrompt,
         config: {
+          temperature: 0.7,
           safetySettings: [
             { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
             { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
@@ -83,21 +75,21 @@ const aiChatFlow = ai.defineFlow(
           {
             role: 'user',
             content: [
-              { text: `CONTEXTO ATUAL (DADOS REAIS):\n${input.contextData}\n\n` },
-              { text: `PERGUNTA DO USUÁRIO: ${userQuestion}` }
+              { text: `DADOS DA OPERAÇÃO:\n${input.contextData}\n\n` },
+              { text: `PERGUNTA DO USUÁRIO: ${lastUserMessage}` }
             ]
           }
         ]
       });
 
-      if (!response.text) {
-        throw new Error('A IA não gerou uma resposta textual.');
+      if (!text) {
+        throw new Error('A IA não gerou uma resposta textual válida.');
       }
 
-      return { text: response.text };
+      return { text };
     } catch (err: any) {
-      console.error('[AI_FLOW_ERROR]', err);
-      throw new Error(`Falha no processamento da IA: ${err.message}`);
+      console.error('[AI_FLOW_CRITICAL_ERROR]', err);
+      throw new Error(`Falha técnica na análise: ${err.message}`);
     }
   }
 );

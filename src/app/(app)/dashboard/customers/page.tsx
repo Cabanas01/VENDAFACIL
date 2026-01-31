@@ -4,26 +4,26 @@
  * @fileOverview Gestão de Clientes do Dashboard
  * 
  * Lista e gerencia os clientes da loja com métricas de compra.
+ * Implementação defensiva para evitar exceções client-side.
  */
 
 import { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '@/components/auth-provider';
 import { useToast } from '@/hooks/use-toast';
 import { PageHeader } from '@/components/page-header';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Plus, Search, User, Mail, Phone, MoreHorizontal, Edit, Trash2, Loader2, Users, ShoppingBag } from 'lucide-react';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
+import { Plus, Search, MoreHorizontal, Edit, Trash2, Loader2, Users, ShoppingBag } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { supabase } from '@/lib/supabase/client';
 import type { Customer } from '@/lib/types';
 
-const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val / 100);
-
 export default function CustomersDashboardPage() {
-  const { store, addCustomer, sales } = useAuth();
+  const { store, addCustomer } = useAuth();
   const { toast } = useToast();
   
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -34,41 +34,47 @@ export default function CustomersDashboardPage() {
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
 
   const loadCustomers = async () => {
-    if (!store) return;
+    if (!store?.id) return;
     setLoading(true);
-    const { data, error } = await supabase
-      .from('customers')
-      .select('*')
-      .eq('store_id', store.id)
-      .order('name');
-    
-    if (!error) setCustomers(data || []);
-    setLoading(false);
+    try {
+      const { data, error } = await supabase
+        .from('customers')
+        .select('*')
+        .eq('store_id', store.id)
+        .order('name');
+      
+      if (!error) setCustomers(data || []);
+    } catch (err) {
+      console.error('Falha ao carregar clientes');
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
     loadCustomers();
-  }, [store]);
+  }, [store?.id]);
 
   const filteredCustomers = useMemo(() => {
-    const term = search.toLowerCase();
-    return customers.filter(c => 
-      c.name.toLowerCase().includes(term) || 
-      c.email.toLowerCase().includes(term) ||
-      c.phone.includes(term)
+    const term = (search || '').toLowerCase();
+    const safeCustomers = Array.isArray(customers) ? customers : [];
+    return safeCustomers.filter(c => 
+      (c.name || '').toLowerCase().includes(term) || 
+      (c.email || '').toLowerCase().includes(term) ||
+      (c.phone || '').includes(term)
     );
   }, [customers, search]);
 
   const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (isSubmitting) return;
+    if (isSubmitting || !store?.id) return;
 
     const formData = new FormData(e.currentTarget);
     const data = {
       name: formData.get('name') as string,
       email: formData.get('email') as string,
       phone: formData.get('phone') as string,
-      cpf: formData.get('cpf') as string || null,
+      cpf: (formData.get('cpf') as string) || null,
     };
 
     setIsSubmitting(true);
@@ -92,10 +98,13 @@ export default function CustomersDashboardPage() {
 
   const handleDelete = async (id: string) => {
     if (!confirm('Excluir cliente permanentemente?')) return;
-    const { error } = await supabase.from('customers').delete().eq('id', id);
-    if (!error) {
+    try {
+      const { error } = await supabase.from('customers').delete().eq('id', id);
+      if (error) throw error;
       toast({ title: 'Cliente removido.' });
       loadCustomers();
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Erro ao excluir', description: err.message });
     }
   };
 
@@ -120,46 +129,59 @@ export default function CustomersDashboardPage() {
           </div>
         </CardHeader>
         <CardContent>
-          {loading ? <div className="py-20 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto" /></div> : (
+          {loading ? (
+            <div className="py-20 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto" /></div>
+          ) : (
             <div className="rounded-md border">
               <Table>
                 <TableHeader className="bg-muted/50">
                   <TableRow>
                     <TableHead className="text-xs uppercase font-bold">Cliente</TableHead>
                     <TableHead className="text-xs uppercase font-bold">Contato</TableHead>
-                    <TableHead className="text-xs uppercase font-bold">Histórico</TableHead>
+                    <TableHead className="text-xs uppercase font-bold">Cadastro</TableHead>
                     <TableHead className="text-right text-xs uppercase font-bold">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredCustomers.map(c => {
-                    const customerSales = sales.filter(s => s.items?.some(i => i.product_id === c.id)); // Exemplo simplificado
-                    return (
-                      <TableRow key={c.id}>
-                        <TableCell className="font-bold">{c.name}</TableCell>
-                        <TableCell>
-                          <div className="flex flex-col text-xs text-muted-foreground">
-                            <span>{c.email}</span>
-                            <span>{c.phone}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="secondary" className="gap-1 text-[10px]">
-                            <ShoppingBag className="h-3 w-3" /> {new Date(c.created_at).toLocaleDateString()}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal /></Button></DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => { setEditingCustomer(c); setIsModalOpen(true); }}><Edit className="h-4 w-4 mr-2" /> Editar</DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleDelete(c.id)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" /> Excluir</DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                  {filteredCustomers.map(c => (
+                    <TableRow key={c.id}>
+                      <TableCell className="font-bold">{c.name || 'Sem Nome'}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-col text-xs text-muted-foreground">
+                          <span>{c.email || 'N/A'}</span>
+                          <span>{c.phone || 'N/A'}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className="gap-1 text-[10px]">
+                          <ShoppingBag className="h-3 w-3" /> 
+                          {c.created_at ? new Date(c.created_at).toLocaleDateString() : '-'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => { setEditingCustomer(c); setIsModalOpen(true); }}>
+                              <Edit className="h-4 w-4 mr-2" /> Editar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleDelete(c.id)} className="text-destructive font-bold">
+                              <Trash2 className="h-4 w-4 mr-2" /> Excluir
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {filteredCustomers.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center py-10 text-muted-foreground">
+                        Nenhum cliente localizado.
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </div>
@@ -171,14 +193,27 @@ export default function CustomersDashboardPage() {
         <DialogContent>
           <DialogHeader><DialogTitle>{editingCustomer ? 'Editar' : 'Cadastrar'} Cliente</DialogTitle></DialogHeader>
           <form onSubmit={handleSave} className="space-y-4 py-4">
-            <Input name="name" defaultValue={editingCustomer?.name} placeholder="Nome completo" required />
-            <div className="grid grid-cols-2 gap-4">
-              <Input name="phone" defaultValue={editingCustomer?.phone} placeholder="Telefone" required />
-              <Input name="cpf" defaultValue={editingCustomer?.cpf || ''} placeholder="CPF (Opcional)" />
+            <div className="space-y-2">
+              <label className="text-sm font-bold">Nome Completo</label>
+              <Input name="name" defaultValue={editingCustomer?.name || ''} placeholder="Ex: João da Silva" required />
             </div>
-            <Input name="email" type="email" defaultValue={editingCustomer?.email} placeholder="E-mail" required />
-            <DialogFooter>
-              <Button type="submit" disabled={isSubmitting}>{isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Salvar</Button>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-bold">Telefone</label>
+                <Input name="phone" defaultValue={editingCustomer?.phone || ''} placeholder="(00) 00000-0000" required />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-bold">CPF (Opcional)</label>
+                <Input name="cpf" defaultValue={editingCustomer?.cpf || ''} placeholder="000.000.000-00" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-bold">E-mail</label>
+              <Input name="email" type="email" defaultValue={editingCustomer?.email || ''} placeholder="email@exemplo.com" required />
+            </div>
+            <DialogFooter className="pt-4">
+              <Button type="button" variant="ghost" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
+              <Button type="submit" disabled={isSubmitting}>{isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Salvar Cliente</Button>
             </DialogFooter>
           </form>
         </DialogContent>

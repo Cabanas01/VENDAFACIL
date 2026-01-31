@@ -1,7 +1,12 @@
-
 'use client';
 
-import { useEffect, useState } from 'react';
+/**
+ * @fileOverview Gestão de Tenants (Admin)
+ * 
+ * Exibe todas as lojas do sistema com proteção contra dados inconsistentes.
+ */
+
+import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,7 +15,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
-import { MoreHorizontal, Eye, Lock, Trash2, Users, Gift } from 'lucide-react';
+import { MoreHorizontal, Eye, Lock, Trash2, Gift } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { GrantPlanDialog } from './grant-plan-dialog';
@@ -53,15 +58,6 @@ const statusConfig: Record<string, { variant: "default" | "secondary" | "destruc
     excluida: { variant: 'destructive', label: 'Excluída' },
 };
 
-const getStatusBadge = (status: string) => {
-    const config = statusConfig[status?.toLowerCase()] || { variant: 'outline', label: status || 'N/A' };
-    return (
-        <Badge variant={config.variant} className={`${config.className ?? ''} capitalize`}>
-            {config.label}
-        </Badge>
-    );
-};
-
 export default function AdminStores() {
   const [stores, setStores] = useState<StoreRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -84,19 +80,12 @@ export default function AdminStores() {
         query = query.eq('business_type', activeTab);
       }
       
-      const { data: storesData, error: storesError } = await query;
+      const { data: storesData, error } = await query;
+      if (error) throw error;
 
-      if (storesError) {
-        throw storesError;
-      }
+      const safeStores = Array.isArray(storesData) ? storesData : [];
       
-      if (!storesData || storesData.length === 0) {
-        setStores([]);
-        setLoading(false);
-        return;
-      }
-
-      const ownerIds = [...new Set(storesData.map(s => s.user_id).filter(Boolean))];
+      const ownerIds = [...new Set(safeStores.map(s => s.user_id).filter(Boolean))];
       let ownerEmailMap = new Map<string, string>();
       if (ownerIds.length > 0) {
         const { data: usersData } = await supabase
@@ -104,10 +93,10 @@ export default function AdminStores() {
           .select('id, email')
           .in('id', ownerIds as string[]);
 
-        ownerEmailMap = new Map((usersData ?? []).map(u => [u.id, u.email as string]));
+        ownerEmailMap = new Map((usersData || []).map(u => [u.id, u.email as string]));
       }
       
-      const combinedData = (storesData || []).map((store) => ({
+      const combinedData = safeStores.map((store) => ({
         ...store,
         status: store.status || 'trial',
         owner_email: store.user_id ? ownerEmailMap.get(store.user_id) : 'N/A',
@@ -115,7 +104,6 @@ export default function AdminStores() {
 
       setStores(combinedData as StoreRow[]);
     } catch (err: any) {
-      console.error('Erro na listagem de lojas:', err);
       setErrorMsg(err.message || 'Falha ao buscar lojas.');
     } finally {
       setLoading(false);
@@ -126,11 +114,6 @@ export default function AdminStores() {
     fetchStores();
   }, [activeTab]);
 
-  const handleOpenGrantModal = (store: StoreRow) => {
-    setSelectedStore(store);
-    setIsGrantModalOpen(true);
-  };
-
   const renderTable = (storeList: StoreRow[]) => {
       if (loading) {
           return (
@@ -139,7 +122,8 @@ export default function AdminStores() {
             </div>
           );
       }
-      if (!storeList || storeList.length === 0) {
+      const safeList = Array.isArray(storeList) ? storeList : [];
+      if (safeList.length === 0) {
           return (
             <div className="text-center text-sm text-muted-foreground p-8">
                 Nenhuma loja encontrada nesta categoria.
@@ -158,8 +142,11 @@ export default function AdminStores() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {storeList.map(s => {
-                const access = Array.isArray(s?.store_access) ? s.store_access[0] : s?.store_access;
+              {safeList.map(s => {
+                const accessArray = Array.isArray(s?.store_access) ? s.store_access : [];
+                const access = accessArray[0] || s?.store_access;
+                const config = statusConfig[s?.status?.toLowerCase()] || { variant: 'outline', label: s?.status || 'N/A' };
+                
                 return (
                   <TableRow key={s?.id}>
                     <TableCell>
@@ -173,7 +160,9 @@ export default function AdminStores() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      {getStatusBadge(s?.status)}
+                      <Badge variant={config.variant} className={`${config.className ?? ''} capitalize`}>
+                        {config.label}
+                      </Badge>
                     </TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
@@ -185,11 +174,8 @@ export default function AdminStores() {
                              <Eye className="mr-2 h-4 w-4" /> Ver Detalhes
                            </DropdownMenuItem>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => handleOpenGrantModal(s)}>
+                          <DropdownMenuItem onClick={() => { setSelectedStore(s); setIsGrantModalOpen(true); }}>
                               <Gift className="mr-2 h-4 w-4" /> Conceder Plano
-                          </DropdownMenuItem>
-                          <DropdownMenuItem>
-                            <Lock className="mr-2 h-4 w-4" /> Suspender
                           </DropdownMenuItem>
                           <DropdownMenuItem className="text-red-500">
                             <Trash2 className="mr-2 h-4 w-4" /> Excluir
