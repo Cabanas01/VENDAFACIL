@@ -1,11 +1,10 @@
 'use client';
 
 /**
- * @fileOverview OnboardingPage (Formulário Controlado + Sincronização de Sessão)
+ * @fileOverview OnboardingPage
  * 
  * Coleta os dados comerciais para a criação da primeira loja.
- * Implementa sincronização forçada de sessão para garantir que auth.uid() não seja null.
- * Segue premissas: CNPJ sem máscara, fetch via useEffect, inputs 100% controlados.
+ * Bloqueia renderização se o usuário já possuir uma loja.
  */
 
 import { useState, useEffect } from 'react';
@@ -41,19 +40,19 @@ const onboardingSchema = z.object({
 type OnboardingValues = z.infer<typeof onboardingSchema>;
 
 export default function OnboardingPage() {
-  const { createStore, storeStatus } = useAuth();
+  const { createStore, bootstrap, loading } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingCnpj, setIsLoadingCnpj] = useState(false);
   const [step, setStep] = useState(1);
 
-  // Guarda rígida: Se o usuário já tem uma loja, redireciona imediatamente
+  // Redirecionamento de segurança para evitar acesso indevido
   useEffect(() => {
-    if (storeStatus === 'has_store') {
+    if (!loading && bootstrap && (bootstrap.has_store || bootstrap.is_member)) {
       router.replace('/dashboard');
     }
-  }, [storeStatus, router]);
+  }, [bootstrap, loading, router]);
 
   const form = useForm<OnboardingValues>({
     resolver: zodResolver(onboardingSchema),
@@ -73,9 +72,7 @@ export default function OnboardingPage() {
   });
 
   const { setValue, watch, trigger } = form;
-
-  const cnpjValue = watch('cnpj') || '';
-  const cleanCnpj = cnpjValue.replace(/\D/g, '');
+  const cleanCnpj = (watch('cnpj') || '').replace(/\D/g, '');
 
   useEffect(() => {
     if (cleanCnpj.length !== 14) return;
@@ -87,7 +84,6 @@ export default function OnboardingPage() {
         if (!response.ok) throw new Error('CNPJ não encontrado');
         
         const data = await response.json();
-        
         setValue('legal_name', data.razao_social || '');
         setValue('name', data.nome_fantasia || data.razao_social || '');
         setValue('phone', data.ddd_telefone_1 || '');
@@ -98,9 +94,9 @@ export default function OnboardingPage() {
         setValue('state', data.uf || '');
         setValue('number', data.numero || '');
 
-        toast({ title: 'Dados localizados!', description: 'Campos preenchidos automaticamente via BrasilAPI.' });
+        toast({ title: 'Dados localizados!', description: 'Campos preenchidos via BrasilAPI.' });
       } catch (err) {
-        console.warn('[ONBOARDING_CNPJ_AUTOFILL]', err);
+        console.warn('CNPJ Autofill Error', err);
       } finally {
         setIsLoadingCnpj(false);
       }
@@ -111,20 +107,7 @@ export default function OnboardingPage() {
 
   const onSubmit = async (values: OnboardingValues) => {
     setIsSubmitting(true);
-    
     try {
-      const { data: { user: activeUser }, error: userError } = await supabase.auth.getUser();
-
-      if (userError || !activeUser) {
-        toast({
-          variant: 'destructive',
-          title: 'Sessão instável',
-          description: 'Não foi possível validar sua conta. Por favor, recarregue a página.',
-        });
-        setIsSubmitting(false);
-        return;
-      }
-
       await createStore({
         name: values.name,
         legal_name: values.legal_name,
@@ -140,21 +123,20 @@ export default function OnboardingPage() {
           state: values.state
         }
       });
-
-      toast({ title: 'Configuração concluída!', description: 'Sua loja está pronta para operar.' });
+      toast({ title: 'Configuração concluída!', description: 'Sua loja está pronta.' });
     } catch (error: any) {
-      console.error('[ONBOARDING_SUBMIT_ERROR]', error);
       toast({
         variant: 'destructive',
-        title: 'Falha na criação da loja',
-        description: error.message || 'Verifique sua conexão e tente novamente.'
+        title: 'Erro no Cadastro',
+        description: error.message || 'Falha ao criar loja.'
       });
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  if (storeStatus === 'has_store') {
+  // Se o usuário já tem loja, não renderiza nada para evitar flash
+  if (bootstrap && (bootstrap.has_store || bootstrap.is_member)) {
     return null;
   }
 
@@ -169,7 +151,7 @@ export default function OnboardingPage() {
         </div>
         <Progress value={step === 1 ? 50 : 100} className="h-2" />
         <CardDescription>
-          {step === 1 ? 'Primeiro, identifique sua empresa.' : 'Agora, onde sua loja está localizada?'}
+          {step === 1 ? 'Identificação da sua empresa.' : 'Localização da sua unidade.'}
         </CardDescription>
       </CardHeader>
 
@@ -177,7 +159,7 @@ export default function OnboardingPage() {
         <form onSubmit={form.handleSubmit(onSubmit)}>
           <CardContent className="space-y-6">
             {step === 1 ? (
-              <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
+              <div className="space-y-4">
                 <FormField control={form.control} name="cnpj" render={({ field }) => (
                   <FormItem>
                     <FormLabel>CNPJ (Somente números)</FormLabel>
@@ -195,22 +177,14 @@ export default function OnboardingPage() {
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="name" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nome Fantasia</FormLabel>
-                    <FormControl><Input placeholder="Ex: Padaria do Sol" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
+                  <FormItem><FormLabel>Nome Fantasia</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                 )} />
                 <FormField control={form.control} name="legal_name" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Razão Social</FormLabel>
-                    <FormControl><Input placeholder="Ex: Panificadora Sol LTDA" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
+                  <FormItem><FormLabel>Razão Social</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormMessage>
                 )} />
               </div>
             ) : (
-              <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
+              <div className="space-y-4">
                 <FormField control={form.control} name="cep" render={({ field }) => (
                   <FormItem><FormLabel>CEP</FormLabel><FormControl><Input placeholder="00000-000" {...field} /></FormControl><FormMessage /></FormItem>
                 )} />
@@ -242,7 +216,7 @@ export default function OnboardingPage() {
                   </div>
                 </div>
                 <FormField control={form.control} name="phone" render={({ field }) => (
-                  <FormItem><FormLabel>Telefone de Contato</FormLabel><FormControl><Input placeholder="(00) 00000-0000" {...field} /></FormControl><FormMessage /></FormItem>
+                  <FormItem><FormLabel>Telefone</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                 )} />
               </div>
             )}
@@ -250,32 +224,15 @@ export default function OnboardingPage() {
 
           <CardFooter className="flex justify-between border-t pt-6 bg-muted/20">
             {step === 2 && (
-              <Button type="button" variant="ghost" onClick={() => setStep(1)} disabled={isSubmitting}>
-                Voltar
-              </Button>
+              <Button type="button" variant="ghost" onClick={() => setStep(1)} disabled={isSubmitting}>Voltar</Button>
             )}
-            
             {step === 1 ? (
-              <Button 
-                type="button" 
-                className="ml-auto" 
-                onClick={async () => {
-                  const isValid = await trigger(['cnpj', 'name', 'legal_name']);
-                  if (isValid) setStep(2);
-                }}
-              >
-                Próximo <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
+              <Button type="button" className="ml-auto" onClick={async () => {
+                if (await trigger(['cnpj', 'name', 'legal_name'])) setStep(2);
+              }}>Próximo <ArrowRight className="ml-2 h-4 w-4" /></Button>
             ) : (
               <Button type="submit" className="ml-auto" disabled={isSubmitting}>
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> 
-                    Criando Loja...
-                  </>
-                ) : (
-                  'Concluir Cadastro'
-                )}
+                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Concluir'}
               </Button>
             )}
           </CardFooter>

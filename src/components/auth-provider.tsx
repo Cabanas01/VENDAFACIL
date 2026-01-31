@@ -3,8 +3,8 @@
 /**
  * @fileOverview AuthProvider Centralizado (Baseado em RPC Bootstrap)
  * 
- * Este provedor gerencia a identidade e o status de acesso do usuário
- * utilizando exclusivamente a RPC get_user_bootstrap_status.
+ * Gerencia a identidade e o status de acesso do usuário utilizando 
+ * exclusivamente a RPC get_user_bootstrap_status como fonte da verdade.
  */
 
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
@@ -74,15 +74,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (rpcError) throw rpcError;
       setBootstrap(status);
 
-      // 2. Se não tem loja nem é membro, interrompe aqui (irá para onboarding)
+      // 2. Se não tem loja nem é membro, o usuário é novo
       if (!status.has_store && !status.is_member) {
         setStore(null);
         setLoading(false);
         return;
       }
 
-      // 3. Se tem acesso, buscar dados operacionais
-      // Nota: Localizamos o store_id baseado no vínculo (owner ou member)
+      // 3. Localizar o store_id baseado no vínculo (owner ou member)
       const { data: ownerStore } = await supabase.from('stores').select('id').eq('user_id', userId).maybeSingle();
       let storeId = ownerStore?.id;
 
@@ -110,7 +109,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (err) {
       console.error('[BOOTSTRAP_ERROR]', err);
-      // Erro na RPC envia para login via redirecionamento no layout
       setBootstrap(null);
     } finally {
       setLoading(false);
@@ -119,7 +117,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshStatus = useCallback(async () => {
     const { data: { user: sessionUser } } = await supabase.auth.getUser();
-    if (sessionUser) await fetchAppData(sessionUser.id);
+    if (sessionUser) {
+      setLoading(true);
+      await fetchAppData(sessionUser.id);
+    }
   }, [fetchAppData]);
 
   useEffect(() => {
@@ -141,6 +142,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
         setUser({ id: session.user.id, email: session.user.email || '' });
+        setLoading(true);
         await fetchAppData(session.user.id);
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
@@ -153,7 +155,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, [fetchAppData]);
 
-  // Actions
   const createStore = useCallback(async (storeData: any) => {
     const { error } = await supabase.rpc('create_new_store', {
       p_name: storeData.name,

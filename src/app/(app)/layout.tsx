@@ -3,7 +3,8 @@
 /**
  * @fileOverview AppLayout (Guardião Determinístico de Navegação)
  * 
- * Centraliza a lógica de redirecionamento baseada exclusivamente no BootstrapStatus.
+ * Centraliza a lógica de redirecionamento baseada no BootstrapStatus.
+ * Bloqueia renderização de filhos até que o estado de acesso seja coerente com a rota.
  */
 
 import { useAuth } from '@/components/auth-provider';
@@ -33,34 +34,34 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // 2. Erro no bootstrap ou RPC falhou -> Login (Segurança)
+    // 2. Erro no bootstrap -> Login
     if (!bootstrap) {
       router.replace('/login');
       return;
     }
 
-    // 3. Regra: Sem loja e sem vínculo -> Onboarding
-    const needsOnboarding = !bootstrap.has_store && !bootstrap.is_member;
-    if (needsOnboarding) {
+    // 3. Regra de Ouro: Novos usuários sem loja -> Força Onboarding
+    const isNewUser = !bootstrap.has_store && !bootstrap.is_member;
+    if (isNewUser) {
       if (pathname !== '/onboarding') {
         router.replace('/onboarding');
       }
       return;
     }
 
-    // 4. Regra: Tem loja -> Proíbe Onboarding
-    if (pathname === '/onboarding') {
+    // 4. Regra de Ouro: Usuários com loja -> Proíbe Onboarding
+    if (pathname === '/onboarding' && !isNewUser) {
       router.replace('/dashboard');
       return;
     }
 
-    // 5. Regra: Admin
+    // 5. Restrição de Admin
     if (isAdminPath && !bootstrap.is_admin) {
       router.replace('/dashboard');
       return;
     }
 
-    // 6. Paywall (Apenas para rotas comerciais)
+    // 6. Paywall (apenas rotas comerciais)
     const isPaywallPath = !['/billing', '/settings', '/ai'].some(p => pathname.startsWith(p)) && !isAdminPath;
     if (isPaywallPath && accessStatus && !accessStatus.acesso_liberado) {
       router.replace('/billing');
@@ -68,22 +69,29 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   }, [user, loading, bootstrap, accessStatus, pathname, router, isAdminPath]);
 
-  // Loading Central
+  // Loader Central: Impede qualquer renderização durante a resolução de estados
   if (loading || (user && !bootstrap)) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground animate-pulse font-medium">Validando credenciais comerciais...</p>
+        <p className="text-sm text-muted-foreground animate-pulse font-medium uppercase tracking-widest">Sincronizando Sistema...</p>
       </div>
     );
   }
 
-  // Curto-circuito de renderização para evitar flashes
+  // Curto-circuito de segurança: Impede flashes de conteúdo errado
   if (!user || !bootstrap) return null;
 
-  const needsOnboarding = !bootstrap.has_store && !bootstrap.is_member;
-  if (needsOnboarding && pathname !== '/onboarding') return null;
-  if (!needsOnboarding && pathname === '/onboarding') return null;
+  const isNewUser = !bootstrap.has_store && !bootstrap.is_member;
+  const isIncorrectOnboarding = isNewUser ? pathname !== '/onboarding' : pathname === '/onboarding';
+  
+  if (isIncorrectOnboarding) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   // Layout Especial para Onboarding
   if (pathname === '/onboarding') {
