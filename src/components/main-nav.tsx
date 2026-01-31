@@ -35,7 +35,6 @@ import {
   ChevronDown,
   CreditCard,
   Users,
-  LineChart,
   Target,
   Users2,
   Sparkles
@@ -155,7 +154,7 @@ export function MainNav() {
                 </Avatar>
                 <div className="flex flex-col items-start overflow-hidden">
                   <span className="text-[10px] font-black truncate w-full">{user?.email}</span>
-                  <span className="text-[9px] text-primary uppercase font-black tracking-tighter">Conta Ativa</span>
+                  <span className="text-[9px] text-primary uppercase font-bold tracking-tighter">CONTA ATIVA</span>
                 </div>
               </div>
               <ChevronDown className="h-3 w-3 text-muted-foreground" />

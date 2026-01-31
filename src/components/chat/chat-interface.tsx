@@ -6,7 +6,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Bot, User, Send, Loader2, Sparkles, AlertCircle, Settings } from 'lucide-react';
+import { Bot, User, Send, Loader2, Sparkles, Settings } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { askAi } from '@/ai/flows/ai-chat-flow';
 
@@ -68,18 +68,22 @@ export function ChatInterface({ title, subtitle, contextData, scope, suggestions
 
   if (!isAiConfigured) {
     return (
-      <Card className="border-yellow-500/20 bg-yellow-50/5">
+      <Card className="border-yellow-200 bg-yellow-50/30">
         <CardContent className="flex flex-col items-center justify-center py-20 text-center space-y-6">
-          <div className="p-4 bg-yellow-100 rounded-full">
+          <div className="p-4 bg-yellow-100/50 rounded-full border border-yellow-200">
             <Settings className="h-12 w-12 text-yellow-600 animate-pulse" />
           </div>
-          <div className="space-y-2 max-w-md">
-            <h3 className="text-xl font-bold text-yellow-900">Configuração de IA Necessária</h3>
-            <p className="text-sm text-yellow-700">
-              Para ativar o assistente inteligente, você precisa configurar a chave <strong>GOOGLE_GENAI_API_KEY</strong> no seu arquivo <code>.env.local</code>.
+          <div className="space-y-3 max-w-md">
+            <h3 className="text-2xl font-black text-yellow-900 font-headline uppercase tracking-tighter">Configuração de IA Necessária</h3>
+            <p className="text-sm text-yellow-800/80 leading-relaxed px-4">
+              Para ativar o assistente inteligente, você precisa configurar a chave <strong className="text-yellow-900">GOOGLE_GENAI_API_KEY</strong> no seu arquivo <code className="bg-yellow-100 px-1 rounded">.env.local</code>.
             </p>
           </div>
-          <Button variant="outline" className="border-yellow-300 text-yellow-800 hover:bg-yellow-100" onClick={() => window.location.reload()}>
+          <Button 
+            variant="outline" 
+            className="border-yellow-400 text-yellow-900 hover:bg-yellow-100 font-bold h-12 px-8" 
+            onClick={() => window.location.reload()}
+          >
             Verificar Novamente
           </Button>
         </CardContent>

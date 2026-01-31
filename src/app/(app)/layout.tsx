@@ -2,6 +2,8 @@
 
 /**
  * @fileOverview AppLayout (Guardião Determinístico + TopBar Global)
+ * 
+ * Implementação otimizada para refletir a marca VendaFácil conforme design do usuário.
  */
 
 import { useAuth } from '@/components/auth-provider';
@@ -103,11 +105,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <header className="h-16 border-b bg-background flex items-center justify-between px-6 sticky top-0 z-50">
             <div className="flex items-center gap-4">
               <div className="flex flex-col">
-                <h3 className="text-sm font-black tracking-tighter uppercase text-primary">{store?.name || 'VendaFácil'}</h3>
+                <h3 className="text-sm font-black tracking-tighter uppercase text-primary">
+                  {store?.name || 'VendaFácil'}
+                </h3>
                 <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="text-[9px] h-4 font-bold uppercase tracking-wider">{accessStatus?.plano_nome || 'Free'}</Badge>
-                  <Badge variant="secondary" className={cmvGlobal > 40 ? "text-[9px] h-4 bg-red-50 text-red-600 border-red-100" : "text-[9px] h-4 bg-green-50 text-green-600 border-green-100"}>
-                    CMV: {cmvGlobal.toFixed(0)}%
+                  <Badge variant="outline" className="text-[9px] h-4 font-bold uppercase tracking-wider bg-muted/50 border-primary/10">
+                    {accessStatus?.plano_nome || 'Free'}
+                  </Badge>
+                  <Badge 
+                    variant="secondary" 
+                    className={cmvGlobal > 40 ? "text-[9px] h-4 bg-red-50 text-red-600 border-red-100" : "text-[9px] h-4 bg-green-50 text-green-600 border-green-100"}
+                  >
+                    CMV {cmvGlobal.toFixed(0)}%
                   </Badge>
                 </div>
               </div>
