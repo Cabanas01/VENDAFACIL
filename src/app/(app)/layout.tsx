@@ -27,7 +27,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   /**
    * 🧱 REGRA DE OURO: DEFINIÇÃO DE NOVO USUÁRIO
-   * Só é novo usuário quem NÃO tem loja, NÃO é membro E NÃO é admin.
+   * Só é novo usuário quem NÃO tem loja, NÃO é membro E NÃO é admin do sistema.
    */
   const isNewUser = useMemo(() => {
     if (!bootstrap) return false;
@@ -61,8 +61,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
 
     // 4. Paywall (Apenas para rotas comerciais de usuários não-admin)
-    const isPaywallPath = !['/billing', '/settings', '/ai'].some(p => pathname.startsWith(p)) && !isAdminPath && pathname !== '/onboarding';
-    if (isPaywallPath && !bootstrap.is_admin && accessStatus && !accessStatus.acesso_liberado) {
+    const isConfigOrAdminPath = ['/billing', '/settings', '/ai', '/admin'].some(p => pathname.startsWith(p));
+    if (!isConfigOrAdminPath && pathname !== '/onboarding' && !bootstrap.is_admin && accessStatus && !accessStatus.acesso_liberado) {
       router.replace('/billing');
     }
 
@@ -76,12 +76,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground animate-pulse font-medium uppercase tracking-widest">Validando Perfil...</p>
+        <p className="text-sm text-muted-foreground animate-pulse font-medium uppercase tracking-widest">Sincronizando Perfil...</p>
       </div>
     );
   }
 
-  // Se o usuário já existe e está tentando ver o onboarding, ou se é novo e não está no onboarding, bloqueamos.
+  // Verificação síncrona para evitar flashes
   const isIncorrectRoute = isNewUser ? pathname !== '/onboarding' : pathname === '/onboarding';
   
   if (user && bootstrap && isIncorrectRoute) {
@@ -96,7 +96,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   // Layout para Onboarding (Funil Exclusivo)
   if (pathname === '/onboarding') {
-    return <main className="min-h-screen flex items-center justify-center bg-muted/5 w-full">{children}</main>;
+    return <main className="min-h-screen flex items-center justify-center bg-muted/5 w-full p-4">{children}</main>;
   }
 
   return (

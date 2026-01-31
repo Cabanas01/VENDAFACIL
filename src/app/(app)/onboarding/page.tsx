@@ -4,7 +4,7 @@
  * @fileOverview OnboardingPage
  * 
  * Coleta os dados comerciais para a criação da primeira loja.
- * Não possui mais lógica de redirecionamento; esta é responsabilidade do AppLayout.
+ * Esta página é puramente visual; o controle de acesso é feito no AppLayout.
  */
 
 import { useState, useEffect } from 'react';
@@ -84,7 +84,7 @@ export default function OnboardingPage() {
         setValue('state', data.uf || '');
         setValue('number', data.numero || '');
 
-        toast({ title: 'Dados localizados!', description: 'Campos preenchidos via BrasilAPI.' });
+        toast({ title: 'Dados localizados!', description: 'Campos preenchidos automaticamente.' });
       } catch (err) {
         console.warn('CNPJ Autofill Error', err);
       } finally {
@@ -113,7 +113,7 @@ export default function OnboardingPage() {
           state: values.state
         }
       });
-      toast({ title: 'Configuração concluída!', description: 'Sua loja está pronta.' });
+      toast({ title: 'Configuração concluída!', description: 'Bem-vindo ao VendaFácil.' });
     } catch (error: any) {
       toast({
         variant: 'destructive',
@@ -129,14 +129,14 @@ export default function OnboardingPage() {
     <Card className="shadow-2xl w-full border-border/50 max-w-lg mx-auto">
       <CardHeader className="space-y-4">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-2xl font-headline font-bold text-primary">VendaFácil Setup</CardTitle>
+          <CardTitle className="text-2xl font-headline font-bold text-primary">Configuração Inicial</CardTitle>
           <div className="bg-primary/10 p-2 rounded-lg">
             <Store className="h-6 w-6 text-primary" />
           </div>
         </div>
         <Progress value={step === 1 ? 50 : 100} className="h-2" />
         <CardDescription>
-          {step === 1 ? 'Identificação da sua empresa.' : 'Localização da sua unidade.'}
+          {step === 1 ? 'Identificação da sua empresa.' : 'Localização e contato.'}
         </CardDescription>
       </CardHeader>
 
@@ -209,7 +209,7 @@ export default function OnboardingPage() {
                   </div>
                 </div>
                 <FormField control={form.control} name="phone" render={({ field }) => (
-                  <FormItem><FormLabel>Telefone</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                  <FormItem><FormLabel>Telefone de Contato</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                 )} />
               </div>
             )}
@@ -221,11 +221,12 @@ export default function OnboardingPage() {
             )}
             {step === 1 ? (
               <Button type="button" className="ml-auto" onClick={async () => {
-                if (await trigger(['cnpj', 'name', 'legal_name'])) setStep(2);
+                const isValid = await trigger(['cnpj', 'name', 'legal_name']);
+                if (isValid) setStep(2);
               }}>Próximo <ArrowRight className="ml-2 h-4 w-4" /></Button>
             ) : (
               <Button type="submit" className="ml-auto" disabled={isSubmitting}>
-                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Concluir'}
+                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Finalizar Cadastro'}
               </Button>
             )}
           </CardFooter>
