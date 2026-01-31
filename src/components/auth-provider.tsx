@@ -69,15 +69,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     try {
       // 1. Resolver o ID da loja (Tenant)
-      // Usamos a função do browser que já deve estar com o token anexado
       const { data: ownerStore, error: ownerError } = await supabase
         .from('stores')
         .select('id')
         .eq('user_id', userId)
         .maybeSingle();
 
-      // Erro 42501 aqui indica que o auth.uid() no banco é null ou o token falhou
       if (ownerError) {
+        // Erro 42501 aqui indica que o auth.uid() no banco é null ou o token falhou
         console.error('[AUTH_PROVIDER] RLS Reject on stores:', ownerError.code);
         if (!silent) setStoreStatus('error');
         return;
@@ -116,10 +115,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         supabase.from('customers').select('*').eq('store_id', storeId).order('name'),
       ]);
 
-      if (storeRes.error) {
-        console.error('[AUTH_PROVIDER] Failed to fetch store details:', storeRes.error.code);
-        throw storeRes.error;
-      }
+      if (storeRes.error) throw storeRes.error;
 
       setAccessStatus(statusRes.data?.[0] || null);
       setStore(storeRes.data as Store);
@@ -138,17 +134,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const initAuth = async () => {
-      // IMPORTANTE: getUser() é mais seguro que getSession() para garantir que o token está hidratado
-      const { data: { user: sessionUser } } = await supabase.auth.getUser();
-      setUser(sessionUser);
-      
-      if (sessionUser) {
-        await fetchStoreData(sessionUser.id);
-      } else {
-        setStoreStatus('no_store'); 
+      try {
+        // Forçamos a validação do JWT para garantir que auth.uid() esteja preenchido
+        const { data: { user: sessionUser }, error: authErr } = await supabase.auth.getUser();
+        
+        if (authErr) throw authErr;
+        
+        setUser(sessionUser);
+        
+        if (sessionUser) {
+          await fetchStoreData(sessionUser.id);
+        } else {
+          setStoreStatus('no_store'); 
+        }
+      } catch (err) {
+        console.error('[AUTH_PROVIDER] Identity hydration failed');
+        setStoreStatus('no_store');
+      } finally {
+        setLoading(false);
       }
-      
-      setLoading(false);
     };
 
     initAuth();
@@ -158,7 +162,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(newUser);
       
       if (newUser) {
-        // Recarregar dados se o usuário mudou ou logou
         await fetchStoreData(newUser.id, true);
       } else {
         setStore(null);
@@ -170,6 +173,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, [fetchStoreData]);
 
+  // Restante das implementações (createStore, updateStore, addSale, etc)
   const createStore = useCallback(async (storeData: any) => {
     const { data: { user: currentUser } } = await supabase.auth.getUser();
     if (!currentUser) throw new Error('Usuário não autenticado.');

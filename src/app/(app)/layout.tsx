@@ -77,23 +77,24 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // RENDER: Erro de Comunicação (Geralmente RLS 42501 persistente)
+  // RENDER: Falha na Comunicação (Conforme Screenshot)
   if (storeStatus === 'error') {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center">
-        <div className="bg-destructive/10 p-4 rounded-full mb-4">
-          <AlertTriangle className="h-12 w-12 text-destructive" />
+      <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-500">
+        <div className="bg-destructive/10 p-6 rounded-full mb-6">
+          <AlertTriangle className="h-16 w-16 text-destructive" />
         </div>
-        <h1 className="text-xl font-bold mb-2">Erro de Identidade</h1>
-        <p className="text-muted-foreground mb-6 max-w-sm">
-          O banco de dados não reconheceu sua identidade ou o acesso foi negado. Isso pode ocorrer por um token expirado ou falha nas permissões.
+        <h1 className="text-3xl font-headline font-bold mb-3 tracking-tight">Falha na Comunicação</h1>
+        <p className="text-muted-foreground mb-8 max-w-sm mx-auto leading-relaxed">
+          Ocorreu um erro ao carregar os dados da sua loja. Isso pode ser instabilidade na conexão ou permissão de acesso.
         </p>
-        <div className="flex gap-2">
-          <Button onClick={() => user && fetchStoreData(user.id)} variant="outline">
-            <RefreshCcw className="mr-2 h-4 w-4" /> Tentar Novamente
-          </Button>
-          <Button onClick={() => window.location.reload()}>Recarregar App</Button>
-        </div>
+        <Button 
+          onClick={() => user && fetchStoreData(user.id)} 
+          size="lg" 
+          className="gap-2 px-8 h-12 shadow-lg"
+        >
+          <RefreshCcw className="h-4 w-4" /> Tentar Reconectar
+        </Button>
       </div>
     );
   }

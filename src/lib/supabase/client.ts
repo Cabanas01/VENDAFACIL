@@ -8,7 +8,7 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 /**
  * Garantia de Singleton para o Browser Client.
- * Evita múltiplas instâncias que podem dessincronizar o estado da sessão.
+ * Evita múltiplas instâncias que podem dessincronizar o estado da sessão e causar erro 42501.
  */
 let client: ReturnType<typeof createBrowserClient<Database>> | undefined;
 
