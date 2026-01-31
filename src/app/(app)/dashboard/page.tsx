@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import type { DateRange } from 'react-day-picker';
-import { addDays, startOfToday, endOfDay } from 'date-fns';
+import { addDays, startOfToday, endOfDay, parseISO } from 'date-fns';
 import {
   DollarSign,
   ShoppingCart,
@@ -11,6 +11,7 @@ import {
   Package,
   CheckCircle,
   Info,
+  Wallet,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -52,164 +53,56 @@ export default function DashboardPage() {
 
   const router = useRouter();
 
-  // 🔒 BLINDAGEM TOTAL (NUNCA QUEBRA)
-  const safeSales = Array.isArray(sales) ? sales : [];
-  const safeProducts = Array.isArray(products) ? products : [];
-  const safeCashRegisters = Array.isArray(cashRegisters)
-    ? cashRegisters
-    : [];
-
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: addDays(startOfToday(), -6),
     to: new Date(),
   });
 
-  // 🔄 Garante carregamento da loja
-  useEffect(() => {
-    if (user && storeStatus === 'unknown') {
-      fetchStoreData(user.id);
-    }
-  }, [user, storeStatus, fetchStoreData]);
+  // 🔒 BLINDAGEM E REATIVIDADE
+  const safeSales = useMemo(() => Array.isArray(sales) ? sales : [], [sales]);
+  const safeProducts = useMemo(() => Array.isArray(products) ? products : [], [products]);
+  const safeCashRegisters = useMemo(() => Array.isArray(cashRegisters) ? cashRegisters : [], [cashRegisters]);
 
-  // 📅 FILTRO DE VENDAS
-  const filteredSales = safeSales.filter((sale) => {
-    if (!dateRange?.from) return false;
-
-    const saleDate = new Date(sale.created_at);
+  // 📅 FILTRO DE VENDAS (Sincronizado com o período selecionado)
+  const filteredSales = useMemo(() => {
+    if (!dateRange?.from) return [];
     const fromDate = startOfToday();
-    const toDate = dateRange.to
-      ? endOfDay(dateRange.to)
-      : endOfDay(dateRange.from);
+    const toDate = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
 
-    return saleDate >= fromDate && saleDate <= toDate;
-  });
+    return safeSales.filter((sale) => {
+      const saleDate = parseISO(sale.created_at);
+      return saleDate >= fromDate && saleDate <= toDate;
+    });
+  }, [safeSales, dateRange]);
 
-  // 📊 KPIs
-  const totalRevenue = filteredSales.reduce(
-    (sum, sale) => sum + sale.total_cents,
-    0
-  );
-  const totalSales = filteredSales.length;
-  const averageTicket =
-    totalSales > 0 ? totalRevenue / totalSales : 0;
+  // 📊 KPIs PRINCIPAIS
+  const totalRevenue = useMemo(() => filteredSales.reduce((sum, s) => sum + s.total_cents, 0), [filteredSales]);
+  const totalSalesCount = filteredSales.length;
+  const averageTicket = totalSalesCount > 0 ? totalRevenue / totalSalesCount : 0;
 
-  // 💳 VENDAS POR MÉTODO
-  const salesByPaymentMethod = filteredSales.reduce(
-    (acc, sale) => {
-      acc[sale.payment_method] =
-        (acc[sale.payment_method] || 0) + sale.total_cents;
+  // 💰 LÓGICA DE CAIXA (Sincronizada com o PDV)
+  const openCashRegister = useMemo(() => safeCashRegisters.find(cr => cr.closed_at === null), [safeCashRegisters]);
+  
+  const salesInOpenSession = useMemo(() => {
+    if (!openCashRegister) return { total: 0, cash: 0 };
+    const fromDate = parseISO(openCashRegister.opened_at);
+    
+    return safeSales.filter(s => parseISO(s.created_at) >= fromDate).reduce((acc, s) => {
+      acc.total += s.total_cents;
+      if (s.payment_method === 'cash') acc.cash += s.total_cents;
       return acc;
-    },
-    {} as Record<'cash' | 'pix' | 'card', number>
-  );
+    }, { total: 0, cash: 0 });
+  }, [safeSales, openCashRegister]);
 
-  // 🛒 VENDAS POR PRODUTO
-  const salesByProduct = filteredSales
-    .flatMap((sale) =>
-      Array.isArray(sale.items) ? sale.items : []
-    )
-    .reduce((acc, item) => {
-      acc[item.product_name_snapshot] =
-        (acc[item.product_name_snapshot] || 0) +
-        item.subtotal_cents;
-      return acc;
-    }, {} as Record<string, number>);
-
-  const topProducts = Object.entries(salesByProduct)
-    .sort((a, b) => b[1] - a[1])
-    .map(([name, total]) => ({ name, total }));
-
-  // 🧾 VENDAS POR CATEGORIA
-  const salesByCategory = filteredSales
-    .flatMap((sale) =>
-      Array.isArray(sale.items) ? sale.items : []
-    )
-    .map((item) => {
-      const product = safeProducts.find(
-        (p) => p.id === item.product_id
-      );
-      return {
-        ...item,
-        category: product?.category || 'Sem categoria',
-      };
-    })
-    .reduce((acc, item) => {
-      acc[item.category] =
-        (acc[item.category] || 0) + item.quantity;
-      return acc;
-    }, {} as Record<string, number>);
-
-  const topCategories = Object.entries(salesByCategory)
-    .sort((a, b) => b[1] - a[1])
-    .map(([name, total]) => ({ name, total }));
-
-  // 📦 ESTOQUE POR CATEGORIA
-  const stockByCategory = safeProducts.reduce((acc, product) => {
-    const category = product.category || 'Sem categoria';
-    acc[category] = (acc[category] || 0) + product.stock_qty;
-    return acc;
-  }, {} as Record<string, number>);
-
-  const stockByCategoryData = Object.entries(stockByCategory).map(
-    ([name, total]) => ({ name, total })
-  );
-
-  // ⚠️ INSIGHTS
-  const criticalStockProducts = safeProducts.filter(
-    (p) =>
-      p.active &&
-      p.stock_qty > 0 &&
-      p.min_stock_qty &&
-      p.stock_qty <= p.min_stock_qty
-  );
-
-  const productsWithoutSale = safeProducts.filter(
-    (p) =>
-      p.stock_qty > 0 &&
-      !filteredSales.some((s) =>
-        (Array.isArray(s.items) ? s.items : []).some(
-          (i) => i.product_id === p.id
-        )
-      )
-  );
-
-  // 💰 CAIXA
-  const openCashRegister = safeCashRegisters.find(
-    (cr) => cr.closed_at === null
-  );
-
-  const salesInOpenRegister = openCashRegister
-    ? safeSales.filter(
-        (s) =>
-          new Date(s.created_at) >=
-          new Date(openCashRegister.opened_at)
-      )
-    : [];
-
-  const revenueInOpenRegister = salesInOpenRegister.reduce(
-    (sum, sale) => sum + sale.total_cents,
-    0
-  );
-
-  const expectedClosing = openCashRegister
-    ? openCashRegister.opening_amount_cents +
-      revenueInOpenRegister
+  const currentCashInDrawer = openCashRegister 
+    ? openCashRegister.opening_amount_cents + salesInOpenSession.cash 
     : 0;
 
-  // 🧱 ESTADOS DE BLOQUEIO
-  if (!user) {
-    return <div className="p-6">Usuário não autenticado</div>;
-  }
+  // 🧱 ESTADOS DE BLOQUEIO / CARREGAMENTO
+  if (!user) return <div className="p-6">Validando sessão...</div>;
+  if (storeStatus === 'loading_auth' || storeStatus === 'loading_store') return <div className="p-6">Sincronizando loja...</div>;
+  if (storeStatus === 'no_store') return <div className="p-6">Nenhuma loja configurada.</div>;
 
-  if (storeStatus === 'loading') {
-    return <div className="p-6">Carregando loja...</div>;
-  }
-
-  if (storeStatus === 'none') {
-    return <div className="p-6">Você ainda não tem uma loja</div>;
-  }
-
-  // 🖥️ RENDER
   return (
     <>
       <PageHeader title="Dashboard">
@@ -220,66 +113,56 @@ export default function DashboardPage() {
       </PageHeader>
 
       <div className="space-y-6">
-        {/* KPIs */}
+        {/* KPIs Superior */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
           <Card>
-            <CardHeader className="flex justify-between pb-2">
-              <CardTitle>Faturamento</CardTitle>
-              <DollarSign />
+            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+              <CardTitle className="text-sm font-medium">Faturamento (Período)</CardTitle>
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
-                {formatCurrency(totalRevenue)}
-              </div>
+              <div className="text-2xl font-black">{formatCurrency(totalRevenue)}</div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex justify-between pb-2">
-              <CardTitle>Vendas</CardTitle>
-              <ShoppingCart />
+            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+              <CardTitle className="text-sm font-medium">Vendas Realizadas</CardTitle>
+              <ShoppingCart className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
-                {totalSales}
-              </div>
+              <div className="text-2xl font-black">{totalSalesCount}</div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex justify-between pb-2">
-              <CardTitle>Ticket médio</CardTitle>
-              <TrendingUp />
+            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+              <CardTitle className="text-sm font-medium">Ticket Médio</CardTitle>
+              <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
-                {formatCurrency(averageTicket)}
-              </div>
+              <div className="text-2xl font-black">{formatCurrency(averageTicket)}</div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex justify-between pb-2">
-              <CardTitle>Caixa</CardTitle>
-              {openCashRegister ? (
-                <CheckCircle className="text-green-500" />
-              ) : (
-                <Info />
-              )}
+          <Card className={openCashRegister ? "border-green-500/50 bg-green-50/5" : ""}>
+            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+              <CardTitle className="text-sm font-medium">Caixa Aberto</CardTitle>
+              <Wallet className={cn("h-4 w-4", openCashRegister ? "text-green-500" : "text-muted-foreground")} />
             </CardHeader>
             <CardContent>
               {openCashRegister ? (
-                <>
-                  <div className="text-green-600 font-bold">
-                    Aberto
-                  </div>
-                  <p>
-                    Previsto:{' '}
-                    {formatCurrency(expectedClosing)}
-                  </p>
-                </>
+                <div className="space-y-1">
+                  <div className="text-2xl font-black text-green-600">{formatCurrency(currentCashInDrawer)}</div>
+                  <p className="text-[10px] text-muted-foreground uppercase font-bold">Saldo em Dinheiro</p>
+                </div>
               ) : (
-                <div>Fechado</div>
+                <div className="flex flex-col gap-1">
+                  <div className="text-xl font-bold text-muted-foreground">Fechado</div>
+                  <Button variant="link" className="h-auto p-0 text-[10px] uppercase font-bold" onClick={() => router.push('/cash')}>
+                    Abrir Caixa Agora
+                  </Button>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -287,19 +170,28 @@ export default function DashboardPage() {
 
         {/* GRÁFICOS */}
         <div className="grid gap-6 md:grid-cols-2">
-          <SalesByProductChart data={topProducts} />
           <SalesByPaymentMethodChart
-            data={Object.entries(salesByPaymentMethod).map(
-              ([name, value]) => ({
-                name: name as 'cash' | 'pix' | 'card',
-                value,
-              })
-            )}
+            data={filteredSales.reduce((acc, s) => {
+              const existing = acc.find(item => item.name === s.payment_method);
+              if (existing) existing.value += s.total_cents;
+              else acc.push({ name: s.payment_method as any, value: s.total_cents });
+              return acc;
+            }, [] as { name: 'cash' | 'pix' | 'card', value: number }[])}
           />
-          <StockByCategoryChart data={stockByCategoryData} />
-          <SalesByCategoryChart data={topCategories} />
+          <SalesByProductChart 
+            data={Object.entries(filteredSales.flatMap(s => s.items || []).reduce((acc, item) => {
+              acc[item.product_name_snapshot] = (acc[item.product_name_snapshot] || 0) + item.subtotal_cents;
+              return acc;
+            }, {} as Record<string, number>))
+            .map(([name, total]) => ({ name, total }))
+            .sort((a,b) => b.total - a.total)} 
+          />
         </div>
       </div>
     </>
   );
+}
+
+function cn(...classes: string[]) {
+  return classes.filter(Boolean).join(' ');
 }

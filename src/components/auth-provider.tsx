@@ -69,7 +69,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!silent) setStoreStatus('loading_store');
     
     try {
-      console.log('[BOOTSTRAP] Iniciando carregamento de dados do tenant:', userId);
+      console.log('[BOOTSTRAP] Sincronizando dados do tenant:', userId);
 
       const { data: ownerStore, error: ownerError } = await supabase
         .from('stores')
@@ -78,7 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle();
 
       if (ownerError) {
-        console.error('[BOOTSTRAP] Erro RLS ao ler lojas:', ownerError.code);
+        console.error('[BOOTSTRAP] Erro RLS:', ownerError.code);
         if (!silent) setStoreStatus('error');
         return;
       }
@@ -93,7 +93,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .maybeSingle();
 
         if (memberError) {
-          console.error('[BOOTSTRAP] Erro RLS ao ler membros:', memberError.code);
           if (!silent) setStoreStatus('error');
           return;
         }
@@ -101,7 +100,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (!storeId) {
-        console.log('[BOOTSTRAP] Usuário sem loja vinculada.');
         setStore(null);
         if (!silent) setStoreStatus('no_store');
         return;
@@ -125,11 +123,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setCustomers(customersRes.data as Customer[] || []);
       setCashRegistersState(cashRes.data as CashRegister[] || []);
       
-      console.log('[BOOTSTRAP] Snapshot do tenant carregado com sucesso.');
       if (!silent) setStoreStatus('has_store');
 
     } catch (err: any) {
-      console.error('[BOOTSTRAP] Falha crítica no carregamento de dados:', err);
+      console.error('[BOOTSTRAP] Falha técnica:', err);
       if (!silent) setStoreStatus('error');
     }
   }, []);
@@ -137,32 +134,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        console.log('[AUTH] Validando identidade do usuário...');
-        const { data: { user: sessionUser }, error: authErr } = await supabase.auth.getUser();
+        const { data: { user: sessionUser } } = await supabase.auth.getUser();
         
-        if (authErr || !sessionUser) {
-          console.warn('[AUTH] Usuário não logado ou sessão expirada.');
+        if (!sessionUser) {
           setStoreStatus('no_store');
           setLoading(false);
           return;
         }
         
-        // Fetch full profile
         const { data: profile } = await supabase.from('users').select('*').eq('id', sessionUser.id).single();
-        if (profile) {
-          setUser(profile as User);
-        } else {
-          // Fallback minimal user if profile entry doesn't exist yet
-          setUser({ id: sessionUser.id, email: sessionUser.email || '' } as User);
-        }
+        setUser(profile ? (profile as User) : ({ id: sessionUser.id, email: sessionUser.email || '' } as User));
         
-        if (sessionUser) {
-          setTimeout(() => fetchStoreData(sessionUser.id), 50);
-        } else {
-          setStoreStatus('no_store'); 
-        }
+        await fetchStoreData(sessionUser.id);
       } catch (err) {
-        console.error('[AUTH] Erro interno na hidratação de identidade:', err);
         setStoreStatus('no_store');
       } finally {
         setLoading(false);
@@ -172,7 +156,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     initAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('[AUTH] Evento detectado:', event);
       if (event === 'SIGNED_IN' && session?.user) {
         setUser({ id: session.user.id, email: session.user.email || '' } as User);
         await fetchStoreData(session.user.id, true);
@@ -189,23 +172,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const createStore = useCallback(async (storeData: any) => {
     const { data: { user: currentUser } } = await supabase.auth.getUser();
-    if (!currentUser) throw new Error('Sessão inválida. Faça login novamente.');
+    if (!currentUser) throw new Error('Sessão inválida.');
 
-    console.log('[ONBOARDING] Garantindo perfil do usuário...');
-    // 🛡️ CRITICAL FIX: Ensure the user record exists in public.users 
-    // before the RPC tries to insert into public.stores (which has a FK to users).
-    // This avoids: "insert or update on table 'stores' violates foreign key constraint 'stores_user_id_fkey'"
-    const { error: profileError } = await supabase.from('users').upsert({
-      id: currentUser.id,
-      email: currentUser.email,
-    }, { onConflict: 'id' });
+    await supabase.from('users').upsert({ id: currentUser.id, email: currentUser.email }, { onConflict: 'id' });
 
-    if (profileError) {
-      console.error('[ONBOARDING] Falha ao sincronizar perfil:', profileError);
-      // We continue as the RPC might still work if the FK constraint is somehow deferred or if profile actually exists
-    }
-
-    console.log('[ONBOARDING] Chamando RPC create_new_store...');
     const { data, error } = await supabase.rpc('create_new_store', {
       p_name: storeData.name,
       p_legal_name: storeData.legal_name,
@@ -215,10 +185,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       p_timezone: storeData.timezone || 'America/Sao_Paulo',
     });
 
-    if (error) {
-      console.error('[ONBOARDING] Erro no RPC create_new_store:', error);
-      throw error;
-    }
+    if (error) throw error;
 
     await fetchStoreData(currentUser.id);
     return data as Store;
@@ -280,12 +247,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [store]);
 
   const addSale = useCallback(async (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => {
-    if (!store?.id) throw new Error('Loja não identificada.');
+    if (!store?.id || !user) throw new Error('Loja não identificada.');
 
     const result = await processSaleAction(store.id, cart, paymentMethod);
     if (!result.success) throw new Error(result.error);
 
-    if (user) await fetchStoreData(user.id, true);
+    // 🔥 Sincronização Obrigatória: Força o recarregamento imediato para atualizar Dashboard e Caixa
+    await fetchStoreData(user.id, true);
     return result;
   }, [user, store, fetchStoreData]);
 
