@@ -1,4 +1,3 @@
-
 'use client';
 
 /**
@@ -235,10 +234,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   /**
    * PROXY PARA SERVER ACTION
-   * Envia a venda para o servidor onde o auth.uid() é garantido via cookies.
+   * Resolve definitivamente o problema de auth.uid() ser nulo no RLS.
+   * O cliente apenas chama a função e o servidor processa com contexto de cookies.
    */
   const addSale = useCallback(async (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => {
-    // Dispara a Server Action (Opção 1)
     const result = await processSaleAction(cart, paymentMethod);
     
     if (!result.success) {

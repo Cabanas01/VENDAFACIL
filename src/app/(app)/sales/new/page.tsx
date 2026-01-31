@@ -121,17 +121,18 @@ export default function NewSalePage() {
     
     setIsSubmitting(true);
     try {
-      const result = await addSale(cart, method);
+      // addSale agora chama a Server Action por baixo dos panos
+      await addSale(cart, method);
       
-      if (result.success) {
-        toast({ 
-          title: 'Venda realizada!', 
-          description: `Venda registrada com sucesso.` 
-        });
-        setCart([]);
-        setIsFinalizing(false);
-        router.push('/sales');
-      }
+      toast({ 
+        title: 'Venda realizada!', 
+        description: `Venda de ${formatCurrency(cartTotal)} registrada com sucesso.` 
+      });
+      
+      setCart([]);
+      setIsFinalizing(false);
+      router.push('/sales');
+      
     } catch (error: any) {
       console.error('[PDV_FINALIZE_ERROR]', error);
       toast({
