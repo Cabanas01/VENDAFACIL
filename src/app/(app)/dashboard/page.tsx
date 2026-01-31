@@ -46,20 +46,23 @@ export default function DashboardOverviewPage() {
   });
 
   const filteredSales = useMemo(() => {
+    const safeSales = Array.isArray(sales) ? sales : [];
     if (!dateRange?.from) return [];
     const from = startOfDay(dateRange.from);
     const to = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
 
-    return (sales || []).filter((sale) => {
+    return safeSales.filter((sale) => {
+      if (!sale.created_at) return false;
       const saleDate = parseISO(sale.created_at);
       return saleDate >= from && saleDate <= to;
     });
   }, [sales, dateRange]);
 
   const stats = useMemo(() => {
+    const safeProducts = Array.isArray(products) ? products : [];
     const revenue = filteredSales.reduce((sum, s) => sum + (s.total_cents || 0), 0);
     const cost = filteredSales.flatMap(s => s.items || []).reduce((acc, item) => {
-      const prod = products.find(p => p.id === item.product_id);
+      const prod = safeProducts.find(p => p.id === item.product_id);
       return acc + ((prod?.cost_cents || 0) * (item.quantity || 0));
     }, 0);
     
@@ -69,8 +72,8 @@ export default function DashboardOverviewPage() {
     return { revenue, cost, profit, cmvPercent };
   }, [filteredSales, products]);
 
-  const openCash = useMemo(() => (cashRegisters || []).find(cr => !cr.closed_at), [cashRegisters]);
-  const lowStockCount = useMemo(() => (products || []).filter(p => p.stock_qty <= (p.min_stock_qty || 0)).length, [products]);
+  const openCash = useMemo(() => (Array.isArray(cashRegisters) ? cashRegisters : []).find(cr => !cr.closed_at), [cashRegisters]);
+  const lowStockCount = useMemo(() => (Array.isArray(products) ? products : []).filter(p => p.stock_qty <= (p.min_stock_qty || 0)).length, [products]);
 
   if (storeStatus === 'loading_auth' || storeStatus === 'loading_store') {
     return <div className="p-8 text-center text-muted-foreground">Sincronizando seu painel profissional...</div>;
@@ -155,7 +158,7 @@ export default function DashboardOverviewPage() {
             <Users className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-black">{(customers || []).length}</div>
+            <div className="text-2xl font-black">{(Array.isArray(customers) ? customers : []).length}</div>
             <p className="text-[10px] text-muted-foreground font-bold mt-1">Ativos na base</p>
           </CardContent>
         </Card>

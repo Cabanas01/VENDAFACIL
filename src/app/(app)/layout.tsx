@@ -48,11 +48,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [user, loading, storeStatus, accessStatus, pathname, router, isAdminPath]);
 
   const cmvGlobal = useMemo(() => {
-    if (!sales.length || !products.length) return 0;
-    const revenue = sales.reduce((acc, s) => acc + s.total_cents, 0);
-    const cost = sales.flatMap(s => s.items || []).reduce((acc, item) => {
-      const p = products.find(prod => prod.id === item.product_id);
-      return acc + ((p?.cost_cents || 0) * item.quantity);
+    const safeSales = Array.isArray(sales) ? sales : [];
+    const safeProducts = Array.isArray(products) ? products : [];
+    
+    if (!safeSales.length || !safeProducts.length) return 0;
+    
+    const revenue = safeSales.reduce((acc, s) => acc + (s.total_cents || 0), 0);
+    const cost = safeSales.flatMap(s => s.items || []).reduce((acc, item) => {
+      const p = safeProducts.find(prod => prod.id === item.product_id);
+      return acc + ((p?.cost_cents || 0) * (item.quantity || 0));
     }, 0);
     return revenue > 0 ? (cost / revenue) * 100 : 0;
   }, [sales, products]);
@@ -74,7 +78,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <AlertTriangle className="h-10 w-10 text-red-500 stroke-[1.5]" />
           </div>
           <h1 className="text-2xl font-headline font-bold text-slate-900 mb-4">Falha na Comunicação</h1>
-          <div className="text-slate-500 text-base mb-10">Ocorreu um erro ao carregar os dados da sua loja.</div>
+          <div className="text-slate-500 text-base mb-10">Ocorreu um erro ao carregar os dados da sua loja. Isso pode ser instabilidade na conexão ou permissão de acesso.</div>
           <div className="flex flex-col gap-3">
             <Button onClick={() => user && fetchStoreData(user.id)} className="h-12 px-8 font-semibold gap-2 shadow-sm">
               <RefreshCcw className="h-4 w-4" /> Tentar Reconectar

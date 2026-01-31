@@ -29,6 +29,12 @@ const AiChatOutputSchema = z.object({
 export type AiChatOutput = z.infer<typeof AiChatOutputSchema>;
 
 export async function askAi(input: AiChatInput): Promise<AiChatOutput> {
+  const apiKey = process.env.GOOGLE_GENAI_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  
+  if (!apiKey) {
+    throw new Error('Configuração de IA Pendente: A chave de API do Google não foi encontrada no ambiente do servidor. Verifique o arquivo .env.');
+  }
+
   return aiChatFlow(input);
 }
 
@@ -49,7 +55,6 @@ const aiChatFlow = ai.defineFlow(
          Analise os dados da loja e responda de forma consultiva e direta.
          REGRA DE OURO: Responda apenas com base nos DADOS FORNECIDOS. Use Markdown.`;
 
-    // Filtramos o histórico para garantir a estrutura correta do Genkit 1.x
     const history = (input.messages || []).slice(0, -1).map(m => ({
       role: m.role,
       content: [{ text: m.content }]
