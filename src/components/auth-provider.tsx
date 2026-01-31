@@ -1,10 +1,10 @@
-
 'use client';
 
 /**
  * @fileOverview AuthProvider (MOTOR DE ESTADO PASSIVO)
  * 
  * Centraliza o estado da aplicação e delega ações pesadas para Server Actions.
+ * Melhorado com logs de erro de RLS para diagnóstico de bootstrap.
  */
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -68,6 +68,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!silent) setStoreStatus('loading_store');
     
     try {
+      console.log('[BOOTSTRAP] Buscando dados do tenant para user:', userId);
+
       const { data: ownerStore, error: ownerError } = await supabase
         .from('stores')
         .select('id')
@@ -75,6 +77,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle();
 
       if (ownerError) {
+        console.error('[BOOTSTRAP] Erro ao ler stores:', ownerError.code, ownerError.message);
         if (!silent) setStoreStatus('error');
         return;
       }
@@ -89,6 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .maybeSingle();
 
         if (memberError) {
+          console.error('[BOOTSTRAP] Erro ao ler store_members:', memberError.code, memberError.message);
           if (!silent) setStoreStatus('error');
           return;
         }
@@ -101,6 +105,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      console.log('[BOOTSTRAP] Tenant identificado:', storeId);
+
       const [statusRes, storeRes, productsRes, salesRes, cashRes, customersRes] = await Promise.all([
         supabase.rpc('get_store_access_status', { p_store_id: storeId }),
         supabase.from('stores').select('*').eq('id', storeId).single(),
@@ -110,7 +116,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         supabase.from('customers').select('*').eq('store_id', storeId).order('name'),
       ]);
 
-      if (storeRes.error) throw storeRes.error;
+      if (storeRes.error) {
+        console.error('[BOOTSTRAP] Erro RLS em stores:', storeRes.error.code);
+        throw storeRes.error;
+      }
 
       setAccessStatus(statusRes.data?.[0] || null);
       setStore(storeRes.data as Store);
@@ -121,8 +130,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       if (!silent) setStoreStatus('has_store');
 
-    } catch (err) {
-      console.error('[AUTH_PROVIDER] Sync error:', err);
+    } catch (err: any) {
+      console.error('[BOOTSTRAP] Falha técnica crítica:', err.code || err.message);
       if (!silent) setStoreStatus('error');
     }
   }, []);
@@ -232,22 +241,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return data as Product || null;
   }, [store]);
 
-  /**
-   * Proxy Seguro para Server Action de Vendas
-   */
   const addSale = useCallback(async (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => {
     if (!store?.id) {
       throw new Error('Loja não identificada no estado global. Recarregue o portal.');
     }
 
-    // Chamada direta para a Server Action injetando o store_id do estado autenticado
     const result = await processSaleAction(store.id, cart, paymentMethod);
     
     if (!result.success) {
       throw new Error(result.error);
     }
 
-    // Sincronização pós-sucesso
     if (user) {
       await fetchStoreData(user.id, true);
     }
