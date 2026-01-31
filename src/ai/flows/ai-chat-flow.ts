@@ -50,24 +50,39 @@ const aiChatFlow = ai.defineFlow(
          4. Se não souber, diga que os dados atuais não permitem a conclusão.`
       : `Você é o CONSULTOR DE NEGÓCIOS da loja no VendaFácil.
          Seu objetivo é analisar VENDAS, CMV, PRODUTOS e CLIENTES.
+         Analise os dados fornecidos e responda de forma clara e estratégica.
          RESTRIÇÕES:
          1. Você é um LEITOR de dados. Nunca sugira deletar ou alterar nada.
          2. Foco em lucratividade e gestão de estoque.
          3. Use tom profissional e direto.
          4. Responda apenas com base nos DADOS FORNECIDOS abaixo.`;
 
+    // Pegamos a última pergunta do usuário
+    const userQuestion = input.messages[input.messages.length - 1].content;
+    
+    // Mapeamos o histórico anterior (se houver)
+    const history = input.messages.slice(0, -1).map(m => ({
+      role: m.role,
+      content: [{ text: m.content }]
+    }));
+
     const response = await ai.generate({
       system: systemPrompt,
-      prompt: `CONTEÚDO PARA ANÁLISE:
-      ${input.contextData}
-      
-      PERGUNTA DO USUÁRIO:
-      ${input.messages[input.messages.length - 1].content}`,
-      messages: input.messages.slice(0, -1).map(m => ({
-        role: m.role,
-        content: [{ text: m.content }]
-      }))
+      messages: [
+        ...history,
+        {
+          role: 'user',
+          content: [
+            { text: `CONTEXTO ATUAL DA LOJA (DADOS REAIS):\n${input.contextData}\n\n` },
+            { text: `PERGUNTA DO USUÁRIO: ${userQuestion}` }
+          ]
+        }
+      ]
     });
+
+    if (!response.text) {
+      throw new Error('A IA não gerou uma resposta válida.');
+    }
 
     return { text: response.text };
   }
