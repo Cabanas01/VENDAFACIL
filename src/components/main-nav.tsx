@@ -71,33 +71,37 @@ export function MainNav() {
   };
 
   return (
-    <Sidebar>
-      <SidebarHeader className="p-4 border-b border-sidebar-border bg-primary/5">
+    <Sidebar className="border-r border-sidebar-border bg-[#0f172a] text-white">
+      <SidebarHeader className="p-4 border-b border-white/5">
         <div className="flex items-center gap-3">
-          <Avatar className="h-10 w-10 rounded-lg shadow-sm border border-primary/10">
+          <Avatar className="h-9 w-9 rounded-lg shadow-sm bg-primary/20">
             <AvatarImage src={store?.logo_url ?? undefined} alt={store?.name} />
-            <AvatarFallback className="bg-primary text-primary-foreground font-black text-sm">
+            <AvatarFallback className="bg-primary text-white font-black text-xs">
               {store?.name?.substring(0, 2).toUpperCase() || 'VF'}
             </AvatarFallback>
           </Avatar>
           <div className="flex flex-col overflow-hidden">
             <h2 className="text-sm font-black tracking-tighter text-primary uppercase">VendaFácil</h2>
-            <p className="text-[10px] text-muted-foreground font-bold truncate italic">{store?.name || 'Minha Loja'}</p>
+            <p className="text-[9px] text-white/50 font-bold truncate italic tracking-tight">{store?.name || 'Minha Loja'}</p>
           </div>
         </div>
       </SidebarHeader>
 
-      <SidebarContent className="py-2">
+      <SidebarContent className="py-4">
         <SidebarGroup>
-          <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-widest px-4 opacity-50">Operacional</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-[9px] font-black uppercase tracking-[0.15em] px-4 text-white/30 mb-2">Operacional</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {mainNavItems.map((item) => (
                 <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton asChild isActive={isActive(item.href, item.exact)} className="px-4 h-10">
-                    <Link href={item.href}>
-                      <item.icon className="h-4 w-4" />
-                      <span className="font-bold text-xs">{item.label}</span>
+                  <SidebarMenuButton 
+                    asChild 
+                    isActive={isActive(item.href, item.exact)} 
+                    className="px-4 h-9 hover:bg-white/5 transition-colors"
+                  >
+                    <Link href={item.href} className="flex items-center gap-3">
+                      <item.icon className="h-4 w-4 opacity-70" />
+                      <span className="font-bold text-[11px] tracking-tight">{item.label}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -106,16 +110,20 @@ export function MainNav() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-widest px-4 opacity-50">Estratégico</SidebarGroupLabel>
+        <SidebarGroup className="mt-4">
+          <SidebarGroupLabel className="text-[9px] font-black uppercase tracking-[0.15em] px-4 text-white/30 mb-2">Estratégico</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {managementNavItems.map((item) => (
                 <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton asChild isActive={isActive(item.href, item.exact)} className="px-4 h-10">
-                    <Link href={item.href}>
-                      <item.icon className="h-4 w-4" />
-                      <span className="font-bold text-xs">{item.label}</span>
+                  <SidebarMenuButton 
+                    asChild 
+                    isActive={isActive(item.href, item.exact)} 
+                    className="px-4 h-9 hover:bg-white/5 transition-colors"
+                  >
+                    <Link href={item.href} className="flex items-center gap-3">
+                      <item.icon className="h-4 w-4 opacity-70" />
+                      <span className="font-bold text-[11px] tracking-tight">{item.label}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -124,16 +132,20 @@ export function MainNav() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-widest px-4 opacity-50">Sistema</SidebarGroupLabel>
+        <SidebarGroup className="mt-4">
+          <SidebarGroupLabel className="text-[9px] font-black uppercase tracking-[0.15em] px-4 text-white/30 mb-2">Sistema</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {configNavItems.map((item) => (
                 <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton asChild isActive={isActive(item.href, item.exact)} className="px-4 h-10">
-                    <Link href={item.href}>
-                      <item.icon className="h-4 w-4" />
-                      <span className="font-bold text-xs">{item.label}</span>
+                  <SidebarMenuButton 
+                    asChild 
+                    isActive={isActive(item.href, item.exact)} 
+                    className="px-4 h-9 hover:bg-white/5 transition-colors"
+                  >
+                    <Link href={item.href} className="flex items-center gap-3">
+                      <item.icon className="h-4 w-4 opacity-70" />
+                      <span className="font-bold text-[11px] tracking-tight">{item.label}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -143,32 +155,32 @@ export function MainNav() {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="p-4 border-t border-sidebar-border bg-muted/5">
+      <SidebarFooter className="p-4 border-t border-white/5">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="w-full flex items-center justify-between px-2 h-12 hover:bg-primary/5 transition-colors">
+            <Button variant="ghost" className="w-full flex items-center justify-between px-2 h-14 hover:bg-white/5 transition-colors">
               <div className="flex items-center gap-2 overflow-hidden">
-                <Avatar className="h-8 w-8 rounded-full ring-2 ring-primary/10">
+                <Avatar className="h-8 w-8 rounded-full ring-1 ring-white/10">
                   <AvatarImage src={user?.avatar_url ?? undefined} />
-                  <AvatarFallback className="bg-primary/10 text-primary font-bold text-xs">{user?.email?.charAt(0).toUpperCase()}</AvatarFallback>
+                  <AvatarFallback className="bg-primary/20 text-primary font-bold text-[10px]">{user?.email?.charAt(0).toUpperCase()}</AvatarFallback>
                 </Avatar>
                 <div className="flex flex-col items-start overflow-hidden">
-                  <span className="text-[10px] font-black truncate w-full">{user?.email}</span>
-                  <span className="text-[9px] text-primary uppercase font-bold tracking-tighter">CONTA ATIVA</span>
+                  <span className="text-[10px] font-bold truncate w-full text-white/80">{user?.email}</span>
+                  <span className="text-[9px] text-primary uppercase font-black tracking-widest">CONTA ATIVA</span>
                 </div>
               </div>
-              <ChevronDown className="h-3 w-3 text-muted-foreground" />
+              <ChevronDown className="h-3 w-3 text-white/30" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56 border-primary/10 shadow-xl">
-            <DropdownMenuLabel className="text-[10px] uppercase font-bold text-muted-foreground">Meu Portal</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => router.push('/settings')} className="text-xs font-bold">
-              <Settings className="mr-2 h-4 w-4" /> Configurações
+          <DropdownMenuContent align="end" className="w-56 border-white/10 bg-[#0f172a] text-white shadow-2xl">
+            <DropdownMenuLabel className="text-[9px] uppercase font-black text-white/40 tracking-widest px-3">Meu Portal</DropdownMenuLabel>
+            <DropdownMenuSeparator className="bg-white/5" />
+            <DropdownMenuItem onClick={() => router.push('/settings')} className="text-xs font-bold hover:bg-white/5 focus:bg-white/5 cursor-pointer py-2.5">
+              <Settings className="mr-3 h-4 w-4 opacity-70" /> Configurações
             </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => logout()} className="text-destructive text-xs font-bold">
-              <LogOut className="mr-2 h-4 w-4" /> Sair do Sistema
+            <DropdownMenuSeparator className="bg-white/5" />
+            <DropdownMenuItem onClick={() => logout()} className="text-red-400 text-xs font-bold hover:bg-red-500/10 focus:bg-red-500/10 cursor-pointer py-2.5">
+              <LogOut className="mr-3 h-4 w-4" /> Sair do Sistema
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

@@ -105,16 +105,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <header className="h-16 border-b bg-background flex items-center justify-between px-6 sticky top-0 z-50">
             <div className="flex items-center gap-4">
               <div className="flex flex-col">
-                <h3 className="text-sm font-black tracking-tighter uppercase text-primary">
+                <h3 className="text-[11px] font-black tracking-tighter uppercase text-primary mb-0.5">
                   {store?.name || 'VendaFácil'}
                 </h3>
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="text-[9px] h-4 font-bold uppercase tracking-wider bg-muted/50 border-primary/10">
+                <div className="flex items-center gap-1.5">
+                  <Badge variant="outline" className="text-[8px] h-3.5 px-1.5 font-black uppercase tracking-widest bg-muted/30 border-primary/10 text-primary">
                     {accessStatus?.plano_nome || 'Free'}
                   </Badge>
                   <Badge 
                     variant="secondary" 
-                    className={cmvGlobal > 40 ? "text-[9px] h-4 bg-red-50 text-red-600 border-red-100" : "text-[9px] h-4 bg-green-50 text-green-600 border-green-100"}
+                    className={cmvGlobal > 40 
+                      ? "text-[8px] h-3.5 px-1.5 font-black uppercase tracking-widest bg-red-50 text-red-600 border-red-100" 
+                      : "text-[8px] h-3.5 px-1.5 font-black uppercase tracking-widest bg-green-50 text-green-600 border-green-100"
+                    }
                   >
                     CMV {cmvGlobal.toFixed(0)}%
                   </Badge>
@@ -123,19 +126,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
 
             <div className="flex items-center gap-3">
-              <Button variant="ghost" size="icon" className="rounded-full hover:bg-primary/5" onClick={() => router.push('/settings')}>
-                <Avatar className="h-8 w-8 ring-2 ring-primary/10">
+              <Button variant="ghost" size="icon" className="rounded-full hover:bg-primary/5 h-10 w-10" onClick={() => router.push('/settings')}>
+                <Avatar className="h-8 w-8 ring-2 ring-primary/10 transition-transform hover:scale-105">
                   <AvatarImage src={user?.avatar_url ?? undefined} />
                   <AvatarFallback><UserIcon className="h-4 w-4 text-primary" /></AvatarFallback>
                 </Avatar>
               </Button>
-              <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive" onClick={() => logout()}>
+              <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive hover:bg-destructive/5 h-10 w-10" onClick={() => logout()}>
                 <LogOut className="h-4 w-4" />
               </Button>
             </div>
           </header>
 
-          <main className="flex-1 p-4 sm:p-6 lg:p-8 bg-muted/5">
+          <main className="flex-1 p-4 sm:p-6 lg:p-8 bg-[#F8FAFC]">
             {children}
           </main>
         </SidebarInset>
