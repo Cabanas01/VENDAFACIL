@@ -237,19 +237,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [store]);
 
   const addSale = useCallback(async (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => {
-    // 1. Sincronização Ativa de Sessão (Evita expiração silenciosa)
-    const { data: sessionData } = await supabase.auth.getSession();
-    const currentUser = sessionData.session?.user;
-    const currentStore = store;
-
-    if (!currentUser || !currentStore) {
-      console.error('[SALE_ABORTED] Sessão ou Loja ausente.');
+    /**
+     * CORREÇÃO DEFINITIVA: Sincronização Estrita de Identidade
+     * O getUser() garante que o Supabase Client envie o token correto nos headers.
+     */
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    
+    if (userError || !userData?.user) {
+      console.error('[SALE_ABORTED] Falha na sincronização de identidade:', userError);
       throw new Error('Sua sessão expirou. Por favor, entre novamente para continuar.');
     }
+
+    const currentUser = userData.user;
+    const currentStore = store;
+
+    if (!currentStore) {
+      throw new Error('Loja não identificada. Por favor, recarregue a página.');
+    }
+
+    console.log('[SALE_IDENTIDADE_SYNC] User ID:', currentUser.id);
     
     const total = cart.reduce((sum, item) => sum + item.subtotal_cents, 0);
 
-    // ETAPA 1: Inserir o cabeçalho da venda
+    // ETAPA 1: Inserir o cabeçalho da venda (Sales)
     const { data: createdSale, error: saleError } = await supabase
       .from('sales')
       .insert({ 
@@ -264,16 +274,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error('[SALE_DB_ERROR]', saleError);
       const msg = saleError?.message || '';
       
-      // Detecção específica de limites de plano antes da mensagem genérica de RLS
       if (msg.includes('trial_sales_limit')) {
         throw new Error('Limite de 5 vendas do plano de avaliação atingido. Faça o upgrade para continuar.');
       }
       
       if (msg.includes('security policy') || msg.includes('RLS')) {
-        throw new Error('Acesso negado pelo banco de dados. Verifique se seu plano está ativo ou se você tem permissão nesta loja.');
+        throw new Error('Acesso negado. Sua identidade não foi reconhecida pelo banco ou seu plano expirou.');
       }
       
-      throw new Error(msg || 'Falha técnica ao registrar a venda no servidor.');
+      throw new Error(msg || 'Falha técnica ao registrar a venda.');
     }
 
     try {
@@ -309,9 +318,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     } catch (err: any) {
       console.error('[SALE_CRITICAL_FAILURE]', err);
-      // Rollback manual do cabeçalho caso os itens falhem (transação atômica simulada)
+      // Rollback manual do cabeçalho caso os itens falhem
       await supabase.from('sales').delete().eq('id', createdSale.id);
-      throw new Error('Erro ao processar os itens da venda. A operação foi cancelada para sua segurança.');
+      throw new Error('Erro ao processar os itens da venda. A operação foi cancelada.');
     }
   }, [store, fetchStoreData]);
 

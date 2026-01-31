@@ -1,3 +1,4 @@
+
 import { NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { getSupabaseAdmin } from '@/lib/supabase/admin';
@@ -10,12 +11,14 @@ export const runtime = 'nodejs';
  */
 export async function POST() {
   try {
+    // CORREÇÃO DEFINITIVA: Usar o helper de server client com cookies
     const supabase = createSupabaseServerClient();
     const supabaseAdmin = getSupabaseAdmin();
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
     if (authError || !user) {
+      console.error('[API_TRIAL_AUTH_ERROR]', authError);
       return NextResponse.json({ error: 'Sessão inválida ou expirada.' }, { status: 401 });
     }
 
@@ -27,6 +30,7 @@ export async function POST() {
       .maybeSingle();
 
     if (storeError || !store) {
+      console.error('[API_TRIAL_STORE_ERROR]', storeError);
       return NextResponse.json({ error: 'Apenas proprietários podem iniciar o período de teste.' }, { status: 403 });
     }
 
@@ -42,7 +46,7 @@ export async function POST() {
 
     if (rpcError) {
       console.error('[TRIAL_RPC_ERROR]', rpcError);
-      throw new Error(`Falha ao processar trial no banco: ${rpcError.message}`);
+      return NextResponse.json({ error: `Falha ao processar trial: ${rpcError.message}` }, { status: 500 });
     }
 
     return NextResponse.json({ 
