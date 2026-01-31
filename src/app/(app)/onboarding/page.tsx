@@ -43,7 +43,6 @@ type OnboardingValues = z.infer<typeof onboardingSchema>;
 export default function OnboardingPage() {
   const { createStore, storeStatus } = useAuth();
   const { toast } = useToast();
-  const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingCnpj, setIsLoadingCnpj] = useState(false);
   const [step, setStep] = useState(1);
@@ -140,7 +139,6 @@ export default function OnboardingPage() {
       });
 
       toast({ title: 'Configuração concluída!', description: 'Sua loja está pronta para operar.' });
-      // O AppLayout cuidará do redirecionamento automático assim que o status mudar para has_store
     } catch (error: any) {
       console.error('[ONBOARDING_SUBMIT_ERROR]', error);
       toast({

@@ -86,7 +86,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!silent) setStoreStatus('loading_store');
     
     try {
-      // 1. Busca se é dono de alguma loja
       const { data: ownerStore, error: ownerError } = await supabase
         .from('stores')
         .select('id')
@@ -94,14 +93,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle();
 
       if (ownerError) {
-        console.error('[FETCH_STORE] Owner query error:', ownerError);
         if (!silent) setStoreStatus('error');
         return;
       }
 
       let storeId = ownerStore?.id;
 
-      // 2. Se não for dono, busca se é membro de alguma loja
       if (!storeId) {
         const { data: memberEntry } = await supabase
           .from('store_members')
@@ -111,7 +108,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         storeId = memberEntry?.store_id;
       }
 
-      // 3. Se não houver loja em nenhum dos casos, define como no_store
       if (!storeId) {
         setStore(null);
         setProducts([]);
@@ -123,7 +119,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // 4. Carrega todos os dados da loja em paralelo
       const [statusRes, storeRes, productsRes, salesRes, cashRes, customersRes] = await Promise.all([
         supabase.rpc('get_store_access_status', { p_store_id: storeId }),
         supabase.from('stores').select('*').eq('id', storeId).single(),
@@ -172,10 +167,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const profile = await fetchProfile(sessionUser.id);
         setUser(profile || ({ id: sessionUser.id, email: sessionUser.email || '' } as User));
         
-        // Garante que fetchStoreData termine antes de liberar o loading
         await fetchStoreData(sessionUser.id);
       } catch (err) {
-        console.error('[INIT_AUTH_ERROR]', err);
         setStoreStatus('error');
       } finally {
         setLoading(false);
@@ -217,7 +210,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (error) throw error;
 
-    // Sincroniza o estado global imediatamente
     await fetchStoreData(currentUser.id, false);
     return data as Store;
   }, [fetchStoreData]);

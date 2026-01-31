@@ -28,26 +28,22 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   // Lógica de Redirecionamento Centralizada
   useEffect(() => {
-    // 1. Aguarda resolução da autenticação inicial
-    if (loading || storeStatus === 'loading_auth') return;
+    if (loading || storeStatus === 'loading_auth' || storeStatus === 'loading_store') return;
 
-    // 2. Se não há usuário logado, manda para o login
+    // 1. Se não há usuário logado, manda para o login
     if (!user) {
       router.replace('/login');
       return;
     }
 
-    // 3. Aguarda resolução da busca de loja no servidor
-    if (storeStatus === 'loading_store') return;
-
-    // 4. Usuário NOVO (Sem loja): Deve obrigatoriamente ir para o onboarding
+    // 2. Usuário NOVO (Sem loja): Deve obrigatoriamente ir para o onboarding
     if (storeStatus === 'no_store') {
       if (pathname !== '/onboarding' && !isAdminPath) {
         router.replace('/onboarding');
       }
     } 
     
-    // 5. Usuário EXISTENTE (Com loja): Não pode ver o onboarding e deve ter acesso validado
+    // 3. Usuário EXISTENTE (Com loja): Redireciona para o dashboard se tentar acessar o onboarding
     if (storeStatus === 'has_store') {
       if (pathname === '/onboarding') {
         router.replace('/dashboard');
@@ -78,7 +74,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [sales, products]);
 
   // BLOQUEIO CRÍTICO: Não renderiza NADA se o status não for definitivo
-  // Isso evita que o Dashboard apareça antes do Onboarding em casos de redirecionamento
   const isTransitioning = loading || 
                           storeStatus === 'loading_auth' || 
                           storeStatus === 'loading_store' ||
@@ -116,7 +111,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Se estiver no onboarding e não tiver loja, renderiza limpo (sem sidebar)
   if (pathname === '/onboarding' && storeStatus === 'no_store') {
     return <main className="min-h-screen flex items-center justify-center bg-muted/5 w-full">{children}</main>;
   }
