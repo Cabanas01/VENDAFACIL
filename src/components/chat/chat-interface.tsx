@@ -38,7 +38,9 @@ export function ChatInterface({ title, subtitle, contextData, scope, suggestions
   const handleSend = async (text: string) => {
     if (!text.trim() || isLoading) return;
 
-    const newMessages: Message[] = [...messages, { role: 'user', content: text }];
+    const userMsg: Message = { role: 'user', content: text };
+    const newMessages: Message[] = [...messages, userMsg];
+    
     setMessages(newMessages);
     setInput('');
     setIsLoading(true);
@@ -51,10 +53,11 @@ export function ChatInterface({ title, subtitle, contextData, scope, suggestions
       });
 
       setMessages([...newMessages, { role: 'model', content: result.text }]);
-    } catch (error) {
+    } catch (error: any) {
+      console.error('[CHAT_INTERFACE_ERROR]', error);
       setMessages([...newMessages, { 
         role: 'model', 
-        content: '⚠️ Ocorreu um erro ao processar sua análise. Por favor, tente novamente.' 
+        content: '⚠️ Ocorreu um erro ao processar sua análise. Por favor, verifique sua conexão ou tente novamente.' 
       }]);
     } finally {
       setIsLoading(false);

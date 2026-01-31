@@ -66,24 +66,38 @@ const aiChatFlow = ai.defineFlow(
       content: [{ text: m.content }]
     }));
 
-    const response = await ai.generate({
-      system: systemPrompt,
-      messages: [
-        ...history,
-        {
-          role: 'user',
-          content: [
-            { text: `CONTEXTO ATUAL DA LOJA (DADOS REAIS):\n${input.contextData}\n\n` },
-            { text: `PERGUNTA DO USUÁRIO: ${userQuestion}` }
-          ]
-        }
-      ]
-    });
+    try {
+      const response = await ai.generate({
+        model: 'googleai/gemini-1.5-flash',
+        system: systemPrompt,
+        config: {
+          safetySettings: [
+            { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+            { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+            { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+            { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+          ],
+        },
+        messages: [
+          ...history,
+          {
+            role: 'user',
+            content: [
+              { text: `CONTEXTO ATUAL (DADOS REAIS):\n${input.contextData}\n\n` },
+              { text: `PERGUNTA DO USUÁRIO: ${userQuestion}` }
+            ]
+          }
+        ]
+      });
 
-    if (!response.text) {
-      throw new Error('A IA não gerou uma resposta válida.');
+      if (!response.text) {
+        throw new Error('A IA não gerou uma resposta textual.');
+      }
+
+      return { text: response.text };
+    } catch (err: any) {
+      console.error('[AI_FLOW_ERROR]', err);
+      throw new Error(`Falha no processamento da IA: ${err.message}`);
     }
-
-    return { text: response.text };
   }
 );

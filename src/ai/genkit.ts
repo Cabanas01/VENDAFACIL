@@ -4,7 +4,10 @@ import { config } from 'dotenv';
 
 config();
 
+// Garante que o Genkit encontre a chave de API independente do nome da variável de ambiente
+const apiKey = process.env.GOOGLE_GENAI_API_KEY || process.env.GEMINI_API_KEY;
+
 export const ai = genkit({
-  plugins: [googleAI()],
+  plugins: [googleAI({ apiKey })],
   model: 'googleai/gemini-1.5-flash',
 });

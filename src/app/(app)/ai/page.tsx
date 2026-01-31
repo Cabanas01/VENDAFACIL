@@ -13,28 +13,35 @@ import { useMemo } from 'react';
 export default function StoreAiPage() {
   const { store, products, sales, customers, accessStatus } = useAuth();
 
-  const dataSnapshot = useMemo(() => ({
-    loja: {
-      nome: store?.name,
-      plano: accessStatus?.plano_nome,
-      data_expiracao: accessStatus?.data_fim_acesso,
-    },
-    resumo_estoque: products.map(p => ({
+  const dataSnapshot = useMemo(() => {
+    // Limitamos o snapshot para evitar estouro de payload em Server Actions
+    const limitedProducts = products.slice(0, 100).map(p => ({
       nome: p.name,
       categoria: p.category,
       preco: p.price_cents / 100,
       custo: (p.cost_cents || 0) / 100,
       qtd: p.stock_qty,
       min: p.min_stock_qty
-    })),
-    vendas_recentes: sales.slice(0, 50).map(s => ({
+    }));
+
+    const limitedSales = sales.slice(0, 30).map(s => ({
       data: s.created_at,
       total: s.total_cents / 100,
       metodo: s.payment_method,
       itens: s.items?.length
-    })),
-    clientes_count: customers.length
-  }), [store, products, sales, customers, accessStatus]);
+    }));
+
+    return {
+      loja: {
+        nome: store?.name,
+        plano: accessStatus?.plano_nome,
+        data_expiracao: accessStatus?.data_fim_acesso,
+      },
+      resumo_estoque: limitedProducts,
+      vendas_recentes: limitedSales,
+      clientes_count: customers.length
+    };
+  }, [store, products, sales, customers, accessStatus]);
 
   const suggestions = [
     "Qual minha margem de lucro média?",
