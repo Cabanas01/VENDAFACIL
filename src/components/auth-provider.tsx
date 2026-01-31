@@ -3,8 +3,8 @@
 /**
  * @fileOverview AuthProvider Centralizado (Baseado em RPC Bootstrap)
  * 
- * Gerencia a identidade e o status de acesso do usuário utilizando 
- * exclusivamente a RPC get_user_bootstrap_status como fonte da verdade.
+ * Gerencia a identidade e o status de acesso do usuário.
+ * O AuthProvider NÃO redireciona; ele apenas sincroniza o estado.
  */
 
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';

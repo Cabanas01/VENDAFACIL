@@ -4,10 +4,10 @@
  * @fileOverview OnboardingPage
  * 
  * Coleta os dados comerciais para a criação da primeira loja.
- * Bloqueia renderização síncrona se o usuário já possuir acesso ao sistema.
+ * Não possui mais lógica de redirecionamento; esta é responsabilidade do AppLayout.
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -20,7 +20,6 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Progress } from '@/components/ui/progress';
-import { useRouter } from 'next/navigation';
 
 const onboardingSchema = z.object({
   name: z.string().min(3, 'Nome fantasia muito curto'),
@@ -39,25 +38,11 @@ const onboardingSchema = z.object({
 type OnboardingValues = z.infer<typeof onboardingSchema>;
 
 export default function OnboardingPage() {
-  const { createStore, bootstrap, loading } = useAuth();
+  const { createStore } = useAuth();
   const { toast } = useToast();
-  const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingCnpj, setIsLoadingCnpj] = useState(false);
   const [step, setStep] = useState(1);
-
-  // Verificação de Segurança Síncrona
-  // Se o usuário já é parte do sistema, não renderizamos nada enquanto o layout processa o redirecionamento.
-  const isExistingUser = useMemo(() => {
-    if (!bootstrap) return false;
-    return bootstrap.has_store || bootstrap.is_member || bootstrap.is_admin;
-  }, [bootstrap]);
-
-  useEffect(() => {
-    if (!loading && isExistingUser) {
-      router.replace('/dashboard');
-    }
-  }, [isExistingUser, loading, router]);
 
   const form = useForm<OnboardingValues>({
     resolver: zodResolver(onboardingSchema),
@@ -139,11 +124,6 @@ export default function OnboardingPage() {
       setIsSubmitting(false);
     }
   };
-
-  // Se o usuário for existente ou estiver carregando, bloqueamos a renderização do formulário.
-  if (loading || isExistingUser) {
-    return null;
-  }
 
   return (
     <Card className="shadow-2xl w-full border-border/50 max-w-lg mx-auto">

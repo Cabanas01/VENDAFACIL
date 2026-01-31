@@ -4,7 +4,7 @@
  * @fileOverview AppLayout (Gatekeeper Determinístico)
  * 
  * Centraliza a navegação baseada no BootstrapStatus.
- * Utiliza guardas síncronas para impedir que o Onboarding seja montado para usuários existentes.
+ * O Onboarding é tratado como uma EXCEÇÃO, não um estado padrão.
  */
 
 import { useAuth } from '@/components/auth-provider';
@@ -25,60 +25,64 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const isAdminPath = pathname.startsWith('/admin');
 
-  // 1. Cálculo do Perfil de Acesso
-  // Um usuário é "Existente" se possui loja, é membro ou é Administrador do SaaS.
-  const isExistingUser = useMemo(() => {
+  /**
+   * 🧱 REGRA DE OURO: DEFINIÇÃO DE NOVO USUÁRIO
+   * Só é novo usuário quem NÃO tem loja, NÃO é membro E NÃO é admin.
+   */
+  const isNewUser = useMemo(() => {
     if (!bootstrap) return false;
-    return bootstrap.has_store || bootstrap.is_member || bootstrap.is_admin;
+    return (
+      bootstrap.has_store === false && 
+      bootstrap.is_member === false && 
+      bootstrap.is_admin === false
+    );
   }, [bootstrap]);
 
-  const isNewUser = !isExistingUser;
-
-  // 2. Lógica de Redirecionamento (Efeito de Navegação)
+  // Lógica de Redirecionamento (Efeito de Navegação)
   useEffect(() => {
     if (loading || !user || !bootstrap) return;
 
-    // Se for novo e não estiver no onboarding -> Força Onboarding
+    // 1. Funil de Onboarding (Apenas para novos usuários reais)
     if (isNewUser && pathname !== '/onboarding') {
       router.replace('/onboarding');
       return;
     }
 
-    // Se já for do sistema e estiver no onboarding -> Tira do Onboarding
-    if (isExistingUser && pathname === '/onboarding') {
+    // 2. Bloqueio de Onboarding para usuários existentes (Dono, Membro ou Admin)
+    if (!isNewUser && pathname === '/onboarding') {
       router.replace('/dashboard');
       return;
     }
 
-    // Restrição de Admin
+    // 3. Restrição de Admin (Apenas se não for admin do sistema)
     if (isAdminPath && !bootstrap.is_admin) {
       router.replace('/dashboard');
       return;
     }
 
-    // Paywall (apenas para rotas comerciais)
+    // 4. Paywall (Apenas para rotas comerciais de usuários não-admin)
     const isPaywallPath = !['/billing', '/settings', '/ai'].some(p => pathname.startsWith(p)) && !isAdminPath && pathname !== '/onboarding';
-    if (isPaywallPath && accessStatus && !accessStatus.acesso_liberado) {
+    if (isPaywallPath && !bootstrap.is_admin && accessStatus && !accessStatus.acesso_liberado) {
       router.replace('/billing');
     }
 
-  }, [user, loading, bootstrap, isExistingUser, isNewUser, accessStatus, pathname, router, isAdminPath]);
+  }, [user, loading, bootstrap, isNewUser, accessStatus, pathname, router, isAdminPath]);
 
-  // 3. BLOQUEIO DE RENDERIZAÇÃO (Guarda Síncrona de Camada Zero)
-  // Impede flashes de conteúdo indevido antes do redirecionamento
-  
-  // Exibe loader enquanto carrega a sessão ou o bootstrap inicial
+  /**
+   * 🛡️ BLOQUEIO DE RENDERIZAÇÃO (Camada Zero)
+   * Impede flashes de conteúdo indevido antes do redirecionamento.
+   */
   if (loading || (user && !bootstrap)) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground animate-pulse font-medium uppercase tracking-widest">Validando Acesso...</p>
+        <p className="text-sm text-muted-foreground animate-pulse font-medium uppercase tracking-widest">Validando Perfil...</p>
       </div>
     );
   }
 
-  // Redirecionamento em progresso: Se a rota não condiz com o perfil, não renderizamos os filhos.
-  const isIncorrectRoute = isExistingUser ? pathname === '/onboarding' : pathname !== '/onboarding';
+  // Se o usuário já existe e está tentando ver o onboarding, ou se é novo e não está no onboarding, bloqueamos.
+  const isIncorrectRoute = isNewUser ? pathname !== '/onboarding' : pathname === '/onboarding';
   
   if (user && bootstrap && isIncorrectRoute) {
     return (
@@ -88,10 +92,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // 4. Renderização do Portal
   if (!user || !bootstrap) return null;
 
-  // Layout Especial para Onboarding (Sem Barras Laterais)
+  // Layout para Onboarding (Funil Exclusivo)
   if (pathname === '/onboarding') {
     return <main className="min-h-screen flex items-center justify-center bg-muted/5 w-full">{children}</main>;
   }
