@@ -70,6 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (status) setBootstrap(status);
 
       if (status?.has_store || status?.is_member) {
+        // Busca a loja ativa (dono ou membro)
         const { data: ownerStore } = await supabase.from('stores').select('id').eq('user_id', userId).maybeSingle();
         let storeId = ownerStore?.id;
 
