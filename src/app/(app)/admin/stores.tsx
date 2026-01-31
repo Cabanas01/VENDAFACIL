@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -20,13 +21,14 @@ export type StoreRow = {
   name: string | null;
   user_id: string | null;
   owner_email?: string | null;
-  status: 'active' | 'trial' | 'suspended' | 'blocked' | 'deleted';
+  status: string;
   business_type: string;
   store_access: any;
 };
 
-const businessCategories = ['general', 'restaurant', 'hamburgueria', 'pizzaria', 'acai', 'mercearia', 'farmacia', 'barbearia', 'salao', 'outros'];
+const businessCategories = ['all', 'general', 'restaurant', 'hamburgueria', 'pizzaria', 'acai', 'mercearia', 'farmacia', 'barbearia', 'salao', 'outros'];
 const categoryLabels: Record<string, string> = {
+  all: 'Todas',
   general: 'Geral',
   restaurant: 'Restaurante',
   hamburgueria: 'Hamburgueria',
@@ -39,20 +41,32 @@ const categoryLabels: Record<string, string> = {
   outros: 'Outros',
 };
 
-const statusConfig: Record<StoreRow['status'], { variant: "default" | "secondary" | "destructive" | "outline", label: string, className?: string }> = {
+const statusConfig: Record<string, { variant: "default" | "secondary" | "destructive" | "outline", label: string, className?: string }> = {
     active: { variant: 'default', label: 'Ativa', className: 'bg-green-500' },
+    ativo: { variant: 'default', label: 'Ativa', className: 'bg-green-500' },
     trial: { variant: 'default', label: 'Trial', className: 'bg-blue-500' },
     suspended: { variant: 'outline', label: 'Suspensa' },
+    suspensa: { variant: 'outline', label: 'Suspensa' },
     blocked: { variant: 'destructive', label: 'Bloqueada' },
+    bloqueada: { variant: 'destructive', label: 'Bloqueada' },
     deleted: { variant: 'destructive', label: 'Excluída' },
+    excluida: { variant: 'destructive', label: 'Excluída' },
 };
 
+const getStatusBadge = (status: string) => {
+    const config = statusConfig[status?.toLowerCase()] || { variant: 'outline', label: status || 'N/A' };
+    return (
+        <Badge variant={config.variant} className={`${config.className ?? ''} capitalize`}>
+            {config.label}
+        </Badge>
+    );
+};
 
 export default function AdminStores() {
   const [stores, setStores] = useState<StoreRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState('general');
+  const [activeTab, setActiveTab] = useState('all');
   const [isGrantModalOpen, setIsGrantModalOpen] = useState(false);
   const [selectedStore, setSelectedStore] = useState<StoreRow | null>(null);
   const router = useRouter();
@@ -66,17 +80,14 @@ export default function AdminStores() {
         .from('stores')
         .select('id, name, user_id, status, business_type, store_access(plano_tipo)');
 
-      if (activeTab !== 'all' && activeTab !== 'general') {
+      if (activeTab !== 'all') {
         query = query.eq('business_type', activeTab);
       }
       
       const { data: storesData, error: storesError } = await query;
 
       if (storesError) {
-        setErrorMsg(`Erro ao buscar lojas: ${storesError.message}`);
-        setStores([]);
-        setLoading(false);
-        return;
+        throw storesError;
       }
       
       if (!storesData || storesData.length === 0) {
@@ -88,26 +99,24 @@ export default function AdminStores() {
       const ownerIds = [...new Set(storesData.map(s => s.user_id).filter(Boolean))];
       let ownerEmailMap = new Map<string, string>();
       if (ownerIds.length > 0) {
-        const { data: usersData, error: usersError } = await supabase
+        const { data: usersData } = await supabase
           .from('users')
           .select('id, email')
           .in('id', ownerIds as string[]);
 
-        if (usersError) {
-          console.warn("Could not fetch owner emails:", usersError.message);
-        } else {
-          ownerEmailMap = new Map((usersData ?? []).map(u => [u.id, u.email as string]));
-        }
+        ownerEmailMap = new Map((usersData ?? []).map(u => [u.id, u.email as string]));
       }
       
-      const combinedData = storesData.map((store) => ({
+      const combinedData = (storesData || []).map((store) => ({
         ...store,
+        status: store.status || 'trial',
         owner_email: store.user_id ? ownerEmailMap.get(store.user_id) : 'N/A',
       }));
 
       setStores(combinedData as StoreRow[]);
-    } catch (err) {
-      console.error('Erro inesperado na listagem de lojas');
+    } catch (err: any) {
+      console.error('Erro na listagem de lojas:', err);
+      setErrorMsg(err.message || 'Falha ao buscar lojas.');
     } finally {
       setLoading(false);
     }
@@ -125,14 +134,12 @@ export default function AdminStores() {
   const renderTable = (storeList: StoreRow[]) => {
       if (loading) {
           return (
-             <div className="space-y-2 pt-4">
-                <Skeleton className="h-8 w-full" />
-                <Skeleton className="h-8 w-full" />
-                <Skeleton className="h-8 w-full" />
+             <div className="space-y-4 pt-4">
+                {[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full" />)}
             </div>
           );
       }
-      if (storeList.length === 0 && !errorMsg) {
+      if (!storeList || storeList.length === 0) {
           return (
             <div className="text-center text-sm text-muted-foreground p-8">
                 Nenhuma loja encontrada nesta categoria.
@@ -157,18 +164,16 @@ export default function AdminStores() {
                   <TableRow key={s?.id}>
                     <TableCell>
                       <div className="font-medium">{s?.name || 'Sem Nome'}</div>
-                      <div className="text-xs text-muted-foreground font-mono">{s?.id}</div>
+                      <div className="text-[10px] text-muted-foreground font-mono uppercase">{s?.id}</div>
                     </TableCell>
-                    <TableCell>{s?.owner_email || '-'}</TableCell>
+                    <TableCell className="text-sm">{s?.owner_email || '-'}</TableCell>
                      <TableCell>
-                      <Badge variant="secondary" className="capitalize">
+                      <Badge variant="outline" className="capitalize text-[10px] font-bold">
                         {getPlanLabel(access?.plano_tipo)}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={statusConfig[s?.status || 'trial'].variant} className={`${statusConfig[s?.status || 'trial'].className ?? ''} capitalize`}>
-                        {statusConfig[s?.status || 'trial'].label}
-                      </Badge>
+                      {getStatusBadge(s?.status)}
                     </TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
@@ -176,11 +181,11 @@ export default function AdminStores() {
                           <Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                           <DropdownMenuItem onSelect={() => router.push(`/admin/stores/${s?.id}`)}>
+                           <DropdownMenuItem onClick={() => router.push(`/admin/stores/${s?.id}`)}>
                              <Eye className="mr-2 h-4 w-4" /> Ver Detalhes
                            </DropdownMenuItem>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem onSelect={() => handleOpenGrantModal(s)}>
+                          <DropdownMenuItem onClick={() => handleOpenGrantModal(s)}>
                               <Gift className="mr-2 h-4 w-4" /> Conceder Plano
                           </DropdownMenuItem>
                           <DropdownMenuItem>
@@ -211,7 +216,7 @@ export default function AdminStores() {
       <Card>
         <CardHeader>
           <CardTitle>Gerenciamento de Lojas</CardTitle>
-          <CardDescription>Visualize e gerencie todas as lojas (tenants) do sistema, segmentadas por categoria.</CardDescription>
+          <CardDescription>Visualize e gerencie todos os tenants ativos no sistema.</CardDescription>
         </CardHeader>
         <CardContent>
           {errorMsg && (
@@ -220,9 +225,9 @@ export default function AdminStores() {
             </Alert>
           )}
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-3 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-11">
+            <TabsList className="grid w-full grid-cols-3 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-11 h-auto gap-1">
               {businessCategories.map(cat => (
-                  <TabsTrigger key={cat} value={cat}>{categoryLabels[cat]}</TabsTrigger>
+                  <TabsTrigger key={cat} value={cat} className="text-[10px] py-1">{categoryLabels[cat]}</TabsTrigger>
               ))}
             </TabsList>
             {businessCategories.map(cat => (
