@@ -1,11 +1,10 @@
-
 'use client';
 
 /**
  * @fileOverview Tela de Nova Venda / PDV
  * 
  * Interface de balcão otimizada para rapidez.
- * Lida com busca de produtos, carrinho e finalização segura.
+ * Lida com busca de produtos, carrinho e finalização segura via Server Action.
  */
 
 import { useState, useMemo } from 'react';
@@ -20,15 +19,14 @@ import {
   PiggyBank, 
   Loader2, 
   Package,
-  ArrowRight,
-  X
+  ArrowRight
 } from 'lucide-react';
 import { useAuth } from '@/components/auth-provider';
 import { useToast } from '@/hooks/use-toast';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
@@ -123,12 +121,12 @@ export default function NewSalePage() {
     
     setIsSubmitting(true);
     try {
-      const sale = await addSale(cart, method);
+      const result = await addSale(cart, method);
       
-      if (sale && sale.id) {
+      if (result.success) {
         toast({ 
           title: 'Venda realizada!', 
-          description: `Comprovante gerado com sucesso.` 
+          description: `Venda registrada com sucesso.` 
         });
         setCart([]);
         setIsFinalizing(false);
@@ -138,8 +136,8 @@ export default function NewSalePage() {
       console.error('[PDV_FINALIZE_ERROR]', error);
       toast({
         variant: 'destructive',
-        title: 'Erro ao processar venda',
-        description: error.message || 'Verifique se seu plano está ativo e tente novamente.'
+        title: 'Falha na Transação',
+        description: error.message || 'Erro inesperado ao registrar a venda.'
       });
     } finally {
       setIsSubmitting(false);

@@ -1,6 +1,12 @@
 'use server'
 
-import { redirect } from 'next/navigation'
+/**
+ * @fileOverview Ações de Autenticação (Server Side)
+ * 
+ * Seguindo a premissa de deixar o Supabase gerenciar as URLs de redirecionamento 
+ * conforme configurado no Dashboard (Auth > URL Configuration).
+ */
+
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 export async function login(formData: FormData) {
@@ -21,16 +27,13 @@ export async function login(formData: FormData) {
   return { error: null, success: true };
 }
 
-
 export async function signup(formData: FormData) {
   const email = String(formData.get('email'))
   const password = String(formData.get('password'))
   
   const supabase = createSupabaseServerClient();
   
-  // By removing `emailRedirectTo`, Supabase will default to using the "Site URL"
-  // configured in your Supabase project's auth settings (Auth > URL Configuration).
-  // This is the most robust approach. Make sure it's set correctly in your Supabase dashboard.
+  // Removendo emailRedirectTo para usar o Site URL padrão do Supabase
   const { data, error } = await supabase.auth.signUp({
     email,
     password,

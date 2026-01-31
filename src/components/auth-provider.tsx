@@ -1,11 +1,10 @@
-
 'use client';
 
 /**
  * @fileOverview AuthProvider (MOTOR DE ESTADO PASSIVO)
  * 
  * Sincroniza sessão e dados do tenant. 
- * NÃO executa navegação (Regra de Ouro).
+ * Proxy de ações críticas para Server Actions para garantir auth.uid().
  */
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -19,9 +18,9 @@ import type {
   StoreStatus, 
   StoreAccessStatus,
   CartItem,
-  Customer,
-  SaleItem
+  Customer
 } from '@/lib/types';
+import { processSaleAction } from '@/app/actions/sales-actions';
 
 type AuthContextType = {
   user: User | null;
@@ -45,7 +44,7 @@ type AuthContextType = {
   updateProductStock: (id: string, qty: number) => Promise<void>;
   removeProduct: (id: string) => Promise<void>;
   findProductByBarcode: (barcode: string) => Promise<Product | null>;
-  addSale: (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => Promise<Sale | null>;
+  addSale: (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => Promise<any>;
   setCashRegisters: (action: any) => Promise<void>;
   deleteAccount: () => Promise<{ error: any }>;
   logout: () => Promise<void>;
@@ -172,10 +171,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       p_timezone: storeData.timezone || 'America/Sao_Paulo',
     });
 
-    if (error) {
-      console.error('[AUTH_PROVIDER] RPC create_new_store failed:', error);
-      throw error;
-    }
+    if (error) throw error;
 
     await fetchStoreData(currentUser.id);
     return data as Store;
@@ -236,93 +232,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return data as Product || null;
   }, [store]);
 
+  /**
+   * PROXY PARA SERVER ACTION
+   * Resolve definitivamente o problema de auth.uid() ser nulo no RLS.
+   */
   const addSale = useCallback(async (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => {
-    /**
-     * CORREÇÃO DEFINITIVA: Sincronização Estrita de Identidade
-     * O getUser() garante que o Supabase Client envie o token correto nos headers.
-     */
-    const { data: userData, error: userError } = await supabase.auth.getUser();
+    const result = await processSaleAction(cart, paymentMethod);
     
-    if (userError || !userData?.user) {
-      console.error('[SALE_ABORTED] Falha na sincronização de identidade:', userError);
-      throw new Error('Sua sessão expirou. Por favor, entre novamente para continuar.');
+    if (!result.success) {
+      throw new Error(result.error);
     }
 
-    const currentUser = userData.user;
-    const currentStore = store;
-
-    if (!currentStore) {
-      throw new Error('Loja não identificada. Por favor, recarregue a página.');
+    // Recarregar dados em segundo plano para refletir estoque e nova venda
+    if (user) {
+      fetchStoreData(user.id, true).catch(err => console.warn('[SYNC_WARN]', err));
     }
 
-    console.log('[SALE_IDENTIDADE_SYNC] User ID:', currentUser.id);
-    
-    const total = cart.reduce((sum, item) => sum + item.subtotal_cents, 0);
-
-    // ETAPA 1: Inserir o cabeçalho da venda (Sales)
-    const { data: createdSale, error: saleError } = await supabase
-      .from('sales')
-      .insert({ 
-        store_id: currentStore.id, 
-        total_cents: total, 
-        payment_method: paymentMethod 
-      })
-      .select()
-      .single();
-
-    if (saleError || !createdSale) {
-      console.error('[SALE_DB_ERROR]', saleError);
-      const msg = saleError?.message || '';
-      
-      if (msg.includes('trial_sales_limit')) {
-        throw new Error('Limite de 5 vendas do plano de avaliação atingido. Faça o upgrade para continuar.');
-      }
-      
-      if (msg.includes('security policy') || msg.includes('RLS')) {
-        throw new Error('Acesso negado. Sua identidade não foi reconhecida pelo banco ou seu plano expirou.');
-      }
-      
-      throw new Error(msg || 'Falha técnica ao registrar a venda.');
-    }
-
-    try {
-      // ETAPA 2: Inserir itens vinculados ao ID real retornado
-      const itemsToInsert = cart.map(item => ({
-        sale_id: createdSale.id, 
-        product_id: item.product_id,
-        product_name_snapshot: item.product_name_snapshot,
-        product_barcode_snapshot: item.product_barcode_snapshot || null,
-        quantity: item.quantity,
-        unit_price_cents: item.unit_price_cents,
-        subtotal_cents: item.subtotal_cents
-      }));
-
-      const { error: itemsError } = await supabase
-        .from('sale_items')
-        .insert(itemsToInsert);
-
-      if (itemsError) throw itemsError;
-
-      // ETAPA 3: Baixa de estoque
-      for (const item of cart) {
-        await supabase.rpc('decrement_stock', { 
-          p_product_id: item.product_id, 
-          p_quantity: item.quantity 
-        });
-      }
-
-      // Sincronização Silenciosa
-      fetchStoreData(currentUser.id, true).catch(err => console.warn('[POST_SALE_SYNC_WARN]', err));
-      
-      return createdSale as Sale;
-
-    } catch (err: any) {
-      console.error('[SALE_CRITICAL_FAILURE]', err);
-      // Rollback manual do cabeçalho caso os itens falhem
-      await supabase.from('sales').delete().eq('id', createdSale.id);
-      throw new Error('Erro ao processar os itens da venda. A operação foi cancelada.');
-    }
-  }, [store, fetchStoreData]);
+    return result;
+  }, [user, fetchStoreData]);
 
   const setCashRegisters = useCallback(async (action: any) => {
     if (!store || !user) return;
