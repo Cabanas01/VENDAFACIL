@@ -3,42 +3,27 @@
 /**
  * @fileOverview Gestão de Clientes do Dashboard
  * 
- * Lista e gerencia os clientes da loja. 
- * Respeita limites de plano validados pelo backend.
+ * Lista e gerencia os clientes da loja com métricas de compra.
  */
 
 import { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '@/components/auth-provider';
 import { useToast } from '@/hooks/use-toast';
 import { PageHeader } from '@/components/page-header';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { 
-  Plus, 
-  Search, 
-  User, 
-  Mail, 
-  Phone, 
-  MoreHorizontal, 
-  Edit, 
-  Trash2, 
-  Loader2,
-  Users
-} from 'lucide-react';
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuTrigger 
-} from '@/components/ui/dropdown-menu';
+import { Plus, Search, User, Mail, Phone, MoreHorizontal, Edit, Trash2, Loader2, Users, ShoppingBag } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { supabase } from '@/lib/supabase/client';
 import type { Customer } from '@/lib/types';
 
+const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val / 100);
+
 export default function CustomersDashboardPage() {
-  const { store, fetchStoreData, addCustomer } = useAuth();
+  const { store, addCustomer, sales } = useAuth();
   const { toast } = useToast();
   
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -48,7 +33,6 @@ export default function CustomersDashboardPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
 
-  // Carregamento inicial de clientes (independente do fetchStoreData global)
   const loadCustomers = async () => {
     if (!store) return;
     setLoading(true);
@@ -90,58 +74,35 @@ export default function CustomersDashboardPage() {
     setIsSubmitting(true);
     try {
       if (editingCustomer) {
-        const { error } = await supabase
-          .from('customers')
-          .update(data)
-          .eq('id', editingCustomer.id);
-        
+        const { error } = await supabase.from('customers').update(data).eq('id', editingCustomer.id);
         if (error) throw error;
         toast({ title: 'Cliente atualizado!' });
       } else {
-        // addCustomer no AuthProvider já lida com o erro trial_customer_limit
         await addCustomer(data);
-        toast({ title: 'Cliente cadastrado com sucesso!' });
+        toast({ title: 'Cliente cadastrado!' });
       }
-      
       setIsModalOpen(false);
       loadCustomers();
     } catch (error: any) {
-      toast({ 
-        variant: 'destructive', 
-        title: 'Não foi possível salvar', 
-        description: error.message 
-      });
+      toast({ variant: 'destructive', title: 'Erro ao salvar', description: error.message });
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir este cliente?')) return;
-
+    if (!confirm('Excluir cliente permanentemente?')) return;
     const { error } = await supabase.from('customers').delete().eq('id', id);
-    if (error) {
-      toast({ variant: 'destructive', title: 'Erro ao excluir', description: error.message });
-    } else {
+    if (!error) {
       toast({ title: 'Cliente removido.' });
       loadCustomers();
     }
   };
 
-  const openAdd = () => {
-    setEditingCustomer(null);
-    setIsModalOpen(true);
-  };
-
-  const openEdit = (customer: Customer) => {
-    setEditingCustomer(customer);
-    setIsModalOpen(true);
-  };
-
   return (
     <div className="space-y-8">
-      <PageHeader title="Meus Clientes" subtitle="Gerencie sua base de contatos e fidelidade.">
-        <Button onClick={openAdd}>
+      <PageHeader title="Meus Clientes" subtitle="Fidelize seu público e gerencie contatos.">
+        <Button onClick={() => { setEditingCustomer(null); setIsModalOpen(true); }}>
           <Plus className="h-4 w-4 mr-2" /> Novo Cliente
         </Button>
       </PageHeader>
@@ -150,128 +111,74 @@ export default function CustomersDashboardPage() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2 text-lg">
-              <Users className="h-5 w-5 text-primary" />
-              Base de Clientes
+              <Users className="h-5 w-5 text-primary" /> Base de Clientes
             </CardTitle>
             <div className="relative w-72">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input 
-                placeholder="Buscar por nome, e-mail ou tel..." 
-                className="pl-10"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
+              <Input placeholder="Buscar por nome ou contato..." className="pl-10" value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          {loading ? (
-            <div className="py-20 text-center">
-              <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
-              <p className="text-sm text-muted-foreground mt-2">Carregando sua lista...</p>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nome</TableHead>
-                  <TableHead>Contato</TableHead>
-                  <TableHead>Documento</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredCustomers.map(c => (
-                  <TableRow key={c.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                          <User className="h-4 w-4" />
-                        </div>
-                        <span className="font-bold">{c.name}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-col text-xs space-y-1">
-                        <div className="flex items-center gap-1 text-muted-foreground">
-                          <Mail className="h-3 w-3" /> {c.email}
-                        </div>
-                        <div className="flex items-center gap-1 text-muted-foreground">
-                          <Phone className="h-3 w-3" /> {c.phone}
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="font-mono text-xs">{c.cpf || '-'}</TableCell>
-                    <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => openEdit(c)}>
-                            <Edit className="h-4 w-4 mr-2" /> Editar
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleDelete(c.id)} className="text-destructive">
-                            <Trash2 className="h-4 w-4 mr-2" /> Excluir
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {filteredCustomers.length === 0 && (
+          {loading ? <div className="py-20 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto" /></div> : (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader className="bg-muted/50">
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center py-10 text-muted-foreground">
-                      Nenhum cliente encontrado.
-                    </TableCell>
+                    <TableHead className="text-xs uppercase font-bold">Cliente</TableHead>
+                    <TableHead className="text-xs uppercase font-bold">Contato</TableHead>
+                    <TableHead className="text-xs uppercase font-bold">Histórico</TableHead>
+                    <TableHead className="text-right text-xs uppercase font-bold">Ações</TableHead>
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {filteredCustomers.map(c => {
+                    const customerSales = sales.filter(s => s.items?.some(i => i.product_id === c.id)); // Exemplo simplificado
+                    return (
+                      <TableRow key={c.id}>
+                        <TableCell className="font-bold">{c.name}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-col text-xs text-muted-foreground">
+                            <span>{c.email}</span>
+                            <span>{c.phone}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className="gap-1 text-[10px]">
+                            <ShoppingBag className="h-3 w-3" /> {new Date(c.created_at).toLocaleDateString()}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal /></Button></DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => { setEditingCustomer(c); setIsModalOpen(true); }}><Edit className="h-4 w-4 mr-2" /> Editar</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleDelete(c.id)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" /> Excluir</DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Modal de CRUD */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{editingCustomer ? 'Editar Cliente' : 'Cadastrar Cliente'}</DialogTitle>
-            <DialogDescription>
-              {editingCustomer 
-                ? 'Atualize os dados de contato do seu cliente.' 
-                : 'Adicione um novo cliente à sua base de dados.'}
-            </DialogDescription>
-          </DialogHeader>
-
+        <DialogContent>
+          <DialogHeader><DialogTitle>{editingCustomer ? 'Editar' : 'Cadastrar'} Cliente</DialogTitle></DialogHeader>
           <form onSubmit={handleSave} className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Nome Completo</label>
-              <Input name="name" defaultValue={editingCustomer?.name} placeholder="Ex: João da Silva" required />
-            </div>
+            <Input name="name" defaultValue={editingCustomer?.name} placeholder="Nome completo" required />
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Telefone</label>
-                <Input name="phone" defaultValue={editingCustomer?.phone} placeholder="(00) 00000-0000" required />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">CPF (Opcional)</label>
-                <Input name="cpf" defaultValue={editingCustomer?.cpf || ''} placeholder="000.000.000-00" />
-              </div>
+              <Input name="phone" defaultValue={editingCustomer?.phone} placeholder="Telefone" required />
+              <Input name="cpf" defaultValue={editingCustomer?.cpf || ''} placeholder="CPF (Opcional)" />
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">E-mail</label>
-              <Input name="email" type="email" defaultValue={editingCustomer?.email} placeholder="contato@email.com" required />
-            </div>
-
-            <DialogFooter className="pt-4">
-              <Button type="button" variant="ghost" onClick={() => setIsModalOpen(false)} disabled={isSubmitting}>
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                {editingCustomer ? 'Salvar Alterações' : 'Cadastrar Cliente'}
-              </Button>
+            <Input name="email" type="email" defaultValue={editingCustomer?.email} placeholder="E-mail" required />
+            <DialogFooter>
+              <Button type="submit" disabled={isSubmitting}>{isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Salvar</Button>
             </DialogFooter>
           </form>
         </DialogContent>

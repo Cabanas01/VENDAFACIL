@@ -41,14 +41,14 @@ export default function StoreAiPage() {
     "Quais produtos estão acabando?",
     "Resuma meu faturamento desta semana.",
     "Quem são meus clientes mais ativos?",
-    "Sugira formas de reduzir meu CMV."
+    "Sugira formas de melhorar meu CMV."
   ];
 
   return (
     <div className="space-y-6">
       <ChatInterface 
         title="Assistente de Negócios"
-        subtitle="Insights baseados no seu estoque, vendas e faturamento."
+        subtitle="Insights baseados no seu estoque, vendas e faturamento real."
         contextData={dataSnapshot}
         scope="store"
         suggestions={suggestions}

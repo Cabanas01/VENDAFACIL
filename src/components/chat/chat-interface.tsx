@@ -6,7 +6,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Bot, User, Send, Loader2, Sparkles, AlertCircle } from 'lucide-react';
+import { Bot, User, Send, Loader2, Sparkles } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { askAi } from '@/ai/flows/ai-chat-flow';
 
@@ -75,7 +75,7 @@ export function ChatInterface({ title, subtitle, contextData, scope, suggestions
         </div>
         <Badge variant="outline" className="gap-1 bg-background">
           <Sparkles className="h-3 w-3 text-primary" />
-          Modo Leitura de Dados
+          Modo Inteligente
         </Badge>
       </CardHeader>
 
@@ -88,9 +88,9 @@ export function ChatInterface({ title, subtitle, contextData, scope, suggestions
                   <Bot className="h-12 w-12 text-primary/40" />
                 </div>
                 <div className="space-y-1">
-                  <h3 className="font-bold">Olá! Eu sou seu assistente inteligente.</h3>
+                  <h3 className="font-bold">Como posso ajudar sua loja hoje?</h3>
                   <p className="text-sm text-muted-foreground px-12">
-                    Analiso seus dados em tempo real para encontrar tendências e responder dúvidas operacionais.
+                    Analiso faturamento, CMV e estoque para te dar respostas precisas.
                   </p>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-4">
@@ -123,7 +123,7 @@ export function ChatInterface({ title, subtitle, contextData, scope, suggestions
                 <Avatar className="h-8 w-8 bg-primary/20"><Bot className="h-5 w-5 text-primary" /></Avatar>
                 <div className="bg-background border rounded-2xl rounded-tl-none px-4 py-3 flex items-center gap-2">
                   <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                  <span className="text-xs text-muted-foreground">Analisando snapshot do sistema...</span>
+                  <span className="text-xs text-muted-foreground">Consultando dados operacionais...</span>
                 </div>
               </div>
             )}
@@ -134,7 +134,7 @@ export function ChatInterface({ title, subtitle, contextData, scope, suggestions
       <CardFooter className="p-4 border-t bg-background">
         <form className="flex w-full items-center gap-3" onSubmit={(e) => { e.preventDefault(); handleSend(input); }}>
           <Input 
-            placeholder="Digite sua dúvida sobre os dados..." 
+            placeholder="Ex: Qual meu produto mais lucrativo?" 
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={isLoading}

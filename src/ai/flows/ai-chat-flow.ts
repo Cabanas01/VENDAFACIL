@@ -63,7 +63,6 @@ const aiChatFlow = ai.defineFlow(
       
       PERGUNTA DO USUÁRIO:
       ${input.messages[input.messages.length - 1].content}`,
-      // Passamos o histórico de mensagens para manter o contexto da conversa
       messages: input.messages.slice(0, -1).map(m => ({
         role: m.role,
         content: [{ text: m.content }]
