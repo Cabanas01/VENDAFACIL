@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import type { DateRange } from 'react-day-picker';
 import { addDays, startOfToday, format, eachDayOfInterval, startOfDay, endOfDay } from 'date-fns';
 import { Lightbulb, Loader2, TrendingDown } from 'lucide-react';
@@ -24,7 +24,7 @@ import type { SummarizeFinancialReportsOutput } from '@/ai/flows/summarize-finan
 import { useAuth } from '@/components/auth-provider';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
-const formatCurrency = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value / 100);
+const formatCurrency = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((value || 0) / 100);
 
 export default function ReportsPage() {
   const { toast } = useToast();
@@ -39,15 +39,19 @@ export default function ReportsPage() {
   const [isSummarizing, setIsSummarizing] = useState(false);
   
   // Filtered data based on dateRange
-  const filteredSales = sales.filter(sale => {
+  const filteredSales = useMemo(() => {
+    if (!dateRange?.from) return [];
+    const fromDate = startOfDay(dateRange.from);
+    const toDate = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
+    
+    return (sales || []).filter(sale => {
+      if (!sale.created_at) return false;
       const saleDate = new Date(sale.created_at);
-      if (!dateRange?.from) return false;
-      const fromDate = startOfDay(dateRange.from);
-      const toDate = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
       return saleDate >= fromDate && saleDate <= toDate;
-  });
+    });
+  }, [sales, dateRange]);
 
-  const reportData = (() => {
+  const reportData = useMemo(() => {
     if (filteredSales.length === 0) {
         return { totalCents: 0, count: 0, cash: 0, pix: 0, card: 0, cost: 0, profit: 0, margin: 0 };
     }
@@ -62,7 +66,7 @@ export default function ReportsPage() {
     }, { totalCents: 0, count: 0, cash: 0, pix: 0, card: 0 });
 
     const cost = filteredSales.flatMap(s => s.items || []).reduce((acc, item) => {
-        const product = products.find(p => p.id === item.product_id);
+        const product = (products || []).find(p => p.id === item.product_id);
         return acc + (product?.cost_cents ?? 0) * (item.quantity || 0);
     }, 0);
     
@@ -70,53 +74,80 @@ export default function ReportsPage() {
     const margin = totals.totalCents > 0 ? (profit / totals.totalCents) * 100 : 0;
 
     return { ...totals, cost, profit, margin };
-  })();
+  }, [filteredSales, products]);
   
   // Sales over time data
-  const salesOverTime = dateRange?.from && dateRange?.to ? eachDayOfInterval({ start: dateRange.from, end: dateRange.to }).map(day => {
+  const salesOverTime = useMemo(() => {
+    if (!dateRange?.from || !dateRange?.to) return [];
+    
+    return eachDayOfInterval({ start: dateRange.from, end: dateRange.to }).map(day => {
       const salesOnDay = filteredSales.filter(s => format(new Date(s.created_at), 'yyyy-MM-dd') === format(day, 'yyyy-MM-dd'));
       return {
           date: format(day, 'dd/MM'),
           total: salesOnDay.reduce((sum, s) => sum + (s.total_cents || 0), 0)
       }
-  }) : [];
+    });
+  }, [filteredSales, dateRange]);
 
-  const salesByPaymentMethod = filteredSales.reduce((acc, sale) => {
+  const salesByPaymentMethod = useMemo(() => {
+    return filteredSales.reduce((acc, sale) => {
       if (sale.payment_method) {
         acc[sale.payment_method] = (acc[sale.payment_method] || 0) + (sale.total_cents || 0);
       }
       return acc;
-  }, {} as Record<'cash' | 'pix' | 'card', number>);
+    }, {} as Record<'cash' | 'pix' | 'card', number>);
+  }, [filteredSales]);
 
-  const salesByProduct = filteredSales
-    .flatMap(sale => sale.items || [])
-    .reduce((acc, item) => {
-        const name = item.product_name_snapshot || 'Produto sem nome';
-        acc[name] = (acc[name] || 0) + (item.subtotal_cents || 0);
-        return acc;
+  const salesByProduct = useMemo(() => {
+    return filteredSales
+      .flatMap(sale => sale.items || [])
+      .reduce((acc, item) => {
+          const name = item.product_name_snapshot || 'Produto sem nome';
+          acc[name] = (acc[name] || 0) + (item.subtotal_cents || 0);
+          return acc;
+      }, {} as Record<string, number>);
+  }, [filteredSales]);
+
+  const topProducts = useMemo(() => {
+    return Object.entries(salesByProduct)
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, total]) => ({ name, total }));
+  }, [salesByProduct]);
+
+  const salesByCategory = useMemo(() => {
+    return filteredSales
+      .flatMap(sale => sale.items || [])
+      .map(item => {
+          const product = (products || []).find(p => p.id === item.product_id);
+          return { ...item, category: product?.category || 'Sem categoria' };
+      })
+      .reduce((acc, item) => {
+          acc[item.category] = (acc[item.category] || 0) + (item.quantity || 0);
+          return acc;
+      }, {} as Record<string, number>);
+  }, [filteredSales, products]);
+
+  const topCategories = useMemo(() => {
+    return Object.entries(salesByCategory)
+      .sort((a,b) => b[1] - a[1])
+      .map(([name, total]) => ({name, total}));
+  }, [salesByCategory]);
+
+  const stockByCategory = useMemo(() => {
+    return (products || []).reduce((acc, product) => {
+      const category = product.category || 'Sem categoria';
+      acc[category] = (acc[category] || 0) + (product.stock_qty || 0);
+      return acc;
     }, {} as Record<string, number>);
-  const topProducts = Object.entries(salesByProduct).sort((a, b) => b[1] - a[1]).map(([name, total]) => ({ name, total }));
+  }, [products]);
 
-  const salesByCategory = filteredSales
-    .flatMap(sale => sale.items || [])
-    .map(item => {
-        const product = products.find(p => p.id === item.product_id);
-        return { ...item, category: product?.category || 'Sem categoria' };
-    })
-    .reduce((acc, item) => {
-        acc[item.category] = (acc[item.category] || 0) + (item.quantity || 0);
-        return acc;
-    }, {} as Record<string, number>);
-   const topCategories = Object.entries(salesByCategory).sort((a,b) => b[1] - a[1]).map(([name, total]) => ({name, total}));
+  const stockByCategoryData = useMemo(() => {
+    return Object.entries(stockByCategory).map(([name, total]) => ({ name, total }));
+  }, [stockByCategory]);
 
-  const stockByCategory = products.reduce((acc, product) => {
-    const category = product.category || 'Sem categoria';
-    acc[category] = (acc[category] || 0) + (product.stock_qty || 0);
-    return acc;
-  }, {} as Record<string, number>);
-  const stockByCategoryData = Object.entries(stockByCategory).map(([name, total]) => ({ name, total }));
-
-  const productsWithoutSale = products.filter(p => p.stock_qty > 0 && !filteredSales.some(s => (s.items || []).some(i => i.product_id === p.id)));
+  const productsWithoutSale = useMemo(() => {
+    return (products || []).filter(p => (p.stock_qty || 0) > 0 && !filteredSales.some(s => (s.items || []).some(i => i.product_id === p.id)));
+  }, [products, filteredSales]);
 
   const handleGenerateReportText = () => {
     if (!dateRange?.from || !reportData) {
@@ -269,7 +300,7 @@ export default function ReportsPage() {
                                     </TableHeader>
                                     <TableBody>
                                         {productsWithoutSale.map(p => (
-                                            <TableRow key={p.id} onClick={() => router.push('/products')} className="cursor-pointer">
+                                            <TableRow key={p.id} onClick={() => router.push('/dashboard/products')} className="cursor-pointer">
                                                 <TableCell className="font-medium">{p.name}</TableCell>
                                                 <TableCell>{p.category || '-'}</TableCell>
                                                 <TableCell className="text-right">{p.stock_qty}</TableCell>

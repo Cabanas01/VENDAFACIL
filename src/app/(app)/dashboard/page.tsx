@@ -13,7 +13,6 @@ import {
   DollarSign, 
   ShoppingCart, 
   TrendingUp, 
-  Package, 
   Wallet, 
   Target, 
   Users,
@@ -73,10 +72,14 @@ export default function DashboardOverviewPage() {
   }, [filteredSales, products]);
 
   const openCash = useMemo(() => (Array.isArray(cashRegisters) ? cashRegisters : []).find(cr => !cr.closed_at), [cashRegisters]);
-  const lowStockCount = useMemo(() => (Array.isArray(products) ? products : []).filter(p => p.stock_qty <= (p.min_stock_qty || 0)).length, [products]);
+  const lowStockCount = useMemo(() => (Array.isArray(products) ? products : []).filter(p => (p.stock_qty || 0) <= (p.min_stock_qty || 0)).length, [products]);
 
   if (storeStatus === 'loading_auth' || storeStatus === 'loading_store') {
-    return <div className="p-8 text-center text-muted-foreground">Sincronizando seu painel profissional...</div>;
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] gap-4 text-muted-foreground">
+        <p className="animate-pulse">Sincronizando ambiente comercial...</p>
+      </div>
+    );
   }
 
   return (

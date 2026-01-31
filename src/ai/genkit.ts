@@ -1,5 +1,5 @@
 import { config } from 'dotenv';
-config();
+config(); // Força o carregamento do .env antes de qualquer plugin
 
 import { genkit } from 'genkit';
 import { googleAI } from '@genkit-ai/google-genai';
@@ -11,7 +11,10 @@ import { googleAI } from '@genkit-ai/google-genai';
  * antes de qualquer fluxo ser executado.
  */
 
-const apiKey = process.env.GOOGLE_GENAI_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+// Tentamos obter a chave de múltiplas variáveis de ambiente comuns
+const apiKey = process.env.GOOGLE_GENAI_API_KEY || 
+               process.env.GEMINI_API_KEY || 
+               process.env.GOOGLE_API_KEY;
 
 if (!apiKey) {
   console.warn('[GENKIT] Erro Crítico: Nenhuma chave de API (GOOGLE_GENAI_API_KEY ou GEMINI_API_KEY) foi detectada no process.env.');
