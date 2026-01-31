@@ -148,7 +148,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       p_timezone: storeData.timezone || 'America/Sao_Paulo',
     });
     if (error) throw error;
-    // O AppLayout (Server) detectará a nova loja e mudará a rota
+    // Força recarregamento para que o Server Layout reavalie o bootstrap
     window.location.href = '/dashboard';
   };
 

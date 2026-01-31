@@ -37,31 +37,31 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const { has_store, is_member, is_admin } = status;
 
   // 🚫 ONBOARDING SÓ PARA NOVO USUÁRIO REAL
-  // Um admin SaaS sem loja própria NÃO deve ver o onboarding.
+  // Definimos que Onboarding é a EXCEÇÃO (apenas se não tiver nada)
   const isNewUser = !has_store && !is_member && !is_admin;
 
   // 3. EXECUÇÃO DOS REDIRECTS SÍNCRONOS (SERVER-SIDE)
   
-  // Novo usuário DEVE estar no onboarding
+  // Se for um usuário novo e não estiver no onboarding, força ir pra lá
   if (isNewUser && !pathname.startsWith('/onboarding')) {
     redirect('/onboarding');
   }
 
-  // Usuário com acesso (Dono, Membro ou Admin) NÃO PODE estar no onboarding
+  // Se NÃO for um usuário novo (já tem loja, é membro ou admin) e tentar entrar no onboarding, tira ele de lá
   if (!isNewUser && pathname.startsWith('/onboarding')) {
     redirect('/dashboard');
   }
 
-  // Proteção de rota admin
+  // Proteção de rotas /admin
   if (pathname.startsWith('/admin') && !is_admin) {
     redirect('/dashboard');
   }
 
   const isAdminPath = pathname.startsWith('/admin');
 
-  // Buscar nome da loja para o Header (se não for admin e possuir loja)
+  // Buscar nome da loja para o Header (se não for novo usuário)
   let storeName = 'VendaFácil';
-  if (!isNewUser && !is_admin) {
+  if (!isNewUser) {
     const { data: storeData } = await supabase
       .from('stores')
       .select('name')

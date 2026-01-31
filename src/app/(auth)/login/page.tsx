@@ -51,8 +51,8 @@ export default function LoginPage() {
         setErrorMsg(error.message === 'Invalid login credentials' ? 'E-mail ou senha incorretos.' : error.message);
         setLoading(false);
       } else {
-        // SUCESSO: Forçamos o recarregamento para que o servidor veja os novos cookies imediatamente.
-        // O AuthLayout detectará a sessão e redirecionará para /dashboard.
+        // SUCESSO: Forçamos o recarregamento completo para que o servidor veja os novos cookies imediatamente.
+        // O AuthLayout ou AppLayout do servidor decidirão a rota final.
         window.location.href = '/dashboard';
       }
     } catch (err) {
