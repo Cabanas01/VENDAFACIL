@@ -196,7 +196,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (error) throw error;
 
-    await fetchStoreData(currentUser.id);
+    // Força atualização total do estado após criação
+    await fetchStoreData(currentUser.id, false);
     return data as Store;
   }, [fetchStoreData]);
 

@@ -22,6 +22,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/lib/supabase/client';
+import { useRouter } from 'next/navigation';
 
 const onboardingSchema = z.object({
   name: z.string().min(3, 'Nome fantasia muito curto'),
@@ -40,11 +41,19 @@ const onboardingSchema = z.object({
 type OnboardingValues = z.infer<typeof onboardingSchema>;
 
 export default function OnboardingPage() {
-  const { createStore } = useAuth();
+  const { createStore, storeStatus } = useAuth();
   const { toast } = useToast();
+  const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingCnpj, setIsLoadingCnpj] = useState(false);
   const [step, setStep] = useState(1);
+
+  // Guarda adicional de página: Se o AuthProvider já confirmou a loja, sai daqui.
+  useEffect(() => {
+    if (storeStatus === 'has_store') {
+      router.replace('/dashboard');
+    }
+  }, [storeStatus, router]);
 
   const form = useForm<OnboardingValues>({
     resolver: zodResolver(onboardingSchema),
@@ -104,8 +113,6 @@ export default function OnboardingPage() {
     setIsSubmitting(true);
     
     try {
-      console.log('[ONBOARDING] Iniciando criação de loja...');
-      
       const { data: { user: activeUser }, error: userError } = await supabase.auth.getUser();
 
       if (userError || !activeUser) {
@@ -135,6 +142,7 @@ export default function OnboardingPage() {
       });
 
       toast({ title: 'Configuração concluída!', description: 'Sua loja está pronta para operar.' });
+      // O AppLayout cuidará do redirecionamento assim que storeStatus mudar para has_store
     } catch (error: any) {
       console.error('[ONBOARDING_SUBMIT_ERROR]', error);
       toast({
@@ -146,6 +154,8 @@ export default function OnboardingPage() {
       setIsSubmitting(false);
     }
   };
+
+  if (storeStatus === 'has_store') return null;
 
   return (
     <Card className="shadow-2xl w-full border-border/50 max-w-lg mx-auto">

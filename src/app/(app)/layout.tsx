@@ -1,9 +1,11 @@
 'use client';
 
 /**
- * @fileOverview AppLayout (Guardião Determinístico + TopBar Global)
+ * @fileOverview AppLayout (Guardião Determinístico de Navegação)
  * 
- * Implementação otimizada para refletir a marca VendaFácil conforme design do usuário.
+ * Implementa regras de redirecionamento baseadas no status da loja e acesso.
+ * Garante que usuários com loja nunca vejam o onboarding e usuários sem loja 
+ * sejam forçados a configurá-la.
  */
 
 import { useAuth } from '@/components/auth-provider';
@@ -25,36 +27,46 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const isAdminPath = pathname.startsWith('/admin');
 
   useEffect(() => {
+    // 1. Aguarda resolução da autenticação
     if (loading || storeStatus === 'loading_auth') return;
+
+    // 2. Se não há usuário, manda para o login
     if (!user) {
       router.replace('/login');
       return;
     }
+
+    // 3. Aguarda resolução dos dados da loja
     if (storeStatus === 'loading_store') return;
-    if (storeStatus === 'no_store' && pathname !== '/onboarding' && !isAdminPath) {
-      router.replace('/onboarding');
-      return;
-    }
-    if (storeStatus === 'has_store' && pathname === '/onboarding') {
-      router.replace('/dashboard');
-      return;
-    }
-    if (storeStatus === 'has_store') {
+
+    // 4. Lógica de Redirecionamento de Onboarding
+    if (storeStatus === 'no_store') {
+      // Usuário novo (sem loja): Deve estar no Onboarding
+      if (pathname !== '/onboarding' && !isAdminPath) {
+        router.replace('/onboarding');
+      }
+    } else if (storeStatus === 'has_store') {
+      // Usuário existente (com loja): NÃO PODE estar no Onboarding
+      if (pathname === '/onboarding') {
+        router.replace('/dashboard');
+        return;
+      }
+
+      // 5. Paywall (Acesso bloqueado por expiração)
       const isLiberado = accessStatus?.acesso_liberado ?? false;
       const isSafePath = pathname === '/billing' || pathname === '/settings' || isAdminPath;
+      
       if (!isLiberado && !isSafePath) {
         router.replace('/billing');
-        return;
       }
     }
   }, [user, loading, storeStatus, accessStatus, pathname, router, isAdminPath]);
 
+  // CMV Global para o TopBar
   const cmvGlobal = useMemo(() => {
     const safeSales = Array.isArray(sales) ? sales : [];
     const safeProducts = Array.isArray(products) ? products : [];
-    
     if (!safeSales.length || !safeProducts.length) return 0;
-    
     const revenue = safeSales.reduce((acc, s) => acc + (s.total_cents || 0), 0);
     const cost = safeSales.flatMap(s => s.items || []).reduce((acc, item) => {
       const p = safeProducts.find(prod => prod.id === item.product_id);
@@ -63,6 +75,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return revenue > 0 ? (cost / revenue) * 100 : 0;
   }, [sales, products]);
 
+  // Tela de Carregamento Global (Bootstrap)
   if (loading || storeStatus === 'loading_auth' || storeStatus === 'loading_store') {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
@@ -72,6 +85,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
+  // Tela de Erro Crítico
   if (storeStatus === 'error') {
     return (
       <div className="min-h-screen w-full flex items-center justify-center bg-[#fcfcfc] p-6">
@@ -80,7 +94,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <AlertTriangle className="h-10 w-10 text-red-500 stroke-[1.5]" />
           </div>
           <h1 className="text-2xl font-headline font-bold text-slate-900 mb-4">Falha na Comunicação</h1>
-          <div className="text-slate-500 text-base mb-10">Ocorreu um erro ao carregar os dados da sua loja. Isso pode ser instabilidade na conexão ou permissão de acesso.</div>
+          <div className="text-slate-500 text-base mb-10">Ocorreu um erro ao carregar os dados da sua loja. Verifique sua conexão.</div>
           <div className="flex flex-col gap-3">
             <Button onClick={() => user && fetchStoreData(user.id)} className="h-12 px-8 font-semibold gap-2 shadow-sm">
               <RefreshCcw className="h-4 w-4" /> Tentar Reconectar
@@ -92,8 +106,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (pathname === '/onboarding') {
+  // Se estiver no onboarding e não tiver loja, renderiza limpo (sem sidebar)
+  if (pathname === '/onboarding' && storeStatus === 'no_store') {
     return <main className="min-h-screen flex items-center justify-center bg-muted/5">{children}</main>;
+  }
+
+  // Se o usuário está sendo redirecionado para fora do onboarding, não renderiza nada para evitar flash de conteúdo
+  if (pathname === '/onboarding' && storeStatus === 'has_store') {
+    return null;
   }
 
   return (
@@ -101,7 +121,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <div className="flex min-h-screen w-full overflow-hidden">
         {isAdminPath ? <AdminSidebar /> : <MainNav />}
         <SidebarInset className="flex-1 overflow-auto flex flex-col">
-          {/* TopBar Global */}
           <header className="h-16 border-b bg-background flex items-center justify-between px-6 sticky top-0 z-50">
             <div className="flex items-center gap-4">
               <div className="flex flex-col">
@@ -127,7 +146,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
             <div className="flex items-center gap-3">
               <Button variant="ghost" size="icon" className="rounded-full hover:bg-primary/5 h-10 w-10" onClick={() => router.push('/settings')}>
-                <Avatar className="h-8 w-8 ring-2 ring-primary/10 transition-transform hover:scale-105">
+                <Avatar className="h-8 w-8 ring-2 ring-primary/10">
                   <AvatarImage src={user?.avatar_url ?? undefined} />
                   <AvatarFallback><UserIcon className="h-4 w-4 text-primary" /></AvatarFallback>
                 </Avatar>
