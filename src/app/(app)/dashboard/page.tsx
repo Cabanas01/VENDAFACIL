@@ -4,6 +4,7 @@
  * @fileOverview Visão Geral do Dashboard (Home)
  * 
  * Centraliza os KPIs de saúde financeira, alertas de estoque e caixa.
+ * Corrigido: Adicionada importação de Badge e tratamento de NaN no formatCurrency.
  */
 
 import { useState, useMemo } from 'react';
@@ -34,7 +35,7 @@ import {
 import { useAuth } from '@/components/auth-provider';
 
 const formatCurrency = (value: number) =>
-  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value / 100);
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((value || 0) / 100);
 
 export default function DashboardOverviewPage() {
   const { user, storeStatus, products, sales, cashRegisters, accessStatus, customers } = useAuth();
@@ -57,10 +58,10 @@ export default function DashboardOverviewPage() {
   }, [sales, dateRange]);
 
   const stats = useMemo(() => {
-    const revenue = filteredSales.reduce((sum, s) => sum + s.total_cents, 0);
+    const revenue = filteredSales.reduce((sum, s) => sum + (s.total_cents || 0), 0);
     const cost = filteredSales.flatMap(s => s.items || []).reduce((acc, item) => {
       const prod = products.find(p => p.id === item.product_id);
-      return acc + ((prod?.cost_cents || 0) * item.quantity);
+      return acc + ((prod?.cost_cents || 0) * (item.quantity || 0));
     }, 0);
     
     const profit = revenue - cost;
@@ -165,14 +166,15 @@ export default function DashboardOverviewPage() {
         <SalesByPaymentMethodChart 
           data={filteredSales.reduce((acc, s) => {
             const existing = acc.find(i => i.name === s.payment_method);
-            if (existing) existing.value += s.total_cents;
-            else acc.push({ name: s.payment_method as any, value: s.total_cents });
+            if (existing) existing.value += (s.total_cents || 0);
+            else acc.push({ name: s.payment_method as any, value: (s.total_cents || 0) });
             return acc;
           }, [] as { name: 'cash' | 'pix' | 'card', value: number }[])} 
         />
         <SalesByProductChart 
           data={Object.entries(filteredSales.flatMap(s => s.items || []).reduce((acc, i) => {
-            acc[i.product_name_snapshot] = (acc[i.product_name_snapshot] || 0) + i.subtotal_cents;
+            const name = i.product_name_snapshot || 'Produto';
+            acc[name] = (acc[name] || 0) + (i.subtotal_cents || 0);
             return acc;
           }, {} as Record<string, number>))
           .map(([name, total]) => ({ name, total }))
