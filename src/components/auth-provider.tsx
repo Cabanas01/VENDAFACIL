@@ -68,6 +68,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchAppData = useCallback(async (userId: string) => {
     try {
+      setLoading(true);
       // 1. Chamar RPC de Bootstrap (Fonte Única de Verdade)
       const { data: status, error: rpcError } = await supabase.rpc('get_user_bootstrap_status');
       
@@ -118,7 +119,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refreshStatus = useCallback(async () => {
     const { data: { user: sessionUser } } = await supabase.auth.getUser();
     if (sessionUser) {
-      setLoading(true);
       await fetchAppData(sessionUser.id);
     }
   }, [fetchAppData]);
@@ -142,7 +142,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
         setUser({ id: session.user.id, email: session.user.email || '' });
-        setLoading(true);
         await fetchAppData(session.user.id);
       } else if (event === 'SIGNED_OUT') {
         setUser(null);

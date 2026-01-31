@@ -25,6 +25,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const isAdminPath = pathname.startsWith('/admin');
 
+  // Lógica de Redirecionamento em Efeito (Navegação)
   useEffect(() => {
     if (loading) return;
 
@@ -34,34 +35,36 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // 2. Erro no bootstrap -> Login
+    // 2. Sem dados de bootstrap -> Login (Falha de segurança)
     if (!bootstrap) {
       router.replace('/login');
       return;
     }
 
-    // 3. Regra de Ouro: Novos usuários sem loja -> Força Onboarding
-    const isNewUser = !bootstrap.has_store && !bootstrap.is_member;
-    if (isNewUser) {
-      if (pathname !== '/onboarding') {
-        router.replace('/onboarding');
-      }
+    // 3. Regra de Ouro: Identificar se o usuário PRECISA de onboarding
+    // Um usuário existente tem loja, é membro OU é administrador do SaaS.
+    const isExistingUser = bootstrap.has_store || bootstrap.is_member || bootstrap.is_admin;
+    const isNewUser = !isExistingUser;
+
+    // Se for novo e não estiver no onboarding -> Força Onboarding
+    if (isNewUser && pathname !== '/onboarding') {
+      router.replace('/onboarding');
       return;
     }
 
-    // 4. Regra de Ouro: Usuários com loja -> Proíbe Onboarding
-    if (pathname === '/onboarding' && !isNewUser) {
+    // Se já for do sistema e estiver no onboarding -> Força Dashboard
+    if (!isNewUser && pathname === '/onboarding') {
       router.replace('/dashboard');
       return;
     }
 
-    // 5. Restrição de Admin
+    // 4. Restrição de Admin
     if (isAdminPath && !bootstrap.is_admin) {
       router.replace('/dashboard');
       return;
     }
 
-    // 6. Paywall (apenas rotas comerciais)
+    // 5. Paywall (apenas rotas comerciais para usuários não-admin)
     const isPaywallPath = !['/billing', '/settings', '/ai'].some(p => pathname.startsWith(p)) && !isAdminPath;
     if (isPaywallPath && accessStatus && !accessStatus.acesso_liberado) {
       router.replace('/billing');
@@ -82,10 +85,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // Curto-circuito de segurança: Impede flashes de conteúdo errado
   if (!user || !bootstrap) return null;
 
-  const isNewUser = !bootstrap.has_store && !bootstrap.is_member;
-  const isIncorrectOnboarding = isNewUser ? pathname !== '/onboarding' : pathname === '/onboarding';
+  // Bloqueio de Renderização Síncrono (Gatekeeper de Camada Zero)
+  const isExistingUser = bootstrap.has_store || bootstrap.is_member || bootstrap.is_admin;
+  const isIncorrectRoute = isExistingUser ? pathname === '/onboarding' : pathname !== '/onboarding';
   
-  if (isIncorrectOnboarding) {
+  if (isIncorrectRoute) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -107,11 +111,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <div className="flex items-center gap-4">
               <div className="flex flex-col">
                 <h3 className="text-[11px] font-black tracking-tighter uppercase text-primary mb-0.5">
-                  {store?.name || 'VendaFácil'}
+                  {store?.name || (bootstrap.is_admin ? 'Painel SaaS' : 'VendaFácil')}
                 </h3>
                 <div className="flex items-center gap-1.5">
                   <Badge variant="outline" className="text-[8px] h-3.5 px-1.5 font-black uppercase tracking-widest bg-muted/30 border-primary/10 text-primary">
-                    {accessStatus?.plano_nome || 'Free'}
+                    {bootstrap.is_admin ? 'Sistema Admin' : (accessStatus?.plano_nome || 'Free')}
                   </Badge>
                 </div>
               </div>

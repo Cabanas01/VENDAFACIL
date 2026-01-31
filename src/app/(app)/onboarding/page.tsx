@@ -4,7 +4,7 @@
  * @fileOverview OnboardingPage
  * 
  * Coleta os dados comerciais para a criação da primeira loja.
- * Bloqueia renderização se o usuário já possuir uma loja.
+ * Bloqueia renderização se o usuário já possuir uma loja ou for admin.
  */
 
 import { useState, useEffect } from 'react';
@@ -46,9 +46,9 @@ export default function OnboardingPage() {
   const [isLoadingCnpj, setIsLoadingCnpj] = useState(false);
   const [step, setStep] = useState(1);
 
-  // Redirecionamento de segurança para evitar acesso indevido
+  // Redirecionamento de segurança para evitar acesso indevido de usuários existentes
   useEffect(() => {
-    if (!loading && bootstrap && (bootstrap.has_store || bootstrap.is_member)) {
+    if (!loading && bootstrap && (bootstrap.has_store || bootstrap.is_member || bootstrap.is_admin)) {
       router.replace('/dashboard');
     }
   }, [bootstrap, loading, router]);
@@ -134,8 +134,8 @@ export default function OnboardingPage() {
     }
   };
 
-  // Se o usuário já tem loja, não renderiza nada para evitar flash
-  if (bootstrap && (bootstrap.has_store || bootstrap.is_member)) {
+  // Se o usuário já tem acesso ou é admin, bloqueia a renderização para evitar flashes
+  if (bootstrap && (bootstrap.has_store || bootstrap.is_member || bootstrap.is_admin)) {
     return null;
   }
 
