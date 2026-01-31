@@ -8,7 +8,7 @@
 
 import { useState, useMemo } from 'react';
 import type { DateRange } from 'react-day-picker';
-import { addDays, startOfToday, endOfDay, parseISO } from 'date-fns';
+import { startOfDay, addDays, startOfToday, endOfDay, parseISO } from 'date-fns';
 import { 
   DollarSign, 
   ShoppingCart, 
@@ -47,7 +47,7 @@ export default function DashboardOverviewPage() {
 
   const filteredSales = useMemo(() => {
     if (!dateRange?.from) return [];
-    const from = startOfToday();
+    const from = startOfDay(dateRange.from);
     const to = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
 
     return sales.filter((sale) => {
