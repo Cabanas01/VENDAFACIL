@@ -2,8 +2,6 @@
 
 /**
  * @fileOverview Fluxo de IA para análise estratégica do VendaFácil.
- * 
- * Implementação resiliente que valida a configuração no momento da chamada.
  */
 
 import { ai } from '@/ai/genkit';
@@ -28,17 +26,12 @@ const AiChatOutputSchema = z.object({
 
 export type AiChatOutput = z.infer<typeof AiChatOutputSchema>;
 
-/**
- * Função principal para invocar a IA.
- * Valida a existência da API KEY em runtime para evitar erros 500 silenciosos.
- */
 export async function askAi(input: AiChatInput): Promise<AiChatOutput> {
   const apiKey = process.env.GOOGLE_GENAI_API_KEY || 
                  process.env.GEMINI_API_KEY || 
                  process.env.GOOGLE_API_KEY;
   
   if (!apiKey) {
-    console.error('[AI_FLOW_CRITICAL] Tentativa de uso da IA sem API KEY configurada.');
     throw new Error('API_KEY_MISSING');
   }
 
@@ -58,14 +51,8 @@ const aiChatFlow = ai.defineFlow(
   },
   async (input) => {
     const systemPrompt = input.scope === 'admin' 
-      ? `Você é o ANALISTA ESTRATÉGICO do SaaS VendaFácil. 
-         Analise métricas GLOBAIS de faturamento e tenants fornecidas.
-         REGRA DE OURO: Responda apenas com base nos DADOS FORNECIDOS.
-         Use Markdown.`
-      : `Você é o CONSULTOR DE NEGÓCIOS do VendaFácil.
-         Foco em: Lucratividade, Gestão de Estoque e Vendas.
-         Analise os dados da loja e responda de forma direta.
-         REGRA DE OURO: Responda apenas com base nos DADOS FORNECIDOS. Use Markdown.`;
+      ? `Você é o ANALISTA ESTRATÉGICO do SaaS VendaFácil. Analise métricas GLOBAIS fornecidas. Responda apenas com base nos DADOS FORNECIDOS em Markdown.`
+      : `Você é o CONSULTOR DE NEGÓCIOS do VendaFácil. Analise os dados da loja (estoque, vendas, CMV) e responda de forma direta em Markdown.`;
 
     const history = (input.messages || []).slice(0, -1).map(m => ({
       role: m.role,
@@ -77,9 +64,6 @@ const aiChatFlow = ai.defineFlow(
     const { text } = await ai.generate({
       model: 'googleai/gemini-1.5-flash',
       system: systemPrompt,
-      config: {
-        temperature: 0.7,
-      },
       messages: [
         ...history,
         {

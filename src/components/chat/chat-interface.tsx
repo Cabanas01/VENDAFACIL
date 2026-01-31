@@ -6,13 +6,14 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Bot, User, Send, Loader2, Sparkles, Settings } from 'lucide-react';
+import { Bot, User, Send, Loader2, Sparkles, Settings, AlertTriangle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { askAi } from '@/ai/flows/ai-chat-flow';
 
 type Message = {
   role: 'user' | 'model';
   content: string;
+  isError?: boolean;
 };
 
 type ChatInterfaceProps = {
@@ -57,10 +58,10 @@ export function ChatInterface({ title, subtitle, contextData, scope, suggestions
     } catch (error: any) {
       console.error('[CHAT_UI_ERROR]', error);
       const errorMsg = error.message === 'API_KEY_MISSING' 
-        ? '⚠️ A chave de API da IA não está configurada no servidor.'
-        : '⚠️ Falha técnica na análise. Verifique sua conexão ou tente novamente.';
+        ? 'A chave de API da IA não está configurada no servidor.'
+        : 'Falha técnica na análise. Verifique sua conexão ou tente novamente.';
       
-      setMessages([...newMessages, { role: 'model', content: errorMsg }]);
+      setMessages([...newMessages, { role: 'model', content: errorMsg, isError: true }]);
     } finally {
       setIsLoading(false);
     }
@@ -73,18 +74,14 @@ export function ChatInterface({ title, subtitle, contextData, scope, suggestions
           <div className="p-5 bg-white rounded-full border border-yellow-200 shadow-sm">
             <Settings className="h-10 w-10 text-yellow-500" />
           </div>
-          
           <div className="space-y-4">
             <h3 className="text-2xl font-black text-[#713F12] font-headline uppercase tracking-tighter">
               Configuração de IA Necessária
             </h3>
             <p className="text-sm text-[#854D0E] leading-relaxed px-8 opacity-80 font-medium">
-              Para ativar o assistente inteligente, você precisa configurar a <br className="hidden md:block" />
-              chave <strong className="font-bold">GOOGLE_GENAI_API_KEY</strong> no seu ambiente de <br className="hidden md:block" />
-              hospedagem ou arquivo .env local.
+              Para ativar o assistente inteligente, você precisa configurar a chave <strong className="font-bold">GOOGLE_GENAI_API_KEY</strong> no seu ambiente de hospedagem ou arquivo .env local.
             </p>
           </div>
-
           <Button 
             variant="outline" 
             className="border-yellow-400 text-[#854D0E] hover:bg-yellow-100 font-bold h-12 px-10 transition-all active:scale-95" 
@@ -141,14 +138,17 @@ export function ChatInterface({ title, subtitle, contextData, scope, suggestions
 
             {messages.map((m, i) => (
               <div key={i} className={`flex gap-3 ${m.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                <Avatar className={`h-8 w-8 ${m.role === 'model' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
+                <Avatar className={`h-8 w-8 ${m.role === 'model' ? 'bg-primary text-primary-foreground' : 'bg-muted shadow-sm'}`}>
                   {m.role === 'model' ? <Bot className="h-5 w-5" /> : <User className="h-5 w-5" />}
                 </Avatar>
                 <div className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm shadow-sm ${
                   m.role === 'user' 
                     ? 'bg-primary text-primary-foreground rounded-tr-none font-medium' 
-                    : 'bg-background border border-primary/5 rounded-tl-none prose prose-slate dark:prose-invert max-w-none'
+                    : m.isError 
+                      ? 'bg-yellow-50 border border-yellow-200 text-yellow-900 rounded-tl-none flex items-start gap-2'
+                      : 'bg-background border border-primary/5 rounded-tl-none prose prose-slate max-w-none'
                 }`}>
+                  {m.isError && <AlertTriangle className="h-4 w-4 text-yellow-600 mt-0.5 shrink-0" />}
                   {m.content}
                 </div>
               </div>
