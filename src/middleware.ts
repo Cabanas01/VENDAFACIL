@@ -3,15 +3,20 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 /**
  * Middleware de Autenticação Robusto.
- * Garante que a sessão do Supabase seja renovada e os cookies propagados
- * corretamente para Server Components e Server Actions.
+ * 1. Mantém a sessão ativa.
+ * 2. Injeta o pathname nos headers para que Server Layouts possam ler a rota atual.
  */
 export async function middleware(request: NextRequest) {
+  const url = new URL(request.url);
+  
   let response = NextResponse.next({
     request: {
       headers: request.headers,
     },
   });
+
+  // Injeta o pathname atual para consumo em Server Components
+  response.headers.set('x-pathname', url.pathname);
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -25,11 +30,13 @@ export async function middleware(request: NextRequest) {
           request.cookies.set({ name, value, ...options });
           response = NextResponse.next({ request: { headers: request.headers } });
           response.cookies.set({ name, value, ...options });
+          response.headers.set('x-pathname', url.pathname);
         },
         remove(name: string, options: CookieOptions) {
           request.cookies.set({ name, value: '', ...options });
           response = NextResponse.next({ request: { headers: request.headers } });
           response.cookies.set({ name, value: '', ...options });
+          response.headers.set('x-pathname', url.pathname);
         },
       },
     }

@@ -1,10 +1,10 @@
 'use client';
 
 /**
- * @fileOverview OnboardingPage
+ * @fileOverview OnboardingPage (Dumb Form)
  * 
- * Coleta os dados comerciais para a criação da primeira loja.
- * Esta página é puramente visual; o controle de acesso é feito no AppLayout.
+ * Esta página é focada apenas na coleta dos dados.
+ * A decisão de acesso é 100% responsabilidade do AppLayout (Server).
  */
 
 import { useState, useEffect } from 'react';
@@ -98,21 +98,7 @@ export default function OnboardingPage() {
   const onSubmit = async (values: OnboardingValues) => {
     setIsSubmitting(true);
     try {
-      await createStore({
-        name: values.name,
-        legal_name: values.legal_name,
-        cnpj: values.cnpj,
-        phone: values.phone,
-        timezone: values.timezone,
-        address: {
-          cep: values.cep,
-          street: values.street,
-          number: values.number,
-          neighborhood: values.neighborhood,
-          city: values.city,
-          state: values.state
-        }
-      });
+      await createStore(values);
       toast({ title: 'Configuração concluída!', description: 'Bem-vindo ao VendaFácil.' });
     } catch (error: any) {
       toast({
@@ -126,112 +112,118 @@ export default function OnboardingPage() {
   };
 
   return (
-    <Card className="shadow-2xl w-full border-border/50 max-w-lg mx-auto">
-      <CardHeader className="space-y-4">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-2xl font-headline font-bold text-primary">Configuração Inicial</CardTitle>
-          <div className="bg-primary/10 p-2 rounded-lg">
-            <Store className="h-6 w-6 text-primary" />
+    <div className="w-full max-w-lg mx-auto py-10">
+      <Card className="shadow-2xl border-border/50">
+        <CardHeader className="space-y-4 text-center">
+          <div className="mx-auto bg-primary/10 p-3 rounded-xl w-fit">
+            <Store className="h-8 w-8 text-primary" />
           </div>
-        </div>
-        <Progress value={step === 1 ? 50 : 100} className="h-2" />
-        <CardDescription>
-          {step === 1 ? 'Identificação da sua empresa.' : 'Localização e contato.'}
-        </CardDescription>
-      </CardHeader>
+          <div>
+            <CardTitle className="text-2xl font-headline font-bold">Configuração da Loja</CardTitle>
+            <CardDescription>Precisamos de alguns dados para ativar seu PDV.</CardDescription>
+          </div>
+          <Progress value={step === 1 ? 50 : 100} className="h-1.5" />
+        </CardHeader>
 
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)}>
-          <CardContent className="space-y-6">
-            {step === 1 ? (
-              <div className="space-y-4">
-                <FormField control={form.control} name="cnpj" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>CNPJ (Somente números)</FormLabel>
-                    <FormControl>
-                      <div className="relative">
-                        <Input placeholder="00000000000000" {...field} />
-                        {isLoadingCnpj && (
-                          <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                            <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                          </div>
-                        )}
-                      </div>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="name" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nome Fantasia</FormLabel>
-                    <FormControl><Input {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="legal_name" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Razão Social</FormLabel>
-                    <FormControl><Input {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <FormField control={form.control} name="cep" render={({ field }) => (
-                  <FormItem><FormLabel>CEP</FormLabel><FormControl><Input placeholder="00000-000" {...field} /></FormControl><FormMessage /></FormItem>
-                )} />
-                <div className="grid grid-cols-4 gap-4">
-                  <div className="col-span-3">
-                    <FormField control={form.control} name="street" render={({ field }) => (
-                      <FormItem><FormLabel>Rua/Avenida</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)}>
+            <CardContent className="space-y-6">
+              {step === 1 ? (
+                <div className="space-y-4">
+                  <FormField control={form.control} name="cnpj" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>CNPJ (Somente números)</FormLabel>
+                      <FormControl>
+                        <div className="relative">
+                          <Input placeholder="00000000000000" {...field} />
+                          {isLoadingCnpj && (
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                            </div>
+                          )}
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="name" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Nome Fantasia</FormLabel>
+                      <FormControl><Input {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="legal_name" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Razão Social</FormLabel>
+                      <FormControl><Input {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="col-span-1">
+                      <FormField control={form.control} name="cep" render={({ field }) => (
+                        <FormItem><FormLabel>CEP</FormLabel><FormControl><Input placeholder="00000-000" {...field} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                    </div>
+                    <div className="col-span-2">
+                      <FormField control={form.control} name="phone" render={({ field }) => (
+                        <FormItem><FormLabel>Telefone</FormLabel><FormControl><Input placeholder="(00) 0000-0000" {...field} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                    </div>
                   </div>
-                  <div className="col-span-1">
-                    <FormField control={form.control} name="number" render={({ field }) => (
-                      <FormItem><FormLabel>Nº</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
+                  <div className="grid grid-cols-4 gap-4">
+                    <div className="col-span-3">
+                      <FormField control={form.control} name="street" render={({ field }) => (
+                        <FormItem><FormLabel>Endereço</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                    </div>
+                    <div className="col-span-1">
+                      <FormField control={form.control} name="number" render={({ field }) => (
+                        <FormItem><FormLabel>Nº</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                    </div>
+                  </div>
+                  <FormField control={form.control} name="neighborhood" render={({ field }) => (
+                    <FormItem><FormLabel>Bairro</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                  )} />
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="col-span-2">
+                      <FormField control={form.control} name="city" render={({ field }) => (
+                        <FormItem><FormLabel>Cidade</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                    </div>
+                    <div className="col-span-1">
+                      <FormField control={form.control} name="state" render={({ field }) => (
+                        <FormItem><FormLabel>UF</FormLabel><FormControl><Input {...field} maxLength={2} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                    </div>
                   </div>
                 </div>
-                <FormField control={form.control} name="neighborhood" render={({ field }) => (
-                  <FormItem><FormLabel>Bairro</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                )} />
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="col-span-2">
-                    <FormField control={form.control} name="city" render={({ field }) => (
-                      <FormItem><FormLabel>Cidade</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                  </div>
-                  <div className="col-span-1">
-                    <FormField control={form.control} name="state" render={({ field }) => (
-                      <FormItem><FormLabel>UF</FormLabel><FormControl><Input {...field} maxLength={2} /></FormControl><FormMessage /></FormItem>
-                    )} />
-                  </div>
-                </div>
-                <FormField control={form.control} name="phone" render={({ field }) => (
-                  <FormItem><FormLabel>Telefone de Contato</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                )} />
-              </div>
-            )}
-          </CardContent>
+              )}
+            </CardContent>
 
-          <CardFooter className="flex justify-between border-t pt-6 bg-muted/20">
-            {step === 2 && (
-              <Button type="button" variant="ghost" onClick={() => setStep(1)} disabled={isSubmitting}>Voltar</Button>
-            )}
-            {step === 1 ? (
-              <Button type="button" className="ml-auto" onClick={async () => {
-                const isValid = await trigger(['cnpj', 'name', 'legal_name']);
-                if (isValid) setStep(2);
-              }}>Próximo <ArrowRight className="ml-2 h-4 w-4" /></Button>
-            ) : (
-              <Button type="submit" className="ml-auto" disabled={isSubmitting}>
-                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Finalizar Cadastro'}
-              </Button>
-            )}
-          </CardFooter>
-        </form>
-      </Form>
-    </Card>
+            <CardFooter className="flex justify-between border-t pt-6 bg-muted/20">
+              {step === 2 && (
+                <Button type="button" variant="ghost" onClick={() => setStep(1)} disabled={isSubmitting}>Voltar</Button>
+              )}
+              {step === 1 ? (
+                <Button type="button" className="ml-auto" onClick={async () => {
+                  const isValid = await trigger(['cnpj', 'name', 'legal_name']);
+                  if (isValid) setStep(2);
+                }}>Próximo <ArrowRight className="ml-2 h-4 w-4" /></Button>
+              ) : (
+                <Button type="submit" className="ml-auto" disabled={isSubmitting}>
+                  {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Criar Minha Loja'}
+                </Button>
+              )}
+            </CardFooter>
+          </form>
+        </Form>
+      </Card>
+    </div>
   );
 }
