@@ -17,7 +17,7 @@ const apiKey = process.env.GOOGLE_GENAI_API_KEY ||
                process.env.GOOGLE_API_KEY;
 
 if (!apiKey) {
-  console.warn('[GENKIT] Erro Crítico: Nenhuma chave de API (GOOGLE_GENAI_API_KEY ou GEMINI_API_KEY) foi detectada no process.env.');
+  console.warn('[GENKIT] Aviso: Nenhuma chave de API (GOOGLE_GENAI_API_KEY ou GEMINI_API_KEY) foi detectada no ambiente.');
 }
 
 export const ai = genkit({

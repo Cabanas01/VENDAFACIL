@@ -23,7 +23,7 @@ import { useRouter } from 'next/navigation';
 
 import { PageHeader } from '@/components/page-header';
 import { DateRangePicker } from '@/components/date-range-picker';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { 
@@ -36,7 +36,7 @@ const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((value || 0) / 100);
 
 export default function DashboardOverviewPage() {
-  const { user, storeStatus, products, sales, cashRegisters, customers } = useAuth();
+  const { storeStatus, products, sales, cashRegisters, customers } = useAuth();
   const router = useRouter();
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
