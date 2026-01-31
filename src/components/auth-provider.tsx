@@ -3,8 +3,8 @@
 /**
  * @fileOverview AuthProvider (Data Sync Only)
  * 
- * Sincroniza os dados do banco com o estado do cliente.
- * NÃO realiza redirecionamentos. Deixa essa tarefa para o Server Layout.
+ * Sincroniza os dados do banco com o estado do cliente para uso em componentes.
+ * NÃO realiza redirecionamentos ou lógica de roteamento.
  */
 
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
@@ -70,7 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (status) setBootstrap(status);
 
       if (status?.has_store || status?.is_member) {
-        // Busca a loja ativa
+        // Busca a loja ativa (Dono ou Membro)
         const { data: ownerStore } = await supabase.from('stores').select('id').eq('user_id', userId).maybeSingle();
         let storeId = ownerStore?.id;
 
@@ -111,6 +111,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (initialized.current) return;
     initialized.current = true;
 
+    // Inicialização da sessão
     supabase.auth.getUser().then(({ data: { user: sessionUser } }) => {
       if (sessionUser) {
         setUser({ id: sessionUser.id, email: sessionUser.email || '' });
@@ -147,6 +148,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       p_timezone: storeData.timezone || 'America/Sao_Paulo',
     });
     if (error) throw error;
+    // O AppLayout (Server) detectará a nova loja e mudará a rota
     window.location.href = '/dashboard';
   };
 

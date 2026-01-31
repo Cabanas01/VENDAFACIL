@@ -26,7 +26,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     redirect('/login');
   }
 
-  // 2. Buscar Status Atômico
+  // 2. Buscar Status Atômico via RPC
   const { data: status, error: rpcError } = await supabase.rpc('get_user_bootstrap_status');
   
   if (rpcError || !status) {
@@ -34,30 +34,34 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     redirect('/login');
   }
 
-  const isNewUser = !status.has_store && !status.is_member && !status.is_admin;
+  const { has_store, is_member, is_admin } = status;
 
-  // 3. EXECUÇÃO DOS REDIRECTS SÍNCRONOS
+  // 🚫 ONBOARDING SÓ PARA NOVO USUÁRIO REAL
+  // Um admin SaaS sem loja própria NÃO deve ver o onboarding.
+  const isNewUser = !has_store && !is_member && !is_admin;
+
+  // 3. EXECUÇÃO DOS REDIRECTS SÍNCRONOS (SERVER-SIDE)
   
   // Novo usuário DEVE estar no onboarding
   if (isNewUser && !pathname.startsWith('/onboarding')) {
     redirect('/onboarding');
   }
 
-  // Usuário com acesso NÃO PODE estar no onboarding
+  // Usuário com acesso (Dono, Membro ou Admin) NÃO PODE estar no onboarding
   if (!isNewUser && pathname.startsWith('/onboarding')) {
     redirect('/dashboard');
   }
 
   // Proteção de rota admin
-  if (pathname.startsWith('/admin') && !status.is_admin) {
+  if (pathname.startsWith('/admin') && !is_admin) {
     redirect('/dashboard');
   }
 
   const isAdminPath = pathname.startsWith('/admin');
 
-  // Buscar nome da loja para o Header (se não for admin)
+  // Buscar nome da loja para o Header (se não for admin e possuir loja)
   let storeName = 'VendaFácil';
-  if (!isNewUser && !status.is_admin) {
+  if (!isNewUser && !is_admin) {
     const { data: storeData } = await supabase
       .from('stores')
       .select('name')
@@ -80,7 +84,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                   </h3>
                   <div className="flex items-center gap-1.5">
                     <Badge variant="outline" className="text-[8px] h-3.5 px-1.5 font-black uppercase tracking-widest bg-muted/30 border-primary/10 text-primary">
-                      {status.is_admin ? 'SaaS Admin' : 'Portal Logado'}
+                      {is_admin ? 'SaaS Admin' : 'Portal Logado'}
                     </Badge>
                   </div>
                 </div>

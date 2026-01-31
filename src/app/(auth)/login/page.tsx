@@ -1,5 +1,12 @@
 'use client';
 
+/**
+ * @fileOverview LoginPage (Dumb Form)
+ * 
+ * Focada apenas na autenticação.
+ * O redirecionamento é gerenciado pelo AuthLayout (Server) após a mudança dos cookies.
+ */
+
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -44,7 +51,8 @@ export default function LoginPage() {
         setErrorMsg(error.message === 'Invalid login credentials' ? 'E-mail ou senha incorretos.' : error.message);
         setLoading(false);
       } else {
-        // Sucesso: Redirecionamento é feito automaticamente pelo layout do Next.js após a mudança de cookies
+        // SUCESSO: Forçamos o recarregamento para que o servidor veja os novos cookies imediatamente.
+        // O AuthLayout detectará a sessão e redirecionará para /dashboard.
         window.location.href = '/dashboard';
       }
     } catch (err) {

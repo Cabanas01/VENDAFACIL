@@ -3,8 +3,8 @@
 /**
  * @fileOverview OnboardingPage (Dumb Form)
  * 
- * Esta página é focada APENAS na coleta dos dados.
- * A segurança e o acesso são 100% responsabilidade do AppLayout (Server).
+ * Esta página é focada APENAS na coleta dos dados da nova loja.
+ * O controle de quem pode ver esta página é feito pelo AppLayout (Server Component).
  */
 
 import { useState, useEffect } from 'react';

@@ -4,7 +4,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 /**
  * Middleware de Autenticação Robusto.
  * 1. Mantém a sessão ativa (Refresh).
- * 2. Injeta o pathname nos headers para que Server Layouts possam ler a rota atual.
+ * 2. Injeta o pathname nos headers para que Server Layouts possam ler a rota atual de forma síncrona.
  */
 export async function middleware(request: NextRequest) {
   const url = new URL(request.url);
@@ -16,7 +16,7 @@ export async function middleware(request: NextRequest) {
   });
 
   // Injeta o pathname atual para consumo em Server Components (Layouts)
-  // Essencial para evitar loops de redirecionamento no servidor
+  // Essencial para evitar loops de redirecionamento no servidor e flickering
   response.headers.set('x-pathname', url.pathname);
 
   const supabase = createServerClient(

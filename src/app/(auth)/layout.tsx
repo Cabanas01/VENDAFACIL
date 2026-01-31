@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
  * @fileOverview AuthLayout (SERVER-SIDE PUBLIC GATEKEEPER)
  * 
  * Este layout impede que usuários LOGADOS acessem a página de login.
+ * Se houver sessão, redireciona síncronamente para o portal privado.
  */
 export default async function AuthLayout({ children }: { children: ReactNode }) {
   const supabase = createSupabaseServerClient();
