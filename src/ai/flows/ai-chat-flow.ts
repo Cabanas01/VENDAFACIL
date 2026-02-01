@@ -8,7 +8,6 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
-import { gemini15Flash } from '@genkit-ai/google-genai';
 
 const MessageSchema = z.object({
   role: z.enum(['user', 'model']),
@@ -43,8 +42,9 @@ export async function askAi(input: AiChatInput): Promise<AiChatOutput> {
 
     const lastUserMessage = input.messages[input.messages.length - 1]?.content || 'Resuma meus dados.';
 
+    // Especificando o modelo via string ID para garantir resolução no runtime
     const response = await ai.generate({
-      model: gemini15Flash,
+      model: 'googleai/gemini-1.5-flash',
       system: systemPrompt,
       messages: [
         ...input.messages.slice(0, -1).map(m => ({
