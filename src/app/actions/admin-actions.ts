@@ -17,19 +17,19 @@ export type GrantPlanPayload = {
 
 /**
  * Concede um plano manualmente a uma loja.
- * Valida o status de administrador no servidor via RPC.
+ * Valida o status de administrador no servidor via RPC de bootstrap.
  */
 export async function grantPlanAction(payload: GrantPlanPayload) {
   const supabase = await createSupabaseServerClient();
 
-  // 1. Verificação de Segurança no Servidor
-  const { data: isAdmin, error: adminErr } = await supabase.rpc('get_admin_status');
+  // 1. Verificação de Segurança no Servidor (Usando a RPC de bootstrap que é garantida)
+  const { data: status, error: bootstrapErr } = await supabase.rpc('get_user_bootstrap_status');
 
-  if (adminErr || !isAdmin) {
-    console.error('[ADMIN_ACTION_DENIED]', { adminErr, isAdmin });
+  if (bootstrapErr || !status || !(status as any).is_admin) {
+    console.error('[ADMIN_ACTION_DENIED]', { bootstrapErr, status });
     return { 
       success: false, 
-      error: 'Acesso negado: Sua identidade de administrador não foi confirmada pelo servidor.' 
+      error: 'not admin' 
     };
   }
 
@@ -44,7 +44,8 @@ export async function grantPlanAction(payload: GrantPlanPayload) {
 
   if (grantErr) {
     console.error('[ADMIN_GRANT_ERROR]', grantErr);
-    return { success: false, error: grantErr.message };
+    // Se o erro vier do banco como "not admin", repassamos para a UI tratar
+    return { success: false, error: grantErr.message === 'not admin' ? 'not admin' : grantErr.message };
   }
 
   // 3. Limpeza de Cache para refletir mudanças na UI

@@ -54,7 +54,6 @@ export function GrantPlanDialog({ store, isOpen, onOpenChange, onSuccess }: Gran
     const calculatedDays = values.plan === 'free' ? 7 : Number(values.durationMonths) * 30;
 
     try {
-      // Chamada direta para a Server Action
       const result = await grantPlanAction({
         storeId: store.id,
         planoTipo: values.plan,
@@ -77,7 +76,9 @@ export function GrantPlanDialog({ store, isOpen, onOpenChange, onSuccess }: Gran
       toast({
         variant: 'destructive',
         title: 'Falha na Operação',
-        description: error.message || 'Erro inesperado ao processar a concessão.',
+        description: error.message === 'not admin' 
+          ? 'Acesso negado: Sua identidade de administrador não foi confirmada pelo servidor.' 
+          : (error.message || 'Erro inesperado ao processar a concessão.'),
       });
     } finally {
       setIsSubmitting(false);
@@ -95,7 +96,7 @@ export function GrantPlanDialog({ store, isOpen, onOpenChange, onSuccess }: Gran
           </div>
           <DialogTitle className="text-center">Conceder Acesso Manual</DialogTitle>
           <DialogDescription className="text-center">
-            Ajuste a licença da loja <span className="font-bold text-foreground">"{store.name}"</span>. 
+            Ajuste a licença da loja <span className="font-bold text-foreground">"{store.name || 'esta loja'}"</span>. 
             Esta ação será registrada nos logs de auditoria.
           </DialogDescription>
         </DialogHeader>
@@ -107,7 +108,7 @@ export function GrantPlanDialog({ store, isOpen, onOpenChange, onSuccess }: Gran
               name="plan"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Tipo de Licença</FormLabel>
+                  <FormLabel className="font-bold">Tipo de Licença</FormLabel>
                   <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
                       <SelectTrigger className="h-12">
@@ -133,7 +134,7 @@ export function GrantPlanDialog({ store, isOpen, onOpenChange, onSuccess }: Gran
                 name="durationMonths"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Duração do Acesso (Meses)</FormLabel>
+                    <FormLabel className="font-bold">Duração do Acesso (Meses)</FormLabel>
                     <FormControl>
                       <Input type="number" className="h-12" {...field} />
                     </FormControl>
@@ -143,11 +144,11 @@ export function GrantPlanDialog({ store, isOpen, onOpenChange, onSuccess }: Gran
               />
             )}
 
-            <DialogFooter className="flex-col sm:flex-row gap-2">
+            <DialogFooter className="flex-col sm:flex-row gap-3 pt-4">
               <Button 
                 type="button" 
                 variant="ghost" 
-                className="flex-1"
+                className="flex-1 h-11"
                 onClick={() => onOpenChange(false)} 
                 disabled={isSubmitting}
               >
