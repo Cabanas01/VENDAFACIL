@@ -4,11 +4,11 @@ import { googleAI } from '@genkit-ai/google-genai';
 /**
  * @fileOverview Configuração Central do Genkit v1.x
  * 
- * Utiliza o alias 'gemini-pro' para garantir compatibilidade total 
- * com o endpoint v1beta e evitar erros de "model not found" (404).
+ * Utiliza o modelo Gemini 1.5 Flash para análise de dados e chat.
+ * Este modelo é otimizado para latência e suporta o contexto necessário para o SaaS.
  */
 
 export const ai = genkit({
   plugins: [googleAI()],
-  model: 'googleai/gemini-pro', 
+  model: 'googleai/gemini-1.5-flash',
 });
