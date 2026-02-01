@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -12,6 +13,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import Link from 'next/link';
+import Script from 'next/script';
 import { trackEvent } from '@/lib/analytics/track';
 
 const loginSchema = z.object({
@@ -60,79 +62,89 @@ export default function LoginPage() {
   };
 
   return (
-    <Card className="shadow-2xl border-border/50">
-      <CardHeader className="text-center space-y-4">
-        <div className="mx-auto">
-          <Avatar className="h-16 w-16 rounded-xl">
-            <AvatarImage src="/logo.png" alt="VendaFacil" />
-            <AvatarFallback className="bg-primary text-primary-foreground font-bold">VF</AvatarFallback>
-          </Avatar>
-        </div>
-        <div className="space-y-1">
-          <CardTitle className="text-3xl font-headline font-bold">VendaFácil</CardTitle>
-          <CardDescription>Acesse seu ponto de venda inteligente.</CardDescription>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="email"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>E-mail</FormLabel>
-                  <FormControl>
-                    <Input placeholder="seu@email.com" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="password"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Senha</FormLabel>
-                  <FormControl>
-                    <div className="relative">
-                      <Input type={showPassword ? 'text' : 'password'} {...field} />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
-                        onClick={() => setShowPassword(!showPassword)}
-                      >
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </Button>
-                    </div>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+    <>
+      <Script
+        id="adsense-login-direct"
+        async
+        src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7101977987227464"
+        crossOrigin="anonymous"
+        strategy="afterInteractive"
+      />
+      
+      <Card className="shadow-2xl border-border/50">
+        <CardHeader className="text-center space-y-4">
+          <div className="mx-auto">
+            <Avatar className="h-16 w-16 rounded-xl">
+              <AvatarImage src="/logo.png" alt="VendaFacil" />
+              <AvatarFallback className="bg-primary text-primary-foreground font-bold">VF</AvatarFallback>
+            </Avatar>
+          </div>
+          <div className="space-y-1">
+            <CardTitle className="text-3xl font-headline font-bold">VendaFácil</CardTitle>
+            <CardDescription>Acesse seu ponto de venda inteligente.</CardDescription>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>E-mail</FormLabel>
+                    <FormControl>
+                      <Input placeholder="seu@email.com" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Senha</FormLabel>
+                    <FormControl>
+                      <div className="relative">
+                        <Input type={showPassword ? 'text' : 'password'} {...field} />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                          onClick={() => setShowPassword(!showPassword)}
+                        >
+                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </Button>
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-            {errorMsg && (
-              <div className="p-3 text-sm bg-destructive/10 border border-destructive/20 text-destructive rounded-md">
-                {errorMsg}
-              </div>
-            )}
+              {errorMsg && (
+                <div className="p-3 text-sm bg-destructive/10 border border-destructive/20 text-destructive rounded-md">
+                  {errorMsg}
+                </div>
+              )}
 
-            <Button type="submit" className="w-full h-12 font-bold" disabled={loading}>
-              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LogIn className="mr-2 h-4 w-4" />}
-              Entrar na conta
-            </Button>
-          </form>
-        </Form>
-      </CardContent>
-      <CardFooter className="flex flex-col space-y-2 text-sm text-center">
-        <p className="text-muted-foreground">
-          Ainda não tem conta?{' '}
-          <Link href="/signup" className="text-primary hover:underline font-bold">Criar conta</Link>
-        </p>
-      </CardFooter>
-    </Card>
+              <Button type="submit" className="w-full h-12 font-bold" disabled={loading}>
+                {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LogIn className="mr-2 h-4 w-4" />}
+                Entrar na conta
+              </Button>
+            </form>
+          </Form>
+        </CardContent>
+        <CardFooter className="flex flex-col space-y-2 text-sm text-center">
+          <p className="text-muted-foreground">
+            Ainda não tem conta?{' '}
+            <Link href="/signup" className="text-primary hover:underline font-bold">Criar conta</Link>
+          </p>
+        </CardFooter>
+      </Card>
+    </>
   );
 }
