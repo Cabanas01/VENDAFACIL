@@ -1,15 +1,22 @@
 'use client';
 
+/**
+ * @fileOverview Gestão de Faturamento (Admin) - Seguro e Defensivo
+ * 
+ * Implementa agregação no frontend para evitar erros de SQL aninhado.
+ */
+
 import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { DollarSign, ArrowUp, ArrowDown, Activity, Receipt } from 'lucide-react';
+import { DollarSign, ArrowUp, ArrowDown, Receipt } from 'lucide-react';
 import { DateRangePicker } from '@/components/date-range-picker';
 import type { DateRange } from 'react-day-picker';
-import { addDays, startOfToday, format, startOfDay, endOfDay } from 'date-fns';
+import { addDays, startOfToday, startOfDay, endOfDay } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
+import { format } from 'date-fns';
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', {
@@ -20,14 +27,19 @@ const formatCurrency = (value: number) =>
 export default function AdminBilling() {
   const [events, setEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isMounted, setIsMounted] = useState(false);
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: addDays(startOfToday(), -29),
     to: new Date(),
   });
 
   useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  useEffect(() => {
     async function loadBillingEvents() {
-      if (!dateRange?.from) return;
+      if (!dateRange?.from || !isMounted) return;
       setLoading(true);
 
       const from = startOfDay(dateRange.from).toISOString();
@@ -44,12 +56,14 @@ export default function AdminBilling() {
       setLoading(false);
     }
 
-    loadBillingEvents();
-  }, [dateRange]);
+    if (isMounted) loadBillingEvents();
+  }, [dateRange, isMounted]);
 
-  // Agregações Determinísticas (Frontend)
+  // Agregações Determinísticas (Frontend Pure)
   const stats = useMemo(() => {
-    return events.reduce((acc, ev) => {
+    const safeEvents = Array.isArray(events) ? events : [];
+    return safeEvents.reduce((acc, ev) => {
+      if (!ev) return acc;
       const amount = Number(ev.amount) || 0;
       if (ev.event_type === 'PURCHASE_APPROVED') {
         acc.revenue += amount;
@@ -63,14 +77,18 @@ export default function AdminBilling() {
   }, [events]);
 
   const revenueByProvider = useMemo(() => {
+    const safeEvents = Array.isArray(events) ? events : [];
     const map: Record<string, number> = {};
-    events.forEach(ev => {
-      if (ev.event_type === 'PURCHASE_APPROVED') {
-        map[ev.provider] = (map[ev.provider] || 0) + (Number(ev.amount) || 0);
+    safeEvents.forEach(ev => {
+      if (ev && ev.event_type === 'PURCHASE_APPROVED') {
+        const provider = ev.provider || 'desconhecido';
+        map[provider] = (map[provider] || 0) + (Number(ev.amount) || 0);
       }
     });
     return Object.entries(map).map(([provider, total]) => ({ provider, total }));
   }, [events]);
+
+  if (!isMounted) return <div className="py-20 text-center animate-pulse">Sincronizando fluxo financeiro...</div>;
 
   if (loading) {
     return (
@@ -129,8 +147,8 @@ export default function AdminBilling() {
                         <TableBody>
                             {events.slice(0, 10).map(e => (
                                 <TableRow key={e.id} className="hover:bg-primary/5 transition-colors border-b border-muted/10">
-                                    <TableCell className="px-6"><Badge variant="outline" className="text-[8px] font-black uppercase border-primary/20">{e.event_type.replace(/_/g, ' ')}</Badge></TableCell>
-                                    <TableCell className="text-[10px] font-bold text-muted-foreground px-6">{format(new Date(e.created_at), 'dd/MM HH:mm')}</TableCell>
+                                    <TableCell className="px-6"><Badge variant="outline" className="text-[8px] font-black uppercase border-primary/20">{e.event_type?.replace(/_/g, ' ')}</Badge></TableCell>
+                                    <TableCell className="text-[10px] font-bold text-muted-foreground px-6">{e.created_at ? format(new Date(e.created_at), 'dd/MM HH:mm') : '-'}</TableCell>
                                     <TableCell className="text-right font-black text-xs px-6">{formatCurrency(Number(e.amount) || 0)}</TableCell>
                                 </TableRow>
                             ))}
@@ -154,7 +172,7 @@ function MetricCard({ title, value, icon, color }: { title: string, value: any, 
         <div className={color}>{icon}</div>
       </CardHeader>
       <CardContent>
-        <div className="text-2xl font-black tracking-tighter">{value}</div>
+        <div className="text-2xl font-black tracking-tighter">{value ?? 0}</div>
       </CardContent>
     </Card>
   );

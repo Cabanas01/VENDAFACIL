@@ -1,17 +1,21 @@
 'use client';
 
+/**
+ * @fileOverview Painel de Analytics (Admin) - Seguro e Defensivo
+ * 
+ * Implementa agregação no frontend e proteção contra hidratação.
+ */
+
 import { useEffect, useState, useMemo } from 'react';
 import type { DateRange } from 'react-day-picker';
 import { addDays, startOfToday, format, parseISO, startOfDay, endOfDay } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 import {
   Activity,
   Eye,
   MousePointerClick,
   FileText,
   TrendingUp,
-  Search,
-  Loader2
+  Search
 } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 
@@ -27,6 +31,7 @@ import { SalesOverTimeChart } from '@/components/charts';
 export default function AdminAnalytics() {
   const searchParams = useSearchParams();
   const { toast } = useToast();
+  const [isMounted, setIsMounted] = useState(false);
   
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: addDays(startOfToday(), -6),
@@ -35,6 +40,10 @@ export default function AdminAnalytics() {
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState<any[]>([]);
   const [storeIdFilter, setStoreIdFilter] = useState(searchParams.get('store_id') || '');
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   useEffect(() => {
     const fetchRawEvents = async () => {
@@ -65,17 +74,20 @@ export default function AdminAnalytics() {
       }
     };
 
-    fetchRawEvents();
-  }, [storeIdFilter, dateRange, toast]);
+    if (isMounted) fetchRawEvents();
+  }, [storeIdFilter, dateRange, toast, isMounted]);
 
-  // Agregações em Memória (Frontend Pure)
+  // Agregações Defensivas
   const metrics = useMemo(() => {
-    return events.reduce((acc, ev) => {
+    const safeEvents = Array.isArray(events) ? events : [];
+    return safeEvents.reduce((acc, ev) => {
+      if (!ev) return acc;
       acc.total += 1;
       if (ev.event_name === 'page_view') acc.views += 1;
-      if (ev.event_name === 'report_opened') acc.reports += 1;
+      if (ev.event_name === 'report_opened' || ev.event_name === 'report_viewed') acc.reports += 1;
       
-      const day = format(new Date(ev.created_at), 'yyyy-MM-dd');
+      const createdAt = ev.created_at || new Date().toISOString();
+      const day = format(new Date(createdAt), 'yyyy-MM-dd');
       acc.byDay[day] = (acc.byDay[day] || 0) + 1;
 
       const name = ev.event_name || 'unknown';
@@ -103,6 +115,8 @@ export default function AdminAnalytics() {
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5);
   }, [metrics.topEvents]);
+
+  if (!isMounted) return <div className="py-20 text-center animate-pulse">Iniciando análise de dados...</div>;
 
   return (
     <div className="space-y-6">
@@ -133,7 +147,7 @@ export default function AdminAnalytics() {
                 <MetricCard title="Eventos Totais" value={metrics.total} icon={<Activity />} />
                 <MetricCard title="Page Views" value={metrics.views} icon={<Eye />} />
                 <MetricCard title="Relatórios" value={metrics.reports} icon={<FileText />} />
-                <MetricCard title="Engajamento" value={events.length > 0 ? (metrics.total / events.length * 100).toFixed(0) + '%' : '0%'} icon={<MousePointerClick />} />
+                <MetricCard title="Ações Ativas" value={metrics.total - metrics.views} icon={<MousePointerClick />} />
             </div>
         )}
         
@@ -165,6 +179,7 @@ export default function AdminAnalytics() {
 }
 
 function MetricCard({ title, value, icon }: { title: string, value: any, icon: any }) {
+  const displayValue = typeof value === 'number' ? value.toLocaleString() : value;
   return (
     <Card className="border-primary/5 shadow-sm">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -172,7 +187,7 @@ function MetricCard({ title, value, icon }: { title: string, value: any, icon: a
         <div className="h-4 w-4 text-primary opacity-50">{icon}</div>
       </CardHeader>
       <CardContent>
-        <div className="text-2xl font-black tracking-tighter">{value}</div>
+        <div className="text-2xl font-black tracking-tighter">{displayValue ?? 0}</div>
       </CardContent>
     </Card>
   );

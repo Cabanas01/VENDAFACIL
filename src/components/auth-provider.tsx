@@ -66,6 +66,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchAppData = useCallback(async (userId: string) => {
+    if (!userId) return;
+    
     try {
       const { data: ownerStore } = await supabase.from('stores').select('id').eq('user_id', userId).maybeSingle();
       let storeId = ownerStore?.id;
@@ -86,7 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         ]);
 
         setAccessStatus(accessRes.data?.[0] || null);
-        setStore(storeRes.data);
+        setStore(storeRes.data || null);
         setProducts(prodRes.data || []);
         setSales(salesRes.data || []);
         setCashRegistersState(cashRes.data || []);
@@ -109,6 +111,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user?.id, fetchAppData]);
 
   useEffect(() => {
+    // Carregamento inicial do usuário
     supabase.auth.getUser().then(({ data: { user: sessionUser } }) => {
       if (sessionUser) {
         setUser({ id: sessionUser.id, email: sessionUser.email || '' });
@@ -118,6 +121,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
+    // Listener de mudanças de estado de autenticação
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session?.user) {
         setUser({ id: session.user.id, email: session.user.email || '' });
@@ -132,9 +136,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, [fetchAppData]);
 
-  // Implementação de Polling Leve (30s) somente em rotas de faturamento
+  // Polling automático somente em páginas críticas de faturamento
   useEffect(() => {
-    const isBillingPath = pathname.includes('/billing') || pathname.includes('/admin/billing');
+    if (typeof window === 'undefined') return;
+    
+    const isBillingPath = pathname?.includes('/billing') || pathname?.includes('/admin/billing');
     
     if (isBillingPath && user?.id) {
       if (!pollingRef.current) {
@@ -166,6 +172,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { user: authUser } } = await supabase.auth.getUser();
     if (!authUser) throw new Error('Sessão expirada.');
 
+    // Upsert preventivo do perfil público do usuário
     await supabase.from('users').upsert({ id: authUser.id, email: authUser.email }, { onConflict: 'id' });
 
     const { error: rpcError } = await supabase.rpc('create_new_store', {

@@ -1,12 +1,12 @@
 'use client';
 
 /**
- * @fileOverview Página de Planos (Sincronizada)
+ * @fileOverview Página de Planos (Sincronizada e Segura)
  * 
- * Implementa polling automático de 30s via AuthProvider para refletir liberação de acesso.
+ * Implementa proteção de hidratação para evitar exceções de cliente no Next.js 15.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   ShieldCheck, 
   Loader2, 
@@ -20,15 +20,22 @@ import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import { PLANS_CONFIG, CHECKOUT_LINKS } from '@/lib/billing/checkoutLinks';
 import type { PlanID } from '@/lib/billing/checkoutLinks';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 export default function BillingPage() {
-  const { user, store, accessStatus, refreshStatus } = useAuth();
+  const { user, store, accessStatus, refreshStatus, storeStatus } = useAuth();
   const { toast } = useToast();
   const [isStartingTrial, setIsStartingTrial] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+
+  // Proteção contra erro de hidratação (crucial para Next.js 15 em produção)
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const handleStartTrial = async () => {
     setIsStartingTrial(true);
@@ -59,6 +66,18 @@ export default function BillingPage() {
     const finalUrl = `${url}${url.includes('?') ? '&' : '?'}external_reference=${encodeURIComponent(externalReference)}`;
     window.open(finalUrl, '_blank');
   };
+
+  if (!isMounted || storeStatus === 'loading_auth' || storeStatus === 'loading_status') {
+    return (
+      <div className="max-w-6xl mx-auto space-y-12 py-8 animate-pulse">
+        <Skeleton className="h-12 w-64 mx-auto" />
+        <Skeleton className="h-40 w-full" />
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-96 w-full" />)}
+        </div>
+      </div>
+    );
+  }
 
   const planOrder: PlanID[] = ['trial', 'semanal', 'mensal', 'anual'];
 

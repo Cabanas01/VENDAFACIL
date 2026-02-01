@@ -3,11 +3,13 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 /**
  * Middleware de Autenticação e Contexto.
- * 1. Mantém a sessão ativa.
- * 2. Injeta o pathname nos headers da REQUISIÇÃO para os Server Layouts.
+ * 
+ * 1. Mantém a sessão ativa sincronizando os cookies.
+ * 2. Injeta o pathname nos headers da requisição para acesso via Server Layouts.
+ * 
+ * Correção Next.js 15: Injetar header no objeto de request para persistência.
  */
 export async function middleware(request: NextRequest) {
-  // Criar headers da requisição para injetar metadados
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set('x-pathname', request.nextUrl.pathname);
 
@@ -40,7 +42,7 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // Refresh session
+  // Revalidação da sessão (Refreshing token)
   await supabase.auth.getUser();
 
   return supabaseResponse;
@@ -48,6 +50,13 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
+    /*
+     * Match all request paths except for the ones starting with:
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * - api/webhooks (webhook routes)
+     */
     '/((?!_next/static|_next/image|favicon.ico|api/webhooks/.*).*)',
   ],
 };
