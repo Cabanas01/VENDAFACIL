@@ -3,7 +3,8 @@
 /**
  * @fileOverview Fluxo de Chat de IA (SaaS Advisor)
  * 
- * Implementado via Genkit v1.x utilizando o modelo Gemini 1.5 Flash estável.
+ * Implementado via Genkit v1.x.
+ * Utiliza mensagens de sistema no histórico para máxima compatibilidade com a API do Google.
  */
 
 import { ai } from '@/ai/genkit';
@@ -42,11 +43,11 @@ export async function askAi(input: AiChatInput): Promise<AiChatOutput> {
 
     const lastUserMessage = input.messages[input.messages.length - 1]?.content || 'Resuma meus dados.';
 
-    // Especificando o modelo via string ID para garantir resolução no runtime
+    // Construção de mensagens com Role System para evitar erro de "systemInstruction" no payload
     const response = await ai.generate({
       model: 'googleai/gemini-1.5-flash',
-      system: systemPrompt,
       messages: [
+        { role: 'system', content: [{ text: systemPrompt }] },
         ...input.messages.slice(0, -1).map(m => ({
           role: m.role as 'user' | 'model',
           content: [{ text: m.content }]
@@ -54,8 +55,7 @@ export async function askAi(input: AiChatInput): Promise<AiChatOutput> {
         {
           role: 'user',
           content: [
-            { text: `DADOS ATUAIS DO SISTEMA:\n${input.contextData}\n\n` },
-            { text: `PERGUNTA DO USUÁRIO: ${lastUserMessage}` }
+            { text: `DADOS ATUAIS DO SISTEMA:\n${input.contextData}\n\nPERGUNTA DO USUÁRIO: ${lastUserMessage}` }
           ]
         }
       ]

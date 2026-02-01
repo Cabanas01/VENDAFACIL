@@ -1,17 +1,16 @@
 import {genkit} from 'genkit';
-import {googleAI, gemini15Flash} from '@genkit-ai/google-genai';
+import {googleAI} from '@genkit-ai/google-genai';
 
 /**
  * @fileOverview Configuração Central do Genkit v1.x
  * 
- * Configurado para a API v1 estável utilizando o modelo Gemini 1.5 Flash.
+ * Configurado para utilizar o plugin oficial do Google AI.
+ * A versão da API é gerenciada automaticamente para garantir compatibilidade.
  */
 
 export const ai = genkit({
   plugins: [
-    googleAI({
-      apiVersion: 'v1',
-    }),
+    googleAI(),
   ],
-  model: gemini15Flash,
+  model: 'googleai/gemini-1.5-flash',
 });
