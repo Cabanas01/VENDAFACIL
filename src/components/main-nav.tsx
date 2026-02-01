@@ -1,3 +1,4 @@
+
 'use client';
 
 import Link from 'next/link';
@@ -82,14 +83,14 @@ export function MainNav() {
           </Avatar>
           <div className="flex flex-col overflow-hidden">
             <h2 className="text-sm font-black tracking-tighter text-primary uppercase">VendaFácil</h2>
-            <p className="text-[10px] text-slate-300 font-bold truncate italic tracking-tight opacity-90">{store?.name || 'Minha Loja'}</p>
+            <p className="text-[10px] text-white font-bold truncate italic tracking-tight opacity-100">{store?.name || 'Minha Loja'}</p>
           </div>
         </div>
       </SidebarHeader>
 
       <SidebarContent className="py-4">
         <SidebarGroup>
-          <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-[0.2em] px-4 text-slate-400 mb-2">Operacional</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-[0.2em] px-4 text-slate-400 mb-2 opacity-100">Operacional</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {mainNavItems.map((item) => (
@@ -100,11 +101,11 @@ export function MainNav() {
                     className={`px-4 h-10 transition-all hover:bg-white/10 ${
                       isActive(item.href, item.exact) 
                         ? 'bg-primary text-white shadow-lg shadow-primary/20' 
-                        : 'text-slate-300 hover:text-white'
+                        : 'text-white hover:text-white'
                     }`}
                   >
                     <Link href={item.href} className="flex items-center gap-3">
-                      <item.icon className={`h-4 w-4 ${isActive(item.href, item.exact) ? 'opacity-100' : 'opacity-70'}`} />
+                      <item.icon className={`h-4 w-4 ${isActive(item.href, item.exact) ? 'opacity-100' : 'opacity-90'}`} />
                       <span className="font-bold text-xs tracking-tight">{item.label}</span>
                     </Link>
                   </SidebarMenuButton>
@@ -115,7 +116,7 @@ export function MainNav() {
         </SidebarGroup>
 
         <SidebarGroup className="mt-6">
-          <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-[0.2em] px-4 text-slate-400 mb-2">Estratégico</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-[0.2em] px-4 text-slate-400 mb-2 opacity-100">Estratégico</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {managementNavItems.map((item) => (
@@ -126,11 +127,11 @@ export function MainNav() {
                     className={`px-4 h-10 transition-all hover:bg-white/10 ${
                       isActive(item.href, item.exact) 
                         ? 'bg-primary text-white shadow-lg shadow-primary/20' 
-                        : 'text-slate-300 hover:text-white'
+                        : 'text-white hover:text-white'
                     }`}
                   >
                     <Link href={item.href} className="flex items-center gap-3">
-                      <item.icon className={`h-4 w-4 ${isActive(item.href, item.exact) ? 'opacity-100' : 'opacity-70'}`} />
+                      <item.icon className={`h-4 w-4 ${isActive(item.href, item.exact) ? 'opacity-100' : 'opacity-90'}`} />
                       <span className="font-bold text-xs tracking-tight">{item.label}</span>
                     </Link>
                   </SidebarMenuButton>
@@ -141,7 +142,7 @@ export function MainNav() {
         </SidebarGroup>
 
         <SidebarGroup className="mt-6">
-          <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-[0.2em] px-4 text-slate-400 mb-2">Sistema</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-[0.2em] px-4 text-slate-400 mb-2 opacity-100">Sistema</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {configNavItems.map((item) => (
@@ -152,11 +153,11 @@ export function MainNav() {
                     className={`px-4 h-10 transition-all hover:bg-white/10 ${
                       isActive(item.href, item.exact) 
                         ? 'bg-primary text-white shadow-lg shadow-primary/20' 
-                        : 'text-slate-300 hover:text-white'
+                        : 'text-white hover:text-white'
                     }`}
                   >
                     <Link href={item.href} className="flex items-center gap-3">
-                      <item.icon className={`h-4 w-4 ${isActive(item.href, item.exact) ? 'opacity-100' : 'opacity-70'}`} />
+                      <item.icon className={`h-4 w-4 ${isActive(item.href, item.exact) ? 'opacity-100' : 'opacity-90'}`} />
                       <span className="font-bold text-xs tracking-tight">{item.label}</span>
                     </Link>
                   </SidebarMenuButton>
@@ -177,11 +178,11 @@ export function MainNav() {
                   <AvatarFallback className="bg-primary/20 text-primary font-bold text-xs">{user?.email?.charAt(0).toUpperCase()}</AvatarFallback>
                 </Avatar>
                 <div className="flex flex-col items-start overflow-hidden text-left">
-                  <span className="text-[11px] font-bold truncate w-full text-slate-200 group-hover:text-white transition-colors">{user?.email}</span>
+                  <span className="text-[11px] font-bold truncate w-full text-white group-hover:text-white transition-colors">{user?.email}</span>
                   <span className="text-[9px] text-primary uppercase font-black tracking-widest">CONTA ATIVA</span>
                 </div>
               </div>
-              <ChevronDown className="h-4 w-4 text-slate-500 group-hover:text-slate-300 transition-colors" />
+              <ChevronDown className="h-4 w-4 text-slate-400 group-hover:text-slate-200 transition-colors" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-64 border-slate-800 bg-[#0f172a] text-white shadow-2xl p-2">

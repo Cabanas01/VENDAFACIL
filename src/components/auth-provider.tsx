@@ -123,19 +123,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const createStore = async (storeData: any) => {
-    if (!user) throw new Error('Usuário não autenticado.');
+    // 1. Obter usuário autenticado atual de forma segura
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+    if (!authUser) throw new Error('Sessão expirada ou usuário não autenticado.');
 
-    // 1. Garantir que o perfil do usuário existe na tabela pública 'users'
-    // Isso evita o erro de Chave Estrangeira 'stores_user_id_fkey' caso o trigger falhe.
+    // 2. Garantir que o perfil do usuário existe na tabela pública 'users'
+    // Isso previne o erro de Chave Estrangeira 'stores_user_id_fkey' visto no print do usuário.
     const { error: userSyncError } = await supabase
       .from('users')
-      .upsert({ id: user.id, email: user.email }, { onConflict: 'id' });
+      .upsert({ 
+        id: authUser.id, 
+        email: authUser.email,
+        name: authUser.user_metadata?.name || null 
+      }, { onConflict: 'id' });
 
     if (userSyncError) {
-      console.warn('[ONBOARDING] Falha ao sincronizar perfil publico:', userSyncError.message);
+      console.error('[ONBOARDING] Falha crítica ao sincronizar perfil publico:', userSyncError.message);
+      throw new Error(`Erro de sincronização de perfil: ${userSyncError.message}`);
     }
 
-    // 2. Formatar o endereço como um objeto para a RPC
+    // 3. Formatar o endereço como um objeto para a RPC
     const addressObject = {
       cep: storeData.cep,
       street: storeData.street,
@@ -146,8 +153,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       complement: storeData.complement || null
     };
 
-    // 3. Chamar a RPC para criar a loja
-    const { error } = await supabase.rpc('create_new_store', {
+    // 4. Chamar a RPC para criar a loja
+    const { error: rpcError } = await supabase.rpc('create_new_store', {
       p_name: storeData.name,
       p_legal_name: storeData.legal_name,
       p_cnpj: storeData.cnpj,
@@ -156,12 +163,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       p_timezone: storeData.timezone || 'America/Sao_Paulo',
     });
 
-    if (error) {
-      console.error('[ONBOARDING] Erro na RPC de criação:', error);
-      throw error;
+    if (rpcError) {
+      console.error('[ONBOARDING] Erro na RPC de criação:', rpcError);
+      throw rpcError;
     }
 
-    // 4. Redirecionar forçando novo carregamento de sessão pelo servidor
+    // 5. Redirecionar forçando novo carregamento de sessão pelo servidor
     window.location.href = '/dashboard';
   };
 
