@@ -48,13 +48,20 @@ export default function RootLayout({
             {children}
           </Providers>
         </Suspense>
-        <Script src="https://www.googletagmanager.com/gtag/js?id=G-FZGT4B73XF" />
-        <Script id="google-analytics">
+        
+        {/* Google Analytics (gtag.js) */}
+        <Script 
+          src="https://www.googletagmanager.com/gtag/js?id=G-FZGT4B73XF" 
+          strategy="afterInteractive" 
+        />
+        <Script id="google-analytics" strategy="afterInteractive">
           {`
             window.dataLayer = window.dataLayer || [];
             function gtag(){dataLayer.push(arguments);}
             gtag('js', new Date());
-            gtag('config', 'G-FZGT4B73XF');
+            gtag('config', 'G-FZGT4B73XF', {
+              page_path: window.location.pathname,
+            });
           `}
         </Script>
       </body>

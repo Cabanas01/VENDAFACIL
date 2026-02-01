@@ -9,6 +9,7 @@ import {
   MousePointerClick,
   FileText,
   Wallet,
+  TrendingUp,
 } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
 
@@ -33,7 +34,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { useAnalytics } from '@/lib/analytics/track';
 
-const ADMIN_ANALYTICS_ENABLED = false;
+const ADMIN_ANALYTICS_ENABLED = true;
 
 export default function AdminAnalytics() {
   const searchParams = useSearchParams();
@@ -57,39 +58,29 @@ export default function AdminAnalytics() {
     }
 
     const fetchAnalytics = async () => {
-      if (!storeIdFilter || !dateRange?.from) {
-          setSummary(null);
-          setLoading(false);
-          return;
-      };
       setLoading(true);
 
-      const fromDate = dateRange.from.toISOString();
-      const toDate = (dateRange.to || dateRange.from).toISOString();
+      const fromDate = dateRange?.from?.toISOString() || addDays(startOfToday(), -6).toISOString();
+      const toDate = (dateRange?.to || dateRange?.from || new Date()).toISOString();
 
-      try {
-        const { data, error } = await supabase
-          .rpc('get_analytics_summary', {
-            p_store_id: storeIdFilter,
-            p_from: fromDate,
-            p_to: toDate,
-          });
+      const { data, error } = await supabase
+        .rpc('get_analytics_summary', {
+          p_store_id: storeIdFilter || null,
+          p_from: fromDate,
+          p_to: toDate,
+        });
 
-        if (error) {
-          toast({
-            variant: 'destructive',
-            title: 'Erro ao buscar dados de analytics',
-            description: error.message,
-          });
-          setSummary(null);
-        } else {
-          setSummary(data as AnalyticsSummary);
-        }
-      } catch (err) {
-        console.error('Erro de rede ao buscar analytics');
-      } finally {
-        setLoading(false);
+      if (error) {
+        toast({
+          variant: 'destructive',
+          title: 'Erro ao buscar dados de analytics',
+          description: error.message,
+        });
+        setSummary(null);
+      } else {
+        setSummary(data as AnalyticsSummary);
       }
+      setLoading(false);
     };
 
     fetchAnalytics();
@@ -98,8 +89,8 @@ export default function AdminAnalytics() {
   const eventsOverTimeData = useMemo(() => {
     if (!summary?.events_by_day) return [];
     return summary.events_by_day.map(d => ({
-        date: d?.day ? format(parseISO(d.day), 'dd/MM') : '-',
-        total: d?.count || 0
+        date: format(parseISO(d.day), 'dd/MM'),
+        total: d.count
     }));
   }, [summary]);
 
@@ -108,139 +99,120 @@ export default function AdminAnalytics() {
       router.push('/billing');
   }
 
-  if (!ADMIN_ANALYTICS_ENABLED) {
-    return (
-        <div className="space-y-6">
-            <Card>
-                <CardHeader>
-                    <CardTitle>Análise de Tráfego</CardTitle>
-                    <CardDescription>
-                        Esta funcionalidade está em desenvolvimento. Para habilitá-la, altere a flag `ADMIN_ANALYTICS_ENABLED` no código.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="text-center text-muted-foreground p-8">
-                    <p>Funcionalidade em breve.</p>
-                </CardContent>
-            </Card>
-            <Card>
-                <CardHeader>
-                    <CardTitle>Ações Rápidas de Analytics</CardTitle>
-                    <CardDescription>Use estes botões para disparar eventos de teste.</CardDescription>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-2">
-                    <Button onClick={handleGoToBilling} variant="outline" className="w-full justify-start">
-                        <Wallet className="mr-2 h-4 w-4" />
-                        Ir para Assinaturas (Testar Clique Único)
-                    </Button>
-                </CardContent>
-            </Card>
-        </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
-        <div className="flex justify-end">
-            <DateRangePicker date={dateRange} onDateChange={setDateRange} />
-        </div>
-        <Card>
-            <CardHeader>
-                <CardTitle>Filtro de Loja</CardTitle>
-                <CardDescription>Insira o ID da loja para visualizar os dados de analytics.</CardDescription>
-            </CardHeader>
-            <CardContent>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div className="relative w-full max-w-sm">
                 <Input 
-                    placeholder="Cole o ID da loja aqui..."
+                    placeholder="Filtrar por ID da Loja (opcional)..."
                     value={storeIdFilter}
                     onChange={(e) => setStoreIdFilter(e.target.value)}
+                    className="pr-10 font-mono text-xs uppercase"
                 />
-            </CardContent>
-        </Card>
+                {storeIdFilter && (
+                    <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
+                        onClick={() => setStoreIdFilter('')}
+                    >
+                        &times;
+                    </Button>
+                )}
+            </div>
+            <DateRangePicker date={dateRange} onDateChange={setDateRange} />
+        </div>
 
         {loading ? (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-                <Card><CardHeader><Skeleton className="h-5 w-32" /></CardHeader><CardContent><Skeleton className="h-8 w-24" /></CardContent></Card>
-                <Card><CardHeader><Skeleton className="h-5 w-32" /></CardHeader><CardContent><Skeleton className="h-8 w-24" /></CardContent></Card>
-                <Card><CardHeader><Skeleton className="h-5 w-32" /></CardHeader><CardContent><Skeleton className="h-8 w-24" /></CardContent></Card>
-                <Card><CardHeader><Skeleton className="h-5 w-32" /></CardHeader><CardContent><Skeleton className="h-8 w-24" /></CardContent></Card>
+                {[1, 2, 3, 4].map(i => (
+                    <Card key={i}><CardHeader><Skeleton className="h-5 w-32" /></CardHeader><CardContent><Skeleton className="h-8 w-24" /></CardContent></Card>
+                ))}
             </div>
         ) : !summary ? (
             <Card>
-                <CardContent className="p-8 text-center text-muted-foreground">
-                    Nenhum dado de analytics para a loja e período selecionados.
+                <CardContent className="p-12 text-center text-muted-foreground flex flex-col items-center gap-2">
+                    <TrendingUp className="h-10 w-10 opacity-20" />
+                    <p>Nenhum dado de tráfego localizado para os filtros selecionados.</p>
                 </CardContent>
             </Card>
         ) : (
              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-                <Card>
+                <Card className="border-primary/20">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total de Eventos</CardTitle>
-                        <Activity className="h-4 w-4 text-muted-foreground" />
+                        <CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground">Total de Eventos</CardTitle>
+                        <Activity className="h-4 w-4 text-primary" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{summary?.total_events || 0}</div>
+                        <div className="text-2xl font-black tracking-tighter">{summary?.total_events ?? 0}</div>
                     </CardContent>
                 </Card>
-                 <Card>
+                 <Card className="border-primary/20">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Visitas a Perfis</CardTitle>
-                        <Eye className="h-4 w-4 text-muted-foreground" />
+                        <CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground">Visitas a Perfis</CardTitle>
+                        <Eye className="h-4 w-4 text-primary" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{summary?.total_profile_views || 0}</div>
+                        <div className="text-2xl font-black tracking-tighter">{summary?.total_profile_views ?? 0}</div>
                     </CardContent>
                 </Card>
-                 <Card>
+                 <Card className="border-primary/20">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Cliques Únicos</CardTitle>
-                        <MousePointerClick className="h-4 w-4 text-muted-foreground" />
+                        <CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground">Cliques Únicos</CardTitle>
+                        <MousePointerClick className="h-4 w-4 text-primary" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{summary?.total_unique_clicks || 0}</div>
+                        <div className="text-2xl font-black tracking-tighter">{summary?.total_unique_clicks ?? 0}</div>
                     </CardContent>
                 </Card>
-                 <Card>
+                 <Card className="border-primary/20">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Relatórios Abertos</CardTitle>
-                        <FileText className="h-4 w-4 text-muted-foreground" />
+                        <CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground">Relatórios Gerados</CardTitle>
+                        <FileText className="h-4 w-4 text-primary" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{summary?.total_reports_opened || 0}</div>
+                        <div className="text-2xl font-black tracking-tighter">{summary?.total_reports_opened ?? 0}</div>
                     </CardContent>
                 </Card>
             </div>
         )}
         
-        <div className="grid gap-6 md:grid-cols-2">
-            <Card>
+        <div className="grid gap-6 md:grid-cols-3">
+            <Card className="md:col-span-1">
                 <CardHeader>
-                    <CardTitle>Top 5 Eventos</CardTitle>
-                    <CardDescription>Os eventos mais comuns registrados no período selecionado.</CardDescription>
+                    <CardTitle className="text-sm font-black uppercase tracking-widest">Top 5 Eventos</CardTitle>
+                    <CardDescription>Eventos mais frequentes no sistema.</CardDescription>
                 </CardHeader>
                 <CardContent>
                      {loading || !summary ? <Skeleton className="h-40 w-full" /> : (
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Evento</TableHead>
-                                    <TableHead className="text-right">Quantidade</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {summary?.top_event_names?.map((event, idx) => (
-                                    <TableRow key={event?.event_name || idx}>
-                                        <TableCell className="font-medium">{event?.event_name || 'N/A'}</TableCell>
-                                        <TableCell className="text-right">{event?.count || 0}</TableCell>
+                        <div className="rounded-md border">
+                            <Table>
+                                <TableHeader className="bg-muted/50">
+                                    <TableRow>
+                                        <TableHead className="text-[10px] uppercase font-black">Evento</TableHead>
+                                        <TableHead className="text-right text-[10px] uppercase font-black">Qtd</TableHead>
                                     </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
+                                </TableHeader>
+                                <TableBody>
+                                    {summary?.top_event_names?.map((event, idx) => (
+                                        <TableRow key={idx}>
+                                            <TableCell className="font-bold text-xs uppercase">{event.event_name.replace(/_/g, ' ')}</TableCell>
+                                            <TableCell className="text-right font-black text-primary">{event.count}</TableCell>
+                                        </TableRow>
+                                    ))}
+                                    {(!summary?.top_event_names || summary.top_event_names.length === 0) && (
+                                        <TableRow><TableCell colSpan={2} className="text-center py-4 text-xs">Sem dados</TableCell></TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </div>
                      )}
                 </CardContent>
             </Card>
-            <Card>
+            <Card className="md:col-span-2">
                 <CardHeader>
-                    <CardTitle>Eventos por dia</CardTitle>
+                    <CardTitle className="text-sm font-black uppercase tracking-widest">Tráfego por Período</CardTitle>
+                    <CardDescription>Volume de interação diária no SaaS.</CardDescription>
                 </CardHeader>
                 <CardContent>
                      {loading || !summary ? <Skeleton className="h-[300px] w-full" /> : (
@@ -250,15 +222,15 @@ export default function AdminAnalytics() {
             </Card>
         </div>
 
-         <Card>
+         <Card className="bg-primary/5 border-primary/10">
             <CardHeader>
-                <CardTitle>Ações Rápidas de Analytics</CardTitle>
-                <CardDescription>Use estes botões para disparar eventos de teste.</CardDescription>
+                <CardTitle className="text-sm font-black uppercase tracking-widest">Simulação de Rastreio</CardTitle>
+                <CardDescription>Teste o envio de eventos únicos para o sistema de analytics.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-2">
-                <Button onClick={handleGoToBilling} variant="outline" className="w-full justify-start">
-                    <Wallet className="mr-2 h-4 w-4" />
-                    Ir para Assinaturas (Testar Clique Único)
+                <Button onClick={handleGoToBilling} variant="outline" className="w-fit font-bold gap-2">
+                    <Wallet className="h-4 w-4" />
+                    Testar Clique Único (Ir para Planos)
                 </Button>
             </CardContent>
         </Card>
