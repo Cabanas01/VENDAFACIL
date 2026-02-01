@@ -4,12 +4,15 @@ import {googleAI} from '@genkit-ai/google-genai';
 /**
  * @fileOverview Configuração Central do Genkit v1.x
  * 
- * Sincronizado com o motor REST v1 para gemini-1.5-flash.
+ * Sincronizado para usar o motor estável googleAI.
+ * Não definimos o modelo global para forçar a especificação em cada chamada,
+ * evitando fallbacks para modelos inexistentes.
  */
 
 export const ai = genkit({
   plugins: [
-    googleAI(),
+    googleAI({
+      apiKey: process.env.GOOGLE_GENAI_API_KEY,
+    }),
   ],
-  model: 'googleai/gemini-1.5-flash',
 });
