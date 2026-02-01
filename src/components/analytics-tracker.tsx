@@ -5,7 +5,7 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { trackEvent } from '@/lib/analytics/track';
 
 /**
- * Componente interno que lida com a lógica de observação
+ * Monitora mudanças de rota e dispara eventos automáticos sincronizados.
  */
 function TrackerInner() {
   const pathname = usePathname();
@@ -18,7 +18,6 @@ function TrackerInner() {
       ? `${pathname}?${searchParams.toString()}` 
       : pathname;
 
-    // Rastreia a mudança de página sincronizando com o backend
     trackEvent('page_view', {
       page_path: pathname,
       page_url: fullPath,
@@ -29,9 +28,6 @@ function TrackerInner() {
   return null;
 }
 
-/**
- * Componente principal com Suspense (obrigatório para useSearchParams)
- */
 export function AnalyticsTracker() {
   return (
     <Suspense fallback={null}>

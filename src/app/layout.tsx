@@ -46,13 +46,13 @@ export default function RootLayout({
       <body className="font-body antialiased min-h-screen">
         <Suspense fallback={null}>
           <Providers>
-            {/* Rastreador de eventos unificado (GA + Backend) */}
+            {/* Rastreador de eventos sincronizado (GA + Backend) */}
             <AnalyticsTracker />
             {children}
           </Providers>
         </Suspense>
         
-        {/* Google Analytics (gtag.js) Base */}
+        {/* Google Analytics Base Script */}
         <Script 
           src="https://www.googletagmanager.com/gtag/js?id=G-FZGT4B73XF" 
           strategy="afterInteractive" 
@@ -62,9 +62,7 @@ export default function RootLayout({
             window.dataLayer = window.dataLayer || [];
             function gtag(){dataLayer.push(arguments);}
             gtag('js', new Date());
-            gtag('config', 'G-FZGT4B73XF', {
-              send_page_view: false // Desabilitamos o automático pois o AnalyticsTracker lidará com isso sincronizado
-            });
+            gtag('config', 'G-FZGT4B73XF', { send_page_view: false });
           `}
         </Script>
       </body>

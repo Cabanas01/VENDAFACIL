@@ -1,12 +1,12 @@
 'use client';
 
 /**
- * @fileOverview BillingPage (Dumb View)
+ * @fileOverview Página de Planos (Sincronizada)
  * 
- * Exibe planos e status com polling leve para detectar confirmação de pagamento.
+ * Implementa polling automático de 30s via AuthProvider para refletir liberação de acesso.
  */
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { 
   ShieldCheck, 
   Loader2, 
@@ -29,14 +29,6 @@ export default function BillingPage() {
   const { user, store, accessStatus, refreshStatus } = useAuth();
   const { toast } = useToast();
   const [isStartingTrial, setIsStartingTrial] = useState(false);
-
-  // Polling leve para detectar atualização do webhook após pagamento
-  useEffect(() => {
-    const interval = setInterval(() => {
-      refreshStatus();
-    }, 30000); // 30 segundos
-    return () => clearInterval(interval);
-  }, [refreshStatus]);
 
   const handleStartTrial = async () => {
     setIsStartingTrial(true);
@@ -91,7 +83,7 @@ export default function BillingPage() {
               <div className="flex items-center justify-center md:justify-start gap-3">
                 <span className="text-3xl font-black uppercase tracking-tighter">{accessStatus?.plano_nome || 'Sem Plano'}</span>
                 <Badge variant={accessStatus?.acesso_liberado ? 'default' : 'destructive'} className="font-black text-[10px] uppercase h-5">
-                  {accessStatus?.acesso_liberado ? 'Acesso Ativo' : 'Acesso Bloqueado'}
+                  {accessStatus?.acesso_liberado ? 'Ativo' : 'Bloqueado'}
                 </Badge>
               </div>
               <p className="text-sm text-muted-foreground font-bold italic opacity-80">{accessStatus?.mensagem}</p>
@@ -112,7 +104,7 @@ export default function BillingPage() {
           {!accessStatus?.acesso_liberado && (
             <div className="mt-4 flex items-center gap-2 text-[10px] text-orange-600 bg-orange-50 p-3 rounded-lg border border-orange-100 font-black uppercase tracking-widest">
               <AlertTriangle className="h-3 w-3" />
-              Aguardando confirmação bancária. A tela atualizará em segundos.
+              Aguardando confirmação bancária. A tela atualizará automaticamente em segundos.
             </div>
           )}
         </CardContent>

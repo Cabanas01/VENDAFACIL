@@ -1,21 +1,23 @@
 'use client';
 
 /**
- * @fileOverview Componente de IA
+ * @fileOverview Componente de IA (PRE-FLIGHT VALIDATION)
  * 
- * Implementa validação de dados antes do envio para evitar análises sobre bases vazias.
+ * Bloqueia chamadas se não houver dados operacionais mínimos (produtos/vendas).
  */
 
 import { useAuth } from '@/components/auth-provider';
 import { ChatInterface } from '@/components/chat/chat-interface';
 import { useMemo } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
-import { Sparkles, Database } from 'lucide-react';
+import { Database } from 'lucide-react';
 
 export default function StoreAiContent({ isAiConfigured }: { isAiConfigured: boolean }) {
   const { store, products, sales, customers, accessStatus } = useAuth();
 
-  const hasData = products.length > 0 || sales.length > 0;
+  const hasSales = (sales || []).length > 0;
+  const hasProducts = (products || []).length > 0;
+  const hasData = hasSales && hasProducts;
 
   const dataSnapshot = useMemo(() => {
     if (!isAiConfigured || !hasData) return null;
@@ -61,9 +63,10 @@ export default function StoreAiContent({ isAiConfigured }: { isAiConfigured: boo
             <Database className="h-8 w-8 text-muted-foreground/40" />
           </div>
           <div className="space-y-2">
-            <h3 className="text-lg font-black uppercase tracking-tight">Dados insuficientes</h3>
-            <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-              Ainda não há dados suficientes (produtos ou vendas) para gerar uma análise inteligente. Comece a operar para liberar os insights da IA.
+            <h3 className="text-lg font-black uppercase tracking-tight">Análise Indisponível</h3>
+            <p className="text-sm text-muted-foreground max-w-sm mx-auto font-medium">
+              Ainda não há dados suficientes para gerar uma análise inteligente. <br/>
+              Comece a cadastrar produtos e realizar vendas para liberar o assistente.
             </p>
           </div>
         </CardContent>
@@ -74,7 +77,7 @@ export default function StoreAiContent({ isAiConfigured }: { isAiConfigured: boo
   return (
     <ChatInterface 
       title="Consultor Estratégico"
-      subtitle="Insights automáticos baseados na sua operação real."
+      subtitle="Insights baseados na sua operação real."
       contextData={dataSnapshot}
       scope="store"
       suggestions={suggestions}

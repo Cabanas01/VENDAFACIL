@@ -1,9 +1,9 @@
 'use client';
 
 /**
- * @fileOverview Painel de Analytics Admin
+ * @fileOverview Painel de Analytics Admin (RPC & TABLE DATA)
  * 
- * Corrigido para ser resiliente a valores nulos e evitar exceções de hidratação.
+ * Consome analytics_events via RPC e trata estados de erro/vazio de forma resiliente.
  */
 
 import { useEffect, useState, useMemo } from 'react';
@@ -21,12 +21,7 @@ import { useSearchParams } from 'next/navigation';
 
 import { DateRangePicker } from '@/components/date-range-picker';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableRow,
-} from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
@@ -102,20 +97,20 @@ export default function AdminAnalytics() {
         ) : !summary || summary.total_events === 0 ? (
             <Card className="border-dashed py-24 text-center text-muted-foreground bg-muted/5">
                 <TrendingUp className="h-12 w-12 mx-auto mb-4 opacity-10" />
-                <p className="font-black uppercase text-[10px] tracking-[0.2em]">Sem tráfego registrado no período</p>
+                <p className="font-black uppercase text-[10px] tracking-[0.2em]">Nenhum tráfego registrado no período</p>
             </Card>
         ) : (
              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-                <MetricCard title="Acessos Totais" value={summary.total_events} icon={<Activity />} />
+                <MetricCard title="Eventos Totais" value={summary.total_events} icon={<Activity />} />
                 <MetricCard title="Views de Perfil" value={summary.total_profile_views} icon={<Eye />} />
                 <MetricCard title="Cliques Únicos" value={summary.total_unique_clicks} icon={<MousePointerClick />} />
-                <MetricCard title="Relatórios" value={summary.total_reports_opened} icon={<FileText />} />
+                <MetricCard title="Relatórios Abertos" value={summary.total_reports_opened} icon={<FileText />} />
             </div>
         )}
         
         <div className="grid gap-6 md:grid-cols-3">
             <Card className="md:col-span-1 border-none shadow-sm">
-                <CardHeader className="bg-muted/10 border-b"><CardTitle className="text-xs font-black uppercase tracking-widest">Principais Ações</CardTitle></CardHeader>
+                <CardHeader className="bg-muted/10 border-b"><CardTitle className="text-xs font-black uppercase tracking-widest">Top Ações</CardTitle></CardHeader>
                 <CardContent className="pt-4">
                      {loading ? <Skeleton className="h-40 w-full" /> : (
                         <Table>
@@ -132,7 +127,7 @@ export default function AdminAnalytics() {
                 </CardContent>
             </Card>
             <Card className="md:col-span-2 border-none shadow-sm">
-                <CardHeader className="bg-muted/10 border-b"><CardTitle className="text-xs font-black uppercase tracking-widest">Curva de Engajamento</CardTitle></CardHeader>
+                <CardHeader className="bg-muted/10 border-b"><CardTitle className="text-xs font-black uppercase tracking-widest">Tráfego Diário</CardTitle></CardHeader>
                 <CardContent className="pt-6">
                      {loading ? <Skeleton className="h-[300px] w-full" /> : <SalesOverTimeChart data={chartData} />}
                 </CardContent>

@@ -13,7 +13,7 @@ declare global {
 
 /**
  * Função central de rastreio (Frontend)
- * Sincroniza Google Analytics e o Backend do VendaFácil.
+ * Sincroniza Google Analytics e o Backend do VendaFácil (analytics_events).
  */
 export async function trackEvent(
   eventName: string, 
@@ -30,13 +30,12 @@ export async function trackEvent(
     timestamp: new Date().toISOString(),
   };
 
-  // 1. Enviar para o Google Analytics (se disponível)
+  // 1. Enviar para o Google Analytics
   if (typeof window !== 'undefined' && window.gtag) {
     window.gtag('event', eventName, params);
   }
 
-  // 2. Enviar para o nosso Backend (Endpoint Interno)
-  // Usamos fetch/background para não bloquear a experiência do usuário
+  // 2. Enviar para o Backend do VendaFácil
   try {
     fetch('/api/analytics/track', {
       method: 'POST',
@@ -47,8 +46,7 @@ export async function trackEvent(
       }),
     });
   } catch (err) {
-    // Analytics falhar não deve quebrar o app
-    console.warn('[ANALYTICS_SYNC_FAILED]', err);
+    console.warn('[ANALYTICS_TRACK_FAILED]', err);
   }
 }
 

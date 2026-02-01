@@ -1,4 +1,3 @@
-
 'use client';
 
 /**
@@ -9,6 +8,7 @@
  */
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import type { 
   Store, 
@@ -51,6 +51,7 @@ type AuthContextType = {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   const [user, setUser] = useState<User | null>(null);
   const [store, setStore] = useState<Store | null>(null);
   const [accessStatus, setAccessStatus] = useState<StoreAccessStatus | null>(null);
@@ -113,6 +114,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, [fetchAppData]);
 
+  // Implementação de Polling Leve (30s) em rotas de faturamento
+  useEffect(() => {
+    const isBillingRoute = pathname.includes('/billing') || pathname.includes('/admin/billing');
+    if (!isBillingRoute || !user) return;
+
+    const interval = setInterval(() => {
+      fetchAppData(user.id);
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [pathname, user, fetchAppData]);
+
   const refreshStatus = useCallback(async () => {
     if (user) await fetchAppData(user.id);
   }, [user, fetchAppData]);
@@ -123,52 +136,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const createStore = async (storeData: any) => {
-    // 1. Obter usuário autenticado atual de forma segura
     const { data: { user: authUser } } = await supabase.auth.getUser();
-    if (!authUser) throw new Error('Sessão expirada ou usuário não autenticado.');
+    if (!authUser) throw new Error('Sessão expirada.');
 
-    // 2. Garantir que o perfil do usuário existe na tabela pública 'users'
-    // Isso previne o erro de Chave Estrangeira 'stores_user_id_fkey' visto no print do usuário.
-    const { error: userSyncError } = await supabase
-      .from('users')
-      .upsert({ 
-        id: authUser.id, 
-        email: authUser.email,
-        name: authUser.user_metadata?.name || null 
-      }, { onConflict: 'id' });
+    await supabase.from('users').upsert({ id: authUser.id, email: authUser.email }, { onConflict: 'id' });
 
-    if (userSyncError) {
-      console.error('[ONBOARDING] Falha crítica ao sincronizar perfil publico:', userSyncError.message);
-      throw new Error(`Erro de sincronização de perfil: ${userSyncError.message}`);
-    }
-
-    // 3. Formatar o endereço como um objeto para a RPC
-    const addressObject = {
-      cep: storeData.cep,
-      street: storeData.street,
-      number: storeData.number,
-      neighborhood: storeData.neighborhood,
-      city: storeData.city,
-      state: storeData.state,
-      complement: storeData.complement || null
-    };
-
-    // 4. Chamar a RPC para criar a loja
     const { error: rpcError } = await supabase.rpc('create_new_store', {
       p_name: storeData.name,
       p_legal_name: storeData.legal_name,
       p_cnpj: storeData.cnpj,
-      p_address: addressObject,
+      p_address: storeData,
       p_phone: storeData.phone,
       p_timezone: storeData.timezone || 'America/Sao_Paulo',
     });
 
-    if (rpcError) {
-      console.error('[ONBOARDING] Erro na RPC de criação:', rpcError);
-      throw rpcError;
-    }
-
-    // 5. Redirecionar forçando novo carregamento de sessão pelo servidor
+    if (rpcError) throw rpcError;
     window.location.href = '/dashboard';
   };
 

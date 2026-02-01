@@ -1,10 +1,9 @@
 'use client';
 
 /**
- * @fileOverview Gestão de Faturamento Admin
+ * @fileOverview Gestão de Faturamento Admin (CLIENT AGGREGATION)
  * 
- * Corrigido para buscar billing_events e calcular métricas agregadas no frontend,
- * respeitando o backend estável sem RPCs de agregação complexa.
+ * Consome billing_events e agrupa métricas no frontend para evitar erros de SQL.
  */
 
 import { useEffect, useState, useMemo } from 'react';
@@ -12,10 +11,10 @@ import { supabase } from '@/lib/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { DollarSign, ArrowUp, ArrowDown, Activity, CreditCard } from 'lucide-react';
+import { DollarSign, ArrowUp, ArrowDown, Activity } from 'lucide-react';
 import { DateRangePicker } from '@/components/date-range-picker';
 import type { DateRange } from 'react-day-picker';
-import { addDays, startOfToday, format, startOfDay, endOfDay } from 'date-fns';
+import { addDays, startOfToday, startOfDay, endOfDay, format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 
 const formatCurrency = (value: number) =>
@@ -40,7 +39,6 @@ export default function AdminBilling() {
       const from = startOfDay(dateRange.from).toISOString();
       const to = endOfDay(dateRange.to || dateRange.from).toISOString();
 
-      // Busca direta na tabela billing_events
       const { data, error } = await supabase
         .from('billing_events')
         .select('*')
@@ -48,23 +46,19 @@ export default function AdminBilling() {
         .lte('created_at', to)
         .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Erro ao buscar eventos:', error);
-        setEvents([]);
-      } else {
-        setEvents(data || []);
-      }
+      if (!error) setEvents(data || []);
       setLoading(false);
     }
 
     loadBillingData();
   }, [dateRange]);
 
-  // Agregações no frontend para evitar erros SQL
+  // Agregações no frontend (Regra de Ouro: Sem agregações aninhadas no SQL)
   const stats = useMemo(() => {
     return events.reduce((acc, ev) => {
+      const amount = ev.amount || 0;
       if (ev.event_type === 'PURCHASE_APPROVED') {
-        acc.revenue += (ev.amount || 0);
+        acc.revenue += amount;
         acc.newSubscriptions += 1;
       }
       if (ev.event_type === 'CANCELLED' || ev.event_type === 'REFUNDED') {
@@ -103,30 +97,32 @@ export default function AdminBilling() {
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             <MetricCard title="Receita Bruta" value={formatCurrency(stats.revenue)} icon={<DollarSign />} color="text-primary" />
-            <MetricCard title="Assinaturas Pagas" value={stats.newSubscriptions} icon={<ArrowUp />} color="text-green-600" />
-            <MetricCard title="Cancelamentos/Estornos" value={stats.cancellations} icon={<ArrowDown />} color="text-red-600" />
+            <MetricCard title="Novas Assinaturas" value={stats.newSubscriptions} icon={<ArrowUp />} color="text-green-600" />
+            <MetricCard title="Cancelamentos" value={stats.cancellations} icon={<ArrowDown />} color="text-red-600" />
         </div>
 
         <div className="grid gap-6 md:grid-cols-2">
             <Card>
-                <CardHeader><CardTitle className="text-sm font-black uppercase tracking-widest">Receita por Provedor</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="text-xs font-black uppercase tracking-widest">Receita por Provedor</CardTitle></CardHeader>
                 <CardContent>
                     <Table>
                         <TableBody>
                             {revenueByProvider.map(p => (
                                 <TableRow key={p.provider}>
-                                    <TableCell className="font-bold uppercase text-xs">{p.provider}</TableCell>
+                                    <TableCell className="font-bold uppercase text-[10px]">{p.provider}</TableCell>
                                     <TableCell className="text-right font-black">{formatCurrency(p.total)}</TableCell>
                                 </TableRow>
                             ))}
-                            {revenueByProvider.length === 0 && <TableRow><TableCell className="text-center py-10 text-muted-foreground">Sem dados.</TableCell></TableRow>}
+                            {revenueByProvider.length === 0 && (
+                              <TableRow><TableCell className="text-center py-10 text-muted-foreground text-xs">Sem transações no período.</TableCell></TableRow>
+                            )}
                         </TableBody>
                     </Table>
                 </CardContent>
             </Card>
 
             <Card>
-                <CardHeader><CardTitle className="text-sm font-black uppercase tracking-widest flex items-center gap-2"><Activity className="h-4 w-4" /> Log de Transações</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="text-xs font-black uppercase tracking-widest flex items-center gap-2"><Activity className="h-4 w-4" /> Log de Faturamento</CardTitle></CardHeader>
                 <CardContent>
                      <Table>
                         <TableHeader>
@@ -139,14 +135,14 @@ export default function AdminBilling() {
                         <TableBody>
                             {events.slice(0, 10).map(e => (
                                 <TableRow key={e.id}>
-                                    <TableCell>
-                                      <Badge variant="outline" className="text-[9px] font-black uppercase">{e.event_type.replace(/_/g, ' ')}</Badge>
-                                    </TableCell>
+                                    <TableCell><Badge variant="outline" className="text-[9px] font-black uppercase">{e.event_type.replace(/_/g, ' ')}</Badge></TableCell>
                                     <TableCell className="text-[10px] font-bold">{format(new Date(e.created_at), 'dd/MM HH:mm')}</TableCell>
                                     <TableCell className="text-right font-black text-xs">{formatCurrency(e.amount || 0)}</TableCell>
                                 </TableRow>
                             ))}
-                            {events.length === 0 && <TableRow><TableCell colSpan={3} className="text-center py-10 text-muted-foreground text-xs font-bold uppercase tracking-widest">Nenhuma transação no período.</TableCell></TableRow>}
+                            {events.length === 0 && (
+                              <TableRow><TableCell colSpan={3} className="text-center py-10 text-muted-foreground text-xs uppercase font-black tracking-widest">Nenhum evento registrado.</TableCell></TableRow>
+                            )}
                         </TableBody>
                     </Table>
                 </CardContent>
