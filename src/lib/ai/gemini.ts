@@ -1,5 +1,5 @@
 /**
- * @fileOverview Interface REST direta para a API Google Gemini v1beta.
+ * @fileOverview Interface REST direta para a API Google Gemini v1 estável.
  */
 
 export async function askGemini(prompt: string, jsonMode: boolean = false) {
@@ -9,9 +9,9 @@ export async function askGemini(prompt: string, jsonMode: boolean = false) {
     throw new Error('CONFIG_MISSING');
   }
 
-  // Mudança para 1.5-flash para maior compatibilidade com Free Tier
+  // Utilizando a API v1 estável para garantir disponibilidade do modelo Flash
   const model = 'gemini-1.5-flash';
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent`;
 
   const body: any = {
     contents: [
@@ -29,10 +29,11 @@ export async function askGemini(prompt: string, jsonMode: boolean = false) {
   }
 
   try {
-    const res = await fetch(`${endpoint}?key=${API_KEY}`, {
+    const res = await fetch(endpoint, {
       method: 'POST',
       headers: { 
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'X-goog-api-key': API_KEY // Autenticação via Header (padrão curl de sucesso)
       },
       body: JSON.stringify(body),
     });
@@ -56,6 +57,7 @@ export async function askGemini(prompt: string, jsonMode: boolean = false) {
     }
 
     let cleanText = text;
+    // Limpeza defensiva de blocos de código markdown se o modelo ignorar o JSON mode
     if (jsonMode && text.includes('```json')) {
       cleanText = text.replace(/```json|```/g, '').trim();
     }
