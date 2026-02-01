@@ -6,7 +6,6 @@ import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { MainNav } from '@/components/main-nav';
 import { AdminSidebar } from '@/components/admin-sidebar';
 import { Providers } from '@/app/providers';
-import { User as UserIcon } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 
@@ -38,20 +37,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const { has_store, is_member, is_admin } = status as any;
 
   // 3. Regras de Fluxo (Determinísticas)
-  // 🚨 REGRA DE OURO: Onboarding é APENAS para quem não tem nada
   const isNewUser = !has_store && !is_member && !is_admin;
 
-  // Se for novo e não estiver no onboarding -> FORÇAR ONBOARDING
   if (isNewUser && !pathname.startsWith('/onboarding')) {
     redirect('/onboarding');
   }
 
-  // Se NÃO for novo mas estiver no onboarding -> EXPULSAR PARA DASHBOARD
   if (!isNewUser && pathname.startsWith('/onboarding')) {
     redirect(is_admin ? '/admin' : '/dashboard');
   }
 
-  // Proteção de área Admin
   if (pathname.startsWith('/admin') && !is_admin) {
     redirect('/dashboard');
   }

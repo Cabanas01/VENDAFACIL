@@ -78,14 +78,14 @@ export function AdminSidebar() {
 
       <SidebarContent className="py-2">
         <SidebarGroup>
-          <SidebarGroupLabel>Gestão</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-[9px] font-black uppercase tracking-widest px-4 mb-2">Gestão</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {adminNavItems.map((item) => (
                 <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton asChild isActive={isActive(item.href, item.exact)}>
-                    <Link href={item.href}>
-                      <item.icon />
+                  <SidebarMenuButton asChild isActive={isActive(item.href, item.exact)} className="h-10 px-4">
+                    <Link href={item.href} className="flex items-center gap-3 font-bold text-xs">
+                      <item.icon className="h-4 w-4" />
                       <span>{item.label}</span>
                     </Link>
                   </SidebarMenuButton>
@@ -95,15 +95,15 @@ export function AdminSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup>
-          <SidebarGroupLabel>Sistema</SidebarGroupLabel>
+        <SidebarGroup className="mt-4">
+          <SidebarGroupLabel className="text-[9px] font-black uppercase tracking-widest px-4 mb-2">Sistema</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {systemNavItems.map((item) => (
                 <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton asChild isActive={isActive(item.href, item.exact)}>
-                    <Link href={item.href}>
-                      <item.icon />
+                  <SidebarMenuButton asChild isActive={isActive(item.href, item.exact)} className="h-10 px-4">
+                    <Link href={item.href} className="flex items-center gap-3 font-bold text-xs">
+                      <item.icon className="h-4 w-4" />
                       <span>{item.label}</span>
                     </Link>
                   </SidebarMenuButton>
@@ -118,7 +118,7 @@ export function AdminSidebar() {
         <Button 
           variant="outline" 
           size="sm" 
-          className="w-full mb-4 gap-2 text-xs font-bold border-primary/20 hover:bg-primary/5"
+          className="w-full mb-4 gap-2 text-[10px] font-black uppercase tracking-widest border-primary/20 hover:bg-primary/5 h-10"
           onClick={() => router.push('/dashboard')}
         >
           <ArrowLeft className="h-3 w-3" /> Voltar para Loja
@@ -126,25 +126,24 @@ export function AdminSidebar() {
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="w-full flex items-center justify-between px-2 h-12">
+            <Button variant="ghost" className="w-full flex items-center justify-between px-2 h-14 hover:bg-primary/5">
               <div className="flex items-center gap-2 overflow-hidden">
-                <Avatar className="h-8 w-8 rounded-full ring-2 ring-primary/20">
-                  <AvatarImage src={user?.avatar_url ?? undefined} />
-                  <AvatarFallback className="bg-primary/10 text-primary">{user?.email?.charAt(0).toUpperCase()}</AvatarFallback>
+                <Avatar className="h-8 w-8 rounded-full ring-2 ring-primary/20 shadow-sm">
+                  <AvatarFallback className="bg-primary/10 text-primary font-black text-[10px]">{user?.email?.charAt(0).toUpperCase()}</AvatarFallback>
                 </Avatar>
-                <div className="flex flex-col items-start overflow-hidden">
-                  <span className="text-xs font-black truncate w-full">{user?.email}</span>
-                  <span className="text-[10px] text-primary uppercase font-bold tracking-widest">SaaS Admin</span>
+                <div className="flex flex-col items-start overflow-hidden text-left">
+                  <span className="text-[10px] font-black truncate w-full text-foreground lowercase">{user?.email}</span>
+                  <span className="text-[9px] text-primary uppercase font-black tracking-[0.15em]">SaaS Admin</span>
                 </div>
               </div>
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              <ChevronDown className="h-3 w-3 text-muted-foreground" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel>Gestão SaaS</DropdownMenuLabel>
+            <DropdownMenuLabel className="text-[10px] font-black uppercase tracking-widest">Gestão SaaS</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => logout()} className="text-destructive">
-              <LogOut className="mr-2 h-4 w-4" /> Sair do Sistema
+            <DropdownMenuItem onClick={() => logout()} className="text-destructive font-bold text-xs">
+              <LogOut className="mr-3 h-4 w-4" /> Sair do Sistema
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

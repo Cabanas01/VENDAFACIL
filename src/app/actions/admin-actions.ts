@@ -27,7 +27,7 @@ export async function grantPlanAction(payload: GrantPlanPayload) {
     return { success: false, error: 'Sessão inválida ou expirada.' };
   }
 
-  // 2. Validar Status de Admin na Tabela de Usuários
+  // 2. Validar Status de Admin na Tabela de Usuários (Fonte da Verdade)
   const { data: profile, error: profileError } = await supabase
     .from('users')
     .select('is_admin')

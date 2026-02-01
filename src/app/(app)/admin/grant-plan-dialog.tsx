@@ -1,10 +1,11 @@
+
 'use client';
 
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Loader2, ShieldCheck } from 'lucide-react';
+import { Loader2, ShieldCheck, X } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -89,41 +90,49 @@ export function GrantPlanDialog({ store, isOpen, onOpenChange, onSuccess }: Gran
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <div className="mx-auto bg-primary/10 p-3 rounded-full w-fit mb-4">
-            <ShieldCheck className="h-6 w-6 text-primary" />
+      <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl">
+        <div className="absolute right-4 top-4 z-10">
+          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={() => onOpenChange(false)}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <div className="bg-primary/5 pt-10 pb-6 px-6 text-center space-y-4">
+          <div className="mx-auto bg-white p-3 rounded-2xl shadow-sm border border-primary/10 w-fit">
+            <ShieldCheck className="h-8 w-8 text-primary" />
           </div>
-          <DialogTitle className="text-center">Conceder Acesso Manual</DialogTitle>
-          <DialogDescription className="text-center">
-            Ajuste a licença da loja <span className="font-bold text-foreground">"{store.name || 'esta loja'}"</span>. 
-            Esta ação será registrada nos logs de auditoria.
-          </DialogDescription>
-        </DialogHeader>
+          <DialogHeader className="space-y-2">
+            <DialogTitle className="text-2xl font-black font-headline uppercase tracking-tighter text-center">Conceder Acesso Manual</DialogTitle>
+            <DialogDescription className="text-center text-sm font-medium leading-relaxed px-4">
+              Ajuste a licença da loja <span className="font-black text-foreground">"{store.name || 'esta loja'}"</span>. <br/>
+              Esta ação será registrada nos logs de auditoria.
+            </DialogDescription>
+          </DialogHeader>
+        </div>
         
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 py-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 p-8 bg-background">
             <FormField
               control={form.control}
               name="plan"
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="font-bold">Tipo de Licença</FormLabel>
+                <FormItem className="space-y-2">
+                  <FormLabel className="font-black uppercase text-[10px] tracking-widest text-muted-foreground">Tipo de Licença</FormLabel>
                   <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
-                      <SelectTrigger className="h-12">
+                      <SelectTrigger className="h-14 font-bold border-muted-foreground/20 focus:ring-primary/20">
                         <SelectValue placeholder="Selecione o plano" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
                       {PLAN_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
+                        <SelectItem key={option.value} value={option.value} className="font-bold">
                           {option.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  <FormMessage />
+                  <FormMessage className="font-bold" />
                 </FormItem>
               )}
             />
@@ -133,28 +142,28 @@ export function GrantPlanDialog({ store, isOpen, onOpenChange, onSuccess }: Gran
                 control={form.control}
                 name="durationMonths"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="font-bold">Duração do Acesso (Meses)</FormLabel>
+                  <FormItem className="space-y-2">
+                    <FormLabel className="font-black uppercase text-[10px] tracking-widest text-muted-foreground">Duração do Acesso (Meses)</FormLabel>
                     <FormControl>
-                      <Input type="number" className="h-12" {...field} />
+                      <Input type="number" className="h-14 font-black text-lg border-muted-foreground/20 focus:ring-primary/20" {...field} />
                     </FormControl>
-                    <FormMessage />
+                    <FormMessage className="font-bold" />
                   </FormItem>
                 )}
               />
             )}
 
-            <DialogFooter className="flex-col sm:flex-row gap-3 pt-4">
+            <DialogFooter className="flex-col sm:flex-row gap-4 pt-4">
               <Button 
                 type="button" 
                 variant="ghost" 
-                className="flex-1 h-11"
+                className="flex-1 h-12 font-black uppercase text-[11px] tracking-widest"
                 onClick={() => onOpenChange(false)} 
                 disabled={isSubmitting}
               >
                 Cancelar
               </Button>
-              <Button type="submit" className="flex-1 h-11 font-bold" disabled={isSubmitting}>
+              <Button type="submit" className="flex-1 h-12 font-black uppercase text-[11px] tracking-widest shadow-lg shadow-primary/20" disabled={isSubmitting}>
                 {isSubmitting ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
