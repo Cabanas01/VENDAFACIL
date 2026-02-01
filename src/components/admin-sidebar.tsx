@@ -146,12 +146,14 @@ export function AdminSidebar() {
 
       <SidebarFooter className="p-4 border-t border-white/5 bg-slate-950">
         <Button 
+          asChild
           variant="outline" 
           size="sm" 
-          className="w-full mb-4 gap-2 text-[10px] font-black uppercase tracking-[0.2em] border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white h-11 shadow-inner transition-all rounded-lg"
-          onClick={() => router.push('/dashboard')}
+          className="w-full mb-4 gap-2 text-[10px] font-black uppercase tracking-[0.2em] border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white h-11 shadow-inner transition-all rounded-lg cursor-pointer"
         >
-          <ArrowLeft className="h-3 w-3" /> Voltar ao PDV
+          <Link href="/dashboard">
+            <ArrowLeft className="h-3 w-3" /> Voltar ao PDV
+          </Link>
         </Button>
 
         <DropdownMenu>
