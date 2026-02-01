@@ -11,12 +11,21 @@ import {
   ShieldCheck, 
   Loader2, 
   Calendar,
-  AlertTriangle
+  AlertTriangle,
+  CheckCircle2,
+  Info
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/components/auth-provider';
 import { useToast } from '@/hooks/use-toast';
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { 
+  Card, 
+  CardContent, 
+  CardHeader, 
+  CardTitle, 
+  CardFooter,
+  CardDescription 
+} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -107,30 +116,38 @@ export default function BillingPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="pt-6">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6 p-6 bg-background rounded-xl border border-primary/10">
-            <div className="space-y-2 text-center md:text-left">
-              <div className="flex items-center justify-center md:justify-start gap-3">
-                <span className="text-3xl font-black uppercase tracking-tighter">{accessStatus?.plano_nome || 'Sem Plano'}</span>
-                <Badge variant={accessStatus?.acesso_liberado ? 'default' : 'destructive'} className="font-black text-[10px] uppercase h-5">
-                  {accessStatus?.acesso_liberado ? 'Ativo' : 'Bloqueado'}
-                </Badge>
-              </div>
-              <p className="text-sm text-muted-foreground font-bold italic opacity-80">{accessStatus?.mensagem}</p>
-            </div>
-
-            {formattedExpiryDate && (
-              <div className="flex items-center gap-4 px-6 py-4 bg-muted/50 rounded-xl border border-primary/5">
-                <Calendar className="h-6 w-6 text-primary/60" />
-                <div>
-                  <p className="text-[10px] uppercase font-black text-muted-foreground tracking-widest mb-0.5">Válido até</p>
-                  <p className="font-black text-foreground text-lg">
-                    {formattedExpiryDate}
-                  </p>
+          {accessStatus ? (
+            <div className="flex flex-col md:flex-row items-center justify-between gap-6 p-6 bg-background rounded-xl border border-primary/10">
+              <div className="space-y-2 text-center md:text-left">
+                <div className="flex items-center justify-center md:justify-start gap-3">
+                  <span className="text-3xl font-black uppercase tracking-tighter">{accessStatus?.plano_nome || 'Sem Plano'}</span>
+                  <Badge variant={accessStatus?.acesso_liberado ? 'default' : 'destructive'} className="font-black text-[10px] uppercase h-5">
+                    {accessStatus?.acesso_liberado ? 'Ativo' : 'Bloqueado'}
+                  </Badge>
                 </div>
+                <p className="text-sm text-muted-foreground font-bold italic opacity-80">{accessStatus?.mensagem}</p>
               </div>
-            )}
-          </div>
-          {!accessStatus?.acesso_liberado && (
+
+              {formattedExpiryDate && (
+                <div className="flex items-center gap-4 px-6 py-4 bg-muted/50 rounded-xl border border-primary/5">
+                  <Calendar className="h-6 w-6 text-primary/60" />
+                  <div>
+                    <p className="text-[10px] uppercase font-black text-muted-foreground tracking-widest mb-0.5">Válido até</p>
+                    <p className="font-black text-foreground text-lg">
+                      {formattedExpiryDate}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="p-10 text-center border-dashed border-2 rounded-xl">
+              <Info className="h-8 w-8 mx-auto text-muted-foreground opacity-50 mb-2" />
+              <p className="text-sm text-muted-foreground font-medium">Informações de acesso não localizadas.</p>
+            </div>
+          )}
+          
+          {accessStatus && !accessStatus?.acesso_liberado && (
             <div className="mt-4 flex items-center gap-2 text-[10px] text-orange-600 bg-orange-50 p-3 rounded-lg border border-orange-100 font-black uppercase tracking-widest">
               <AlertTriangle className="h-3 w-3" />
               Aguardando confirmação bancária. A tela atualizará automaticamente em segundos.
@@ -146,7 +163,7 @@ export default function BillingPage() {
 
           const isTrial = planId === 'trial';
           const isPopular = planId === 'anual';
-          const isCurrent = accessStatus?.plano_tipo === planId && accessStatus.acesso_liberado;
+          const isCurrent = accessStatus?.plano_tipo === planId && accessStatus?.acesso_liberado;
 
           return (
             <Card key={planId} className={cn(
@@ -186,7 +203,7 @@ export default function BillingPage() {
                     className="w-full h-12 font-black uppercase text-[11px] tracking-widest" 
                     variant="outline"
                     onClick={handleStartTrial}
-                    disabled={isStartingTrial || store?.trial_used || isCurrent}
+                    disabled={isStartingTrial || !!store?.trial_used || !!isCurrent}
                   >
                     {isStartingTrial ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -199,7 +216,7 @@ export default function BillingPage() {
                     className="w-full h-12 font-black uppercase text-[11px] tracking-widest shadow-xl shadow-primary/10" 
                     variant={isPopular ? 'default' : 'secondary'}
                     onClick={() => handleCheckout(planId)}
-                    disabled={isCurrent}
+                    disabled={!!isCurrent}
                   >
                     {isCurrent ? 'Plano Ativo' : 'Assinar Agora'}
                   </Button>
@@ -212,5 +229,3 @@ export default function BillingPage() {
     </div>
   );
 }
-
-import { CheckCircle2 } from 'lucide-react';
