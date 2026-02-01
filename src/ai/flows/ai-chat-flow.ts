@@ -4,13 +4,10 @@
  * @fileOverview Fluxo de IA para análise estratégica do VendaFácil.
  * 
  * Esta Server Action é a única porta de entrada para a IA. 
- * Forçamos o runtime 'nodejs' para total compatibilidade com o SDK do Google AI.
  */
 
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
-
-export const runtime = 'nodejs';
 
 const MessageSchema = z.object({
   role: z.enum(['user', 'model']),
