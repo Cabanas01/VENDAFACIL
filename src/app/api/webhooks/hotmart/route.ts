@@ -13,7 +13,7 @@ async function logEvent(payload: any, status: string, details: object = {}) {
     await supabaseAdmin.from('subscription_events').insert({
         provider: 'hotmart',
         event_type: event,
-        event_id: payload.id, 
+        event_id: payload.id || `evt_${Date.now()}`, 
         store_id: store_id || null,
         plan_id: plan_id || null,
         user_id: user_id || null,
@@ -27,27 +27,31 @@ export async function POST(request: Request) {
   const rawBody = await request.text();
   const hottok = request.headers.get('hottok');
 
-  // Validação simplificada para o hottok padrão do Hotmart
+  // Validação direta via string (Token Simples) - Padrão Hotmart
   if (HOTMART_WEBHOOK_SECRET && hottok !== HOTMART_WEBHOOK_SECRET) {
-      console.warn('Hotmart webhook: Invalid token');
+      console.warn('[WEBHOOK_HOTMART] Token inválido ou ausente');
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
   }
 
   const payload = JSON.parse(rawBody);
 
   try {
-    // Idempotência
-    const { data: existingEvent } = await supabaseAdmin
-        .from('subscription_events')
-        .select('id')
-        .eq('event_id', payload.id)
-        .maybeSingle();
+    // Idempotência baseada no ID do evento do Hotmart
+    const eventId = payload.id;
+    if (eventId) {
+        const { data: existingEvent } = await supabaseAdmin
+            .from('subscription_events')
+            .select('id')
+            .eq('event_id', eventId)
+            .maybeSingle();
 
-    if (existingEvent) {
-        return NextResponse.json({ success: true, message: 'Already processed' });
+        if (existingEvent) {
+            return NextResponse.json({ success: true, message: 'Already processed' });
+        }
     }
 
     const { event, data } = payload;
+    // Hotmart pode enviar a referência em locais diferentes dependendo do evento
     const externalReference = data?.purchase?.external_reference || data?.subscription?.external_reference;
 
     if (!externalReference && ['PURCHASE_APPROVED', 'SUBSCRIPTION_RENEWED', 'PLAN_CHANGED'].includes(event)) {
@@ -69,6 +73,7 @@ export async function POST(request: Request) {
 
         const normalizedPlanId = (plan_id || '').toLowerCase();
         
+        // Mapeamento rigoroso para bater com a CHECK CONSTRAINT do banco
         if (normalizedPlanId === 'weekly' || normalizedPlanId === 'semanal') {
           durationDays = 7;
           planName = 'Semanal';
@@ -90,6 +95,7 @@ export async function POST(request: Request) {
         const now = new Date();
         const accessEndDate = addDays(now, durationDays);
 
+        // Atualização via Service Role (Admin) para ignorar RLS
         const { error: accessError } = await supabaseAdmin
           .from('store_access')
           .upsert({
@@ -131,7 +137,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true });
 
   } catch (error: any) {
+      console.error('[WEBHOOK_HOTMART_ERROR]', error);
       await logEvent(payload, 'error_exception', { error: error.message });
-      return NextResponse.json({ success: true });
+      return NextResponse.json({ success: true, message: 'Handled with errors' });
   }
 }

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
@@ -9,10 +8,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Search, Store, ExternalLink, Mail, Calendar } from 'lucide-react';
+import { Search, ExternalLink, Mail, Calendar } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { getPlanLabel } from '@/lib/plan-label';
-import { format, parseISO } from 'date-fns';
+import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 export default function AdminStoresPage() {
