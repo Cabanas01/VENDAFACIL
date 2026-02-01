@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import Script from "next/script";
 import { Providers } from "./providers";
 import { AnalyticsTracker } from "@/components/analytics-tracker";
+import { AdSenseScript } from "@/components/adsense-script";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -46,6 +47,9 @@ export default function RootLayout({
       <body className="font-body antialiased min-h-screen">
         <Suspense fallback={null}>
           <Providers>
+            {/* AdSense condicional (apenas para free) */}
+            <AdSenseScript />
+            
             {/* Rastreador de eventos sincronizado (GA + Backend) */}
             <AnalyticsTracker />
             {children}
