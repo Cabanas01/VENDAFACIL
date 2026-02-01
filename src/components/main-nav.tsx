@@ -1,4 +1,3 @@
-
 'use client';
 
 import Link from 'next/link';
@@ -38,9 +37,11 @@ import {
   Users,
   Target,
   Users2,
-  Sparkles
+  Sparkles,
+  ChevronRight
 } from 'lucide-react';
 import { useAuth } from '@/components/auth-provider';
+import { cn } from '@/lib/utils';
 
 const mainNavItems = [
   { href: '/dashboard', label: 'Visão Geral', icon: Home, exact: true },
@@ -58,7 +59,7 @@ const managementNavItems = [
 ];
 
 const configNavItems = [
-  { href: '/billing', label: 'Plano', icon: CreditCard, exact: true },
+  { href: '/billing', label: 'Plano e Assinatura', icon: CreditCard, exact: true },
   { href: '/settings', label: 'Configurações', icon: Settings, exact: true },
 ];
 
@@ -72,41 +73,53 @@ export function MainNav() {
   };
 
   return (
-    <Sidebar className="border-r border-slate-800 bg-[#0f172a] text-white">
-      <SidebarHeader className="p-4 border-b border-white/10">
+    <Sidebar className="border-r border-white/5 bg-[#0f172a] text-white">
+      <SidebarHeader className="p-6 border-b border-white/5">
         <div className="flex items-center gap-3">
-          <Avatar className="h-10 w-10 rounded-lg shadow-sm bg-primary/20 ring-1 ring-white/10">
-            <AvatarImage src={store?.logo_url ?? undefined} alt={store?.name} />
-            <AvatarFallback className="bg-primary text-white font-black text-xs">
-              {store?.name?.substring(0, 2).toUpperCase() || 'VF'}
-            </AvatarFallback>
-          </Avatar>
+          <div className="relative group">
+            <Avatar className="h-10 w-10 rounded-xl shadow-lg ring-2 ring-primary/20 group-hover:ring-primary/50 transition-all duration-300">
+              <AvatarImage src={store?.logo_url ?? undefined} alt={store?.name} className="object-cover" />
+              <AvatarFallback className="bg-primary text-white font-black text-sm">
+                {store?.name?.substring(0, 2).toUpperCase() || 'VF'}
+              </AvatarFallback>
+            </Avatar>
+            <div className="absolute -bottom-1 -right-1 h-4 w-4 bg-green-500 border-2 border-[#0f172a] rounded-full shadow-sm" />
+          </div>
           <div className="flex flex-col overflow-hidden">
-            <h2 className="text-sm font-black tracking-tighter text-primary uppercase">VendaFácil</h2>
-            <p className="text-[10px] text-white font-bold truncate italic tracking-tight opacity-100">{store?.name || 'Minha Loja'}</p>
+            <h2 className="text-sm font-black tracking-tight text-white uppercase leading-none">VendaFácil</h2>
+            <p className="text-[10px] text-slate-400 font-bold truncate mt-1 tracking-wide opacity-90 uppercase">
+              {store?.name || 'Minha Loja'}
+            </p>
           </div>
         </div>
       </SidebarHeader>
 
-      <SidebarContent className="py-4">
+      <SidebarContent className="px-3 py-6 space-y-8">
         <SidebarGroup>
-          <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-[0.2em] px-4 text-slate-100 mb-2 opacity-100">Operacional</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-[0.2em] px-4 text-slate-500 mb-2">
+            Operacional
+          </SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>
+            <SidebarMenu className="gap-1">
               {mainNavItems.map((item) => (
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton 
                     asChild 
                     isActive={isActive(item.href, item.exact)} 
-                    className={`px-4 h-10 transition-all hover:bg-white/10 ${
+                    className={cn(
+                      "px-4 h-11 transition-all duration-200 rounded-lg group",
                       isActive(item.href, item.exact) 
-                        ? 'bg-primary text-white shadow-lg shadow-primary/20' 
-                        : 'text-slate-100 hover:text-white'
-                    }`}
+                        ? 'bg-primary text-white shadow-md shadow-primary/20' 
+                        : 'text-slate-300 hover:bg-white/5 hover:text-white'
+                    )}
                   >
                     <Link href={item.href} className="flex items-center gap-3">
-                      <item.icon className={`h-4 w-4 ${isActive(item.href, item.exact) ? 'opacity-100' : 'opacity-90'}`} />
+                      <item.icon className={cn(
+                        "h-4 w-4 transition-transform duration-200 group-hover:scale-110",
+                        isActive(item.href, item.exact) ? 'opacity-100' : 'opacity-70 group-hover:opacity-100'
+                      )} />
                       <span className="font-bold text-xs tracking-tight">{item.label}</span>
+                      {isActive(item.href, item.exact) && <ChevronRight className="ml-auto h-3 w-3 opacity-50" />}
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -115,24 +128,33 @@ export function MainNav() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup className="mt-6">
-          <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-[0.2em] px-4 text-slate-100 mb-2 opacity-100">Estratégico</SidebarGroupLabel>
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-[0.2em] px-4 text-slate-500 mb-2">
+            Estratégico
+          </SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>
+            <SidebarMenu className="gap-1">
               {managementNavItems.map((item) => (
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton 
                     asChild 
                     isActive={isActive(item.href, item.exact)} 
-                    className={`px-4 h-10 transition-all hover:bg-white/10 ${
+                    className={cn(
+                      "px-4 h-11 transition-all duration-200 rounded-lg group",
                       isActive(item.href, item.exact) 
-                        ? 'bg-primary text-white shadow-lg shadow-primary/20' 
-                        : 'text-slate-100 hover:text-white'
-                    }`}
+                        ? 'bg-primary text-white shadow-md shadow-primary/20' 
+                        : 'text-slate-300 hover:bg-white/5 hover:text-white'
+                    )}
                   >
                     <Link href={item.href} className="flex items-center gap-3">
-                      <item.icon className={`h-4 w-4 ${isActive(item.href, item.exact) ? 'opacity-100' : 'opacity-90'}`} />
+                      <item.icon className={cn(
+                        "h-4 w-4 transition-transform duration-200 group-hover:scale-110",
+                        isActive(item.href, item.exact) ? 'opacity-100' : 'opacity-70 group-hover:opacity-100'
+                      )} />
                       <span className="font-bold text-xs tracking-tight">{item.label}</span>
+                      {item.label.includes('IA') && (
+                        <Badge className="ml-auto bg-amber-500/20 text-amber-400 border-none text-[8px] h-4 font-black">BETA</Badge>
+                      )}
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -141,23 +163,29 @@ export function MainNav() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup className="mt-6">
-          <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-[0.2em] px-4 text-slate-100 mb-2 opacity-100">Sistema</SidebarGroupLabel>
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-[0.2em] px-4 text-slate-500 mb-2">
+            Configurações
+          </SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>
+            <SidebarMenu className="gap-1">
               {configNavItems.map((item) => (
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton 
                     asChild 
                     isActive={isActive(item.href, item.exact)} 
-                    className={`px-4 h-10 transition-all hover:bg-white/10 ${
+                    className={cn(
+                      "px-4 h-11 transition-all duration-200 rounded-lg group",
                       isActive(item.href, item.exact) 
-                        ? 'bg-primary text-white shadow-lg shadow-primary/20' 
-                        : 'text-slate-100 hover:text-white'
-                    }`}
+                        ? 'bg-primary text-white shadow-md shadow-primary/20' 
+                        : 'text-slate-300 hover:bg-white/5 hover:text-white'
+                    )}
                   >
                     <Link href={item.href} className="flex items-center gap-3">
-                      <item.icon className={`h-4 w-4 ${isActive(item.href, item.exact) ? 'opacity-100' : 'opacity-90'}`} />
+                      <item.icon className={cn(
+                        "h-4 w-4 transition-transform duration-200 group-hover:scale-110",
+                        isActive(item.href, item.exact) ? 'opacity-100' : 'opacity-70 group-hover:opacity-100'
+                      )} />
                       <span className="font-bold text-xs tracking-tight">{item.label}</span>
                     </Link>
                   </SidebarMenuButton>
@@ -168,32 +196,36 @@ export function MainNav() {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="p-4 border-t border-white/10">
+      <SidebarFooter className="p-4 border-t border-white/5 bg-black/20">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="w-full flex items-center justify-between px-2 h-14 hover:bg-white/5 transition-colors group">
-              <div className="flex items-center gap-2 overflow-hidden">
-                <Avatar className="h-9 w-9 rounded-full ring-2 ring-white/10 group-hover:ring-primary/50 transition-all">
-                  <AvatarImage src={user?.avatar_url ?? undefined} />
-                  <AvatarFallback className="bg-primary/20 text-primary font-bold text-xs">{user?.email?.charAt(0).toUpperCase()}</AvatarFallback>
-                </Avatar>
+            <Button variant="ghost" className="w-full flex items-center justify-between px-3 h-16 hover:bg-white/5 transition-all duration-200 group rounded-xl">
+              <div className="flex items-center gap-3 overflow-hidden">
+                <div className="relative">
+                  <Avatar className="h-10 w-10 rounded-full ring-2 ring-primary/20 group-hover:ring-primary/50 transition-all duration-300 shadow-lg">
+                    <AvatarImage src={user?.avatar_url ?? undefined} />
+                    <AvatarFallback className="bg-primary/20 text-primary font-black text-sm">
+                      {user?.email?.charAt(0).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                </div>
                 <div className="flex flex-col items-start overflow-hidden text-left">
-                  <span className="text-[11px] font-bold truncate w-full text-white group-hover:text-white transition-colors">{user?.email}</span>
-                  <span className="text-[9px] text-primary uppercase font-black tracking-widest">CONTA ATIVA</span>
+                  <span className="text-xs font-black truncate w-full text-white tracking-tight">Minha Conta</span>
+                  <span className="text-[10px] text-slate-400 font-bold truncate w-full lowercase opacity-80">{user?.email}</span>
                 </div>
               </div>
-              <ChevronDown className="h-4 w-4 text-slate-400 group-hover:text-slate-200 transition-colors" />
+              <ChevronDown className="h-4 w-4 text-slate-500 group-hover:text-white transition-colors duration-200" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-64 border-slate-800 bg-[#0f172a] text-white shadow-2xl p-2">
-            <DropdownMenuLabel className="text-[10px] uppercase font-black text-slate-500 tracking-widest px-3 mb-1">Meu Portal</DropdownMenuLabel>
-            <DropdownMenuSeparator className="bg-slate-800" />
-            <DropdownMenuItem onClick={() => router.push('/settings')} className="text-xs font-bold hover:bg-white/10 focus:bg-white/10 cursor-pointer py-3 rounded-md">
-              <Settings className="mr-3 h-4 w-4 text-slate-400" /> Configurações
+          <DropdownMenuContent align="end" className="w-64 border-slate-800 bg-[#0f172a] text-white shadow-2xl p-2 rounded-xl">
+            <DropdownMenuLabel className="text-[10px] uppercase font-black text-slate-500 tracking-widest px-3 py-2">Meu Portal</DropdownMenuLabel>
+            <DropdownMenuSeparator className="bg-white/5" />
+            <DropdownMenuItem onClick={() => router.push('/settings')} className="text-xs font-bold hover:bg-white/10 focus:bg-white/10 cursor-pointer py-3 rounded-lg transition-colors">
+              <Settings className="mr-3 h-4 w-4 text-slate-400" /> Configurações Gerais
             </DropdownMenuItem>
-            <DropdownMenuSeparator className="bg-slate-800" />
-            <DropdownMenuItem onClick={() => logout()} className="text-red-400 text-xs font-bold hover:bg-red-500/10 focus:bg-red-500/10 cursor-pointer py-3 rounded-md">
-              <LogOut className="mr-3 h-4 w-4" /> Sair do Sistema
+            <DropdownMenuSeparator className="bg-white/5" />
+            <DropdownMenuItem onClick={() => logout()} className="text-red-400 text-xs font-black hover:bg-red-500/10 focus:bg-red-500/10 cursor-pointer py-3 rounded-lg transition-colors">
+              <LogOut className="mr-3 h-4 w-4" /> Encerrar Sessão
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
