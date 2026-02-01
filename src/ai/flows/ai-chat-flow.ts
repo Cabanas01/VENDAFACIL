@@ -3,8 +3,8 @@
 /**
  * @fileOverview Fluxo de IA para análise estratégica do VendaFácil.
  * 
- * Este fluxo valida a existência da chave de API no momento da execução (Runtime)
- * para evitar falhas silenciosas do Genkit.
+ * Esta Server Action é a única porta de entrada para a IA. 
+ * Ela nunca lança erros (throw), retornando sempre um objeto de resposta seguro.
  */
 
 import { ai } from '@/ai/genkit';
@@ -25,26 +25,30 @@ export type AiChatInput = z.infer<typeof AiChatInputSchema>;
 
 const AiChatOutputSchema = z.object({
   text: z.string().describe('Resposta da IA formatada em Markdown'),
+  error: z.string().optional().describe('Código de erro amigável para a UI'),
 });
 
 export type AiChatOutput = z.infer<typeof AiChatOutputSchema>;
 
+/**
+ * Função principal de execução da IA.
+ * Validamos a infraestrutura internamente para evitar erros 500 no Next.js.
+ */
 export async function askAi(input: AiChatInput): Promise<AiChatOutput> {
-  // Validação Crítica de Runtime
   const apiKey = process.env.GOOGLE_GENAI_API_KEY || 
                  process.env.GEMINI_API_KEY || 
                  process.env.GOOGLE_API_KEY;
   
   if (!apiKey) {
-    console.error('[AI_FLOW_ERROR] Chave de API ausente no momento da chamada da Server Action.');
-    throw new Error('API_KEY_MISSING');
+    console.error('[AI_GATEKEEPER] Chave de API ausente no servidor.');
+    return { text: '', error: 'API_KEY_MISSING' };
   }
 
   try {
     return await aiChatFlow(input);
   } catch (error: any) {
-    console.error('[AI_FLOW_EXECUTION_ERROR]', error);
-    throw error;
+    console.error('[AI_EXECUTION_ERROR]', error);
+    return { text: '', error: 'FLOW_EXECUTION_FAILED' };
   }
 }
 
@@ -86,7 +90,7 @@ const aiChatFlow = ai.defineFlow(
       }
     });
 
-    if (!text) throw new Error('A IA retornou uma resposta vazia.');
+    if (!text) throw new Error('EMPTY_RESPONSE');
 
     return { text };
   }

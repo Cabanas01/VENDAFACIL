@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Bot, User, Send, Loader2, Sparkles, Settings, AlertTriangle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { askAi } from '@/ai/flows/ai-chat-flow';
@@ -22,13 +22,13 @@ type ChatInterfaceProps = {
   contextData: any;
   scope: 'store' | 'admin';
   suggestions: string[];
-  isAiConfigured?: boolean;
 };
 
-export function ChatInterface({ title, subtitle, contextData, scope, suggestions, isAiConfigured = true }: ChatInterfaceProps) {
+export function ChatInterface({ title, subtitle, contextData, scope, suggestions }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [infraError, setInfraError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -38,7 +38,7 @@ export function ChatInterface({ title, subtitle, contextData, scope, suggestions
   }, [messages, isLoading]);
 
   const handleSend = async (text: string) => {
-    if (!text.trim() || isLoading || !isAiConfigured) return;
+    if (!text.trim() || isLoading) return;
 
     const userMsg: Message = { role: 'user', content: text };
     const newMessages: Message[] = [...messages, userMsg];
@@ -46,6 +46,7 @@ export function ChatInterface({ title, subtitle, contextData, scope, suggestions
     setMessages(newMessages);
     setInput('');
     setIsLoading(true);
+    setInfraError(null);
 
     try {
       const result = await askAi({
@@ -54,44 +55,37 @@ export function ChatInterface({ title, subtitle, contextData, scope, suggestions
         scope: scope
       });
 
-      setMessages([...newMessages, { role: 'model', content: result.text }]);
-    } catch (error: any) {
-      console.error('[CHAT_UI_ERROR]', error);
-      const errorMsg = error.message === 'API_KEY_MISSING' 
-        ? 'A chave de API da IA não está configurada no servidor.'
-        : 'Falha técnica na análise. Verifique sua conexão ou tente novamente.';
-      
-      setMessages([...newMessages, { role: 'model', content: errorMsg, isError: true }]);
+      if (result.error) {
+        if (result.error === 'API_KEY_MISSING') {
+          setInfraError('CONFIG');
+        } else {
+          setMessages([...newMessages, { role: 'model', content: 'IA indisponível no momento. Tente novamente.', isError: true }]);
+        }
+      } else {
+        setMessages([...newMessages, { role: 'model', content: result.text }]);
+      }
+    } catch (err) {
+      setMessages([...newMessages, { role: 'model', content: 'Falha técnica na conexão.', isError: true }]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  if (!isAiConfigured) {
+  if (infraError === 'CONFIG') {
     return (
-      <Card className="border-yellow-200 bg-[#FFFAEB]/50 min-h-[60vh] flex flex-col items-center justify-center">
-        <CardContent className="flex flex-col items-center justify-center py-16 text-center space-y-8 max-w-xl mx-auto">
-          <div className="p-5 bg-white rounded-full border border-yellow-200 shadow-sm">
-            <Settings className="h-10 w-10 text-yellow-500" />
-          </div>
-          <div className="space-y-4">
-            <h3 className="text-2xl font-black text-[#713F12] font-headline uppercase tracking-tighter">
-              Configuração de IA Necessária
-            </h3>
-            <p className="text-sm text-[#854D0E] leading-relaxed px-8 opacity-80 font-medium">
-              Para ativar o assistente inteligente, você precisa configurar a chave <strong className="font-bold">GOOGLE_GENAI_API_KEY</strong> no seu ambiente de hospedagem ou arquivo .env local.
-            </p>
-          </div>
-          <div className="pt-4">
-            <Button 
-              variant="outline" 
-              className="border-yellow-400 text-[#854D0E] hover:bg-yellow-100 font-bold h-12 px-10 transition-all active:scale-95" 
-              onClick={() => window.location.reload()}
-            >
-              Verificar Novamente
-            </Button>
-          </div>
-        </CardContent>
+      <Card className="border-yellow-200 bg-[#FFFAEB]/50 py-16 flex flex-col items-center justify-center text-center">
+        <div className="p-5 bg-white rounded-full border border-yellow-200 shadow-sm mb-6">
+          <Settings className="h-10 w-10 text-yellow-500" />
+        </div>
+        <div className="space-y-4 max-w-sm px-6">
+          <h3 className="text-xl font-black text-[#713F12] uppercase tracking-tighter">IA Desativada</h3>
+          <p className="text-sm text-[#854D0E] font-medium leading-relaxed opacity-80">
+            A chave <strong className="font-bold">GOOGLE_GENAI_API_KEY</strong> não foi detectada. Configure seu ambiente para ativar o assistente.
+          </p>
+          <Button variant="outline" className="border-yellow-400 text-[#854D0E] hover:bg-yellow-100 font-bold" onClick={() => window.location.reload()}>
+            Validar Infraestrutura
+          </Button>
+        </div>
       </Card>
     );
   }
@@ -141,7 +135,9 @@ export function ChatInterface({ title, subtitle, contextData, scope, suggestions
             {messages.map((m, i) => (
               <div key={i} className={`flex gap-3 ${m.role === 'user' ? 'flex-row-reverse' : ''}`}>
                 <Avatar className={`h-8 w-8 ${m.role === 'model' ? 'bg-primary text-primary-foreground' : 'bg-muted shadow-sm'}`}>
-                  {m.role === 'model' ? <Bot className="h-5 w-5" /> : <User className="h-5 w-5" />}
+                  <AvatarFallback className="text-[10px] font-bold">
+                    {m.role === 'model' ? 'AI' : 'EU'}
+                  </AvatarFallback>
                 </Avatar>
                 <div className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm shadow-sm ${
                   m.role === 'user' 
@@ -158,10 +154,10 @@ export function ChatInterface({ title, subtitle, contextData, scope, suggestions
 
             {isLoading && (
               <div className="flex gap-3 animate-pulse">
-                <Avatar className="h-8 w-8 bg-primary/20"><Bot className="h-5 w-5 text-primary" /></Avatar>
+                <Avatar className="h-8 w-8 bg-primary/20"><AvatarFallback className="text-[10px]">AI</AvatarFallback></Avatar>
                 <div className="bg-background border rounded-2xl rounded-tl-none px-4 py-3 flex items-center gap-2 shadow-sm">
                   <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-tight">Consultando dados operacionais...</span>
+                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-tight">Analisando dados...</span>
                 </div>
               </div>
             )}
@@ -176,7 +172,7 @@ export function ChatInterface({ title, subtitle, contextData, scope, suggestions
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={isLoading}
-            className="h-12 shadow-inner border-primary/5 bg-[#F8FAFC] focus-visible:ring-primary/20"
+            className="h-12 shadow-inner border-primary/5 bg-[#F8FAFC]"
           />
           <Button type="submit" size="icon" className="h-12 w-12 shadow-lg shadow-primary/20" disabled={isLoading || !input.trim()}>
             {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}

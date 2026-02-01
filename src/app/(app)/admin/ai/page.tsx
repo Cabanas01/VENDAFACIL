@@ -2,8 +2,6 @@
 
 /**
  * @fileOverview Página de Inteligência Artificial para o Admin do SaaS.
- * 
- * Marcamos como dynamic para evitar falhas no build da Vercel.
  */
 
 import { useEffect, useState } from 'react';
@@ -14,8 +12,10 @@ import { Loader2 } from 'lucide-react';
 export default function AdminAiPage() {
   const [loading, setLoading] = useState(true);
   const [globalData, setGlobalData] = useState<any>(null);
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
+    setIsMounted(true);
     const fetchGlobalContext = async () => {
       try {
         const [storesRes, salesRes, logsRes] = await Promise.all([
@@ -25,13 +25,13 @@ export default function AdminAiPage() {
         ]);
 
         setGlobalData({
-          total_lojas: storesRes.data?.length,
-          categorias: storesRes.data?.reduce((acc: any, s: any) => {
+          total_lojas: (storesRes.data || []).length,
+          categorias: (storesRes.data || []).reduce((acc: any, s: any) => {
             acc[s.business_type || 'outros'] = (acc[s.business_type || 'outros'] || 0) + 1;
             return acc;
           }, {}),
-          faturamento_global: (salesRes.data?.reduce((acc, s) => acc + s.total_cents, 0) || 0) / 100,
-          total_vendas: salesRes.data?.length,
+          faturamento_global: ((salesRes.data || []).reduce((acc, s) => acc + (s.total_cents || 0), 0)) / 100,
+          total_vendas: (salesRes.data || []).length,
           ultimos_logs: logsRes.data
         });
       } catch (err) {
@@ -48,15 +48,14 @@ export default function AdminAiPage() {
     "Qual a saúde financeira global do SaaS?",
     "Quais os logs mais recentes de sistema?",
     "Quais categorias de loja são mais comuns?",
-    "Houve alguma anomalia de faturamento hoje?",
     "Resuma o crescimento de novos tenants."
   ];
 
-  if (loading) {
+  if (!isMounted || loading) {
     return (
       <div className="h-[60vh] flex flex-col items-center justify-center gap-4">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground">Preparando inteligência administrativa...</p>
+        <Loader2 className="h-8 w-8 animate-spin text-primary/20" />
+        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground animate-pulse">Sincronizando Inteligência Central...</p>
       </div>
     );
   }

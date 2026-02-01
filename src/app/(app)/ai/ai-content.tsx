@@ -1,26 +1,31 @@
 'use client';
 
 /**
- * @fileOverview Componente de IA (PRE-FLIGHT VALIDATION)
+ * @fileOverview Componente de IA (Client Controller)
  * 
- * Bloqueia chamadas se não houver dados operacionais mínimos (produtos e vendas).
+ * Gerencia o estado de prontidão e a montagem do snapshot de dados.
  */
 
 import { useAuth } from '@/components/auth-provider';
 import { ChatInterface } from '@/components/chat/chat-interface';
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
-import { Database, AlertCircle } from 'lucide-react';
+import { Database, AlertCircle, Loader2 } from 'lucide-react';
 
-export default function StoreAiContent({ isAiConfigured }: { isAiConfigured: boolean }) {
+export default function StoreAiContent() {
   const { products, sales, store, accessStatus } = useAuth();
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const hasSales = (sales || []).length > 0;
   const hasProducts = (products || []).length > 0;
   const canAnalyze = hasSales && hasProducts;
 
   const dataSnapshot = useMemo(() => {
-    if (!canAnalyze || !isAiConfigured) return null;
+    if (!canAnalyze || !isMounted) return null;
 
     return {
       loja: {
@@ -40,7 +45,7 @@ export default function StoreAiContent({ isAiConfigured }: { isAiConfigured: boo
         metodo: s.payment_method
       }))
     };
-  }, [canAnalyze, isAiConfigured, products, sales, store, accessStatus]);
+  }, [canAnalyze, isMounted, products, sales, store, accessStatus]);
 
   const suggestions = [
     "Faça um resumo do meu faturamento atual.",
@@ -49,7 +54,15 @@ export default function StoreAiContent({ isAiConfigured }: { isAiConfigured: boo
     "Como posso aumentar meu lucro este mês?"
   ];
 
-  if (!canAnalyze && isAiConfigured) {
+  if (!isMounted) {
+    return (
+      <div className="h-[60vh] flex flex-col items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary/20" />
+      </div>
+    );
+  }
+
+  if (!canAnalyze) {
     return (
       <Card className="border-dashed py-24 bg-muted/5 flex flex-col items-center justify-center text-center">
         <CardContent className="space-y-6">
@@ -79,7 +92,6 @@ export default function StoreAiContent({ isAiConfigured }: { isAiConfigured: boo
       contextData={dataSnapshot}
       scope="store"
       suggestions={suggestions}
-      isAiConfigured={isAiConfigured}
     />
   );
 }
