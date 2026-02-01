@@ -2,7 +2,7 @@ import { MetadataRoute } from 'next';
 
 /**
  * @fileOverview Sitemap Gerador para SEO.
- * Define as rotas públicas que o Google deve indexar.
+ * Define as rotas que o Google deve indexar para o domínio principal.
  */
 
 export default function sitemap(): MetadataRoute.Sitemap {

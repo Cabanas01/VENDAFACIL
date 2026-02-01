@@ -7,7 +7,7 @@ import { AdSenseScript } from "@/components/adsense-script";
 import "./globals.css";
 
 /**
- * @fileOverview Root Layout com Otimização de SEO (Metadata API)
+ * @fileOverview Root Layout com Otimização de SEO e Verificação do Google Search Console.
  */
 
 export const metadata: Metadata = {
@@ -26,17 +26,12 @@ export const metadata: Metadata = {
     'controle de estoque simples',
     'venda fácil brasil'
   ],
-  authors: [{ name: 'VendaFácil Team' }],
-  creator: 'VendaFácil',
-  publisher: 'VendaFácil',
-  formatDetection: {
-    email: false,
-    address: false,
-    telephone: false,
-  },
   metadataBase: new URL('https://www.vendafacilbrasil.shop'),
   alternates: {
     canonical: '/',
+  },
+  verification: {
+    google: 'UxfEnipfr5bCVjQ7rpII_5thkJa3QsoQsN-FZu3SA1A',
   },
   openGraph: {
     title: 'VendaFácil | PDV Online para Pequenos Negócios',
@@ -57,16 +52,6 @@ export const metadata: Metadata = {
   robots: {
     index: true,
     follow: true,
-    googleBot: {
-      index: true,
-      follow: true,
-      'max-video-preview': -1,
-      'max-image-preview': 'large',
-      'max-snippet': -1,
-    },
-  },
-  verification: {
-    google: 'UxfEnipfr5bCVjQ7rpII_5thkJa3QsoQsN-FZu3SA1A',
   },
 };
 
@@ -107,7 +92,7 @@ export default function RootLayout({
       <body className="font-body antialiased min-h-screen">
         <Suspense fallback={null}>
           <Providers>
-            {/* AdSense condicional */}
+            {/* AdSense condicional para verificação e monetização */}
             <AdSenseScript />
             
             {/* Analytics */}
