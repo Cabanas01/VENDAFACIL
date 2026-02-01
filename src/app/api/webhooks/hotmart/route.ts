@@ -1,4 +1,3 @@
-
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase/admin';
 import crypto from 'crypto';
@@ -70,7 +69,7 @@ export async function POST(request: Request) {
 
     let durationDays: number;
     let planName: string;
-    let finalPlanType: "weekly" | "monthly" | "yearly" | "free";
+    let finalPlanType: "semanal" | "mensal" | "anual" | "trial";
 
     switch (event) {
       case 'PURCHASE_APPROVED':
@@ -81,20 +80,28 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: true, message: 'Acknowledged, but invalid external_reference' });
         }
         
-        // Uso das chaves originais (Inglês) para respeitar as constraints do banco
-        switch (plan_id) {
-          case 'weekly':
-          case 'semanal': 
-            durationDays = 7; planName = 'Semanal'; finalPlanType = 'weekly'; break;
-          case 'monthly':
-          case 'mensal': 
-            durationDays = 30; planName = 'Mensal'; finalPlanType = 'monthly'; break;
-          case 'yearly':
-          case 'anual': 
-            durationDays = 365; planName = 'Anual'; finalPlanType = 'yearly'; break;
-          default:
-            await logEvent(payload, 'error_unknown_plan');
-            return NextResponse.json({ success: true, message: 'Acknowledged, but unknown plan_id' });
+        // Mapeamento de durações e tipos compatíveis com a constraint do banco
+        const normalizedPlanId = plan_id.toLowerCase();
+        
+        if (normalizedPlanId === 'weekly' || normalizedPlanId === 'semanal') {
+          durationDays = 7;
+          planName = 'Semanal';
+          finalPlanType = 'semanal';
+        } else if (normalizedPlanId === 'monthly' || normalizedPlanId === 'mensal') {
+          durationDays = 30;
+          planName = 'Mensal';
+          finalPlanType = 'mensal';
+        } else if (normalizedPlanId === 'yearly' || normalizedPlanId === 'anual') {
+          durationDays = 365;
+          planName = 'Anual';
+          finalPlanType = 'anual';
+        } else if (normalizedPlanId === 'free' || normalizedPlanId === 'trial' || normalizedPlanId === 'avaliacao') {
+          durationDays = 7;
+          planName = 'Avaliação';
+          finalPlanType = 'trial';
+        } else {
+          await logEvent(payload, 'error_unknown_plan');
+          return NextResponse.json({ success: true, message: 'Acknowledged, but unknown plan_id' });
         }
         
         const now = new Date();

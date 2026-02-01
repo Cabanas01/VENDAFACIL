@@ -1,6 +1,5 @@
-
 export type CheckoutProvider = 'hotmart';
-export type PlanID = 'free' | 'weekly' | 'monthly' | 'yearly';
+export type PlanID = 'trial' | 'semanal' | 'mensal' | 'anual';
 
 export type PlanConfig = {
     name: string;
@@ -12,9 +11,9 @@ export type PlanConfig = {
 }
 
 // Configuração central para os planos, usada para construir a UI da página de faturamento.
-// Os PlanIDs agora correspondem EXATAMENTE aos valores do banco de dados original.
+// Os PlanIDs agora correspondem EXATAMENTE aos valores permitidos no banco de dados.
 export const PLANS_CONFIG: Record<PlanID, PlanConfig> = {
-    free: {
+    trial: {
         name: 'Avaliação Gratuita',
         description: 'Experimente todos os recursos sem compromisso.',
         price: 'Grátis',
@@ -27,7 +26,7 @@ export const PLANS_CONFIG: Record<PlanID, PlanConfig> = {
         ],
         isFree: true,
     },
-    weekly: {
+    semanal: {
         name: 'Semanal',
         description: 'Acesso completo por 7 dias.',
         price: 'R$9,90',
@@ -39,7 +38,7 @@ export const PLANS_CONFIG: Record<PlanID, PlanConfig> = {
             'Sem anúncios'
         ],
     },
-    monthly: {
+    mensal: {
         name: 'Mensal',
         description: 'O plano mais flexível. Cancele quando quiser.',
         price: 'R$29,90',
@@ -51,9 +50,9 @@ export const PLANS_CONFIG: Record<PlanID, PlanConfig> = {
             'Backup automático'
         ],
     },
-    yearly: {
+    anual: {
         name: 'Anual',
-        description: 'Economize 75% com o plano anual!',
+        description: 'Economize mais com o plano anual!',
         price: 'R$297,00',
         periodicity: 'ano',
         benefits: [
@@ -65,11 +64,11 @@ export const PLANS_CONFIG: Record<PlanID, PlanConfig> = {
     }
 };
 
-// Links de checkout sincronizados com as chaves originais do banco.
+// Links de checkout sincronizados com as chaves do banco.
 export const CHECKOUT_LINKS: Record<CheckoutProvider, Partial<Record<PlanID, string>>> = {
   hotmart: {
-    weekly: 'https://pay.hotmart.com/A104103229T?off=gczhreyg',
-    monthly: 'https://pay.hotmart.com/A104103229T?off=3py3921r&bid=1769483117758',
-    yearly: 'https://pay.hotmart.com/A104103229T?off=aa1nsl3j',
+    semanal: 'https://pay.hotmart.com/A104103229T?off=gczhreyg',
+    mensal: 'https://pay.hotmart.com/A104103229T?off=3py3921r&bid=1769483117758',
+    anual: 'https://pay.hotmart.com/A104103229T?off=aa1nsl3j',
   },
 };

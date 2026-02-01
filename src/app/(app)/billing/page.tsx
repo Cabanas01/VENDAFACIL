@@ -33,7 +33,6 @@ export default function BillingPage() {
 
   /**
    * Ativa o período de teste chamando a API interna.
-   * Lida com erros específicos como "trial já utilizado" ou "falha de permissão".
    */
   const handleStartTrial = async () => {
     setIsStartingTrial(true);
@@ -42,7 +41,6 @@ export default function BillingPage() {
       const result = await response.json();
 
       if (!response.ok) {
-        // Extrai a mensagem de erro específica do backend ou usa uma mensagem genérica
         throw new Error(result.error || 'Ocorreu um erro ao tentar ativar seu período de teste.');
       }
 
@@ -51,20 +49,17 @@ export default function BillingPage() {
         description: 'Você agora tem 7 dias de acesso completo para testar o sistema.' 
       });
       
-      // Sincroniza o estado global. O AppLayout detectará acesso_liberado: true e permitirá navegação.
       if (user) {
         await fetchStoreData(user.id);
       }
       
     } catch (error: any) {
-      // Exibe erro específico para o usuário sem quebrar a página
       toast({
         variant: 'destructive',
         title: 'Não foi possível ativar',
         description: error.message,
       });
     } finally {
-      // Garante que o botão volte ao estado normal mesmo em caso de erro
       setIsStartingTrial(false);
     }
   };
@@ -86,8 +81,8 @@ export default function BillingPage() {
     window.open(finalUrl, '_blank');
   };
 
-  // IDs devem corresponder exatamente às chaves de PLANS_CONFIG
-  const planOrder: PlanID[] = ['free', 'weekly', 'monthly', 'yearly'];
+  // IDs correspondentes às chaves de PLANS_CONFIG
+  const planOrder: PlanID[] = ['trial', 'semanal', 'mensal', 'anual'];
 
   return (
     <div className="max-w-6xl mx-auto space-y-12 py-8">
@@ -98,7 +93,6 @@ export default function BillingPage() {
         </p>
       </div>
 
-      {/* Card de Status de Acesso */}
       <Card className="border-primary/20 bg-muted/30">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -132,14 +126,13 @@ export default function BillingPage() {
         </CardContent>
       </Card>
 
-      {/* Grid de Planos */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {planOrder.map(planId => {
           const plan = PLANS_CONFIG[planId];
           if (!plan) return null;
 
-          const isTrial = planId === 'free';
-          const isPopular = planId === 'yearly';
+          const isTrial = planId === 'trial';
+          const isPopular = planId === 'anual';
           const isCurrent = accessStatus?.plano_tipo === planId && accessStatus.acesso_liberado;
 
           return (
