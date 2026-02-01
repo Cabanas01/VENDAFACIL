@@ -15,14 +15,14 @@ import type { StoreRow } from './stores';
 import { grantPlanAction } from '@/app/actions/admin-actions';
 
 const PLAN_OPTIONS = [
-  { label: 'Avaliação (7 dias)', value: 'free' },
-  { label: 'Semanal', value: 'weekly' },
-  { label: 'Mensal', value: 'monthly' },
-  { label: 'Anual', value: 'yearly' },
+  { label: 'Avaliação (7 dias)', value: 'trial' },
+  { label: 'Semanal', value: 'semanal' },
+  { label: 'Mensal', value: 'mensal' },
+  { label: 'Anual', value: 'anual' },
 ] as const;
 
 const grantPlanSchema = z.object({
-  plan: z.enum(['free', 'weekly', 'monthly', 'yearly'], { required_error: 'Selecione um plano.' }),
+  plan: z.enum(['trial', 'semanal', 'mensal', 'anual'], { required_error: 'Selecione um plano.' }),
   durationMonths: z.coerce.number().int().min(1, 'Duração deve ser de no mínimo 1 mês.'),
 });
 
@@ -42,7 +42,7 @@ export function GrantPlanDialog({ store, isOpen, onOpenChange, onSuccess }: Gran
   const form = useForm<GrantPlanFormValues>({
     resolver: zodResolver(grantPlanSchema),
     defaultValues: {
-      plan: 'monthly',
+      plan: 'mensal',
       durationMonths: 1,
     },
   });
@@ -51,12 +51,12 @@ export function GrantPlanDialog({ store, isOpen, onOpenChange, onSuccess }: Gran
     if (!store) return;
     setIsSubmitting(true);
 
-    const calculatedDays = values.plan === 'free' ? 7 : Number(values.durationMonths) * 30;
+    const calculatedDays = values.plan === 'trial' ? 7 : Number(values.durationMonths) * 30;
 
     try {
       const result = await grantPlanAction({
         storeId: store.id,
-        planoTipo: values.plan,
+        planoTipo: values.plan.toLowerCase(), // Normalização forçada
         duracaoDias: calculatedDays,
       });
 
@@ -136,7 +136,7 @@ export function GrantPlanDialog({ store, isOpen, onOpenChange, onSuccess }: Gran
               )}
             />
             
-            {form.watch('plan') !== 'free' && (
+            {form.watch('plan') !== 'trial' && (
               <FormField
                 control={form.control}
                 name="durationMonths"
