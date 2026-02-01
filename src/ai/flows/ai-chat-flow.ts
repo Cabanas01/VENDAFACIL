@@ -4,7 +4,7 @@
  * @fileOverview Fluxo de Chat de IA (SaaS Advisor)
  * 
  * Implementado via Genkit v1.x. 
- * Utiliza a instância global de IA para garantir o uso do modelo gemini-1.5-flash.
+ * Utiliza o modelo gemini-1.5-flash para análises operacionais rápidas.
  */
 
 import { ai } from '@/ai/genkit';
@@ -31,21 +31,20 @@ const AiChatOutputSchema = z.object({
 export type AiChatOutput = z.infer<typeof AiChatOutputSchema>;
 
 export async function askAi(input: AiChatInput): Promise<AiChatOutput> {
-  // Validação de segurança no runtime da Server Action
   if (!process.env.GOOGLE_GENAI_API_KEY) {
-    console.error('[AI_GATEKEEPER] Chave de API ausente.');
+    console.error('[AI_GATEKEEPER] Chave de API GOOGLE_GENAI_API_KEY ausente.');
     return { text: '', error: 'CONFIG_MISSING' };
   }
 
   try {
     const systemPrompt = input.scope === 'admin' 
-      ? `Você é o ANALISTA ESTRATÉGICO do VendaFácil. Analise as métricas GLOBAIS. Responda em Markdown.`
-      : `Você é o CONSULTOR DE NEGÓCIOS do VendaFácil. Analise estoque, vendas e CMV. Forneça conselhos práticos para aumentar o lucro. Responda em Markdown.`;
+      ? `Você é o ANALISTA ESTRATÉGICO do VendaFácil. Analise as métricas GLOBAIS do SaaS. Responda em Markdown de forma executiva.`
+      : `Você é o CONSULTOR DE NEGÓCIOS do VendaFácil. Analise estoque, vendas e lucro bruto. Forneça conselhos práticos para aumentar a eficiência da loja. Responda em Markdown.`;
 
     const lastUserMessage = input.messages[input.messages.length - 1]?.content || 'Resuma meus dados.';
 
-    // Execução Genkit 1.x utilizando o modelo configurado globalmente
     const response = await ai.generate({
+      model: 'googleai/gemini-1.5-flash',
       system: systemPrompt,
       messages: [
         ...input.messages.slice(0, -1).map(m => ({
@@ -55,8 +54,8 @@ export async function askAi(input: AiChatInput): Promise<AiChatOutput> {
         {
           role: 'user',
           content: [
-            { text: `DADOS DO SISTEMA:\n${input.contextData}\n\n` },
-            { text: `PERGUNTA: ${lastUserMessage}` }
+            { text: `DADOS ATUAIS DO SISTEMA:\n${input.contextData}\n\n` },
+            { text: `PERGUNTA DO USUÁRIO: ${lastUserMessage}` }
           ]
         }
       ]

@@ -28,18 +28,19 @@ export async function summarizeFinancialReports(input: SummarizeFinancialReports
 
 const summarizeFinancialReportsPrompt = ai.definePrompt({
   name: 'summarizeFinancialReportsPrompt',
+  model: 'googleai/gemini-1.5-flash',
   input: {schema: SummarizeFinancialReportsInputSchema},
   output: {schema: SummarizeFinancialReportsOutputSchema},
-  prompt: `Você é um analista financeiro sênior. Sumarize os dados abaixo em Markdown:
+  prompt: `Você é um analista financeiro sênior especializado em varejo. Analise os dados abaixo e forneça uma visão estratégica em Markdown:
 
-Dados:
+DADOS DO RELATÓRIO:
 {{{financialReportData}}}
 
-Forneça:
-1. Resumo Conciso
-2. Tendências Identificadas
-3. Oportunidades de Lucro
-4. Riscos Detectados`,
+Sua resposta deve conter:
+1. Resumo Executivo (o que aconteceu no período)
+2. Tendências Identificadas (padrões de consumo ou gastos)
+3. Oportunidades de Lucro (onde a loja pode ganhar mais)
+4. Riscos Detectados (estoque parado, margem baixa, etc)`,
 });
 
 const summarizeFinancialReportsFlow = ai.defineFlow(
