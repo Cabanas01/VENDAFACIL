@@ -10,23 +10,23 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 /**
- * @fileOverview AppLayout (SERVER-SIDE PRIVATE GATEKEEPER)
+ * @fileOverview AppLayout (SERVER-SIDE GATEKEEPER)
  * 
- * Este layout é o único responsável por decidir para onde o usuário logado deve ir.
- * A lógica roda no servidor antes de enviar qualquer HTML ao navegador.
+ * Este layout é o único responsável pela inteligência de fluxo.
+ * Ele decide síncronamente no servidor se o usuário vai para Dashboard ou Onboarding.
  */
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = createSupabaseServerClient();
   const headerList = headers();
   const pathname = headerList.get('x-pathname') || '/dashboard';
 
-  // 1. Validar Sessão
+  // 1. Validar Sessão (Nível HTTP)
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) {
     redirect('/login');
   }
 
-  // 2. Chamar RPC de Bootstrap (Atômico)
+  // 2. Buscar Status de Bootstrap (RPC Atômica)
   const { data: status, error: rpcError } = await supabase.rpc('get_user_bootstrap_status');
   
   if (rpcError || !status) {
@@ -34,33 +34,33 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     redirect('/login');
   }
 
-  // Status retornado pela RPC: { has_store, is_member, is_admin }
+  // Status: { has_store, is_member, is_admin }
   const { has_store, is_member, is_admin } = status as any;
 
-  // 3. REGRA DE OURO: Novo Usuário é quem NÃO tem loja, NÃO é membro e NÃO é admin.
+  // 🚨 REGRA DE OURO: Novo usuário é quem não tem NADA.
   const isNewUser = !has_store && !is_member && !is_admin;
 
-  // 4. REDIRECTS SÍNCRONOS (Nível de Rede)
+  // 3. REDIRECTS SÍNCRONOS (Nível de Rede - 307 Temporary Redirect)
   
-  // Caso A: Usuário novo tentando acessar o sistema sem passar pelo onboarding
+  // Caso A: Usuário novo tentando escapar do funil de onboarding
   if (isNewUser && !pathname.startsWith('/onboarding')) {
     redirect('/onboarding');
   }
 
-  // Caso B: Usuário existente (com loja, membro ou admin) tentando acessar o onboarding
+  // Caso B: Usuário existente (com loja ou cargo) tentando acessar o onboarding indevidamente
   if (!isNewUser && pathname.startsWith('/onboarding')) {
+    // Admins vão para o painel SaaS, outros para o Dashboard da loja
     redirect(is_admin ? '/admin' : '/dashboard');
   }
 
-  // Caso C: Proteção de área administrativa
+  // Caso C: Proteção de área administrativa (somente admin_saas = true)
   if (pathname.startsWith('/admin') && !is_admin) {
     redirect('/dashboard');
   }
 
-  // 5. RENDERIZAÇÃO DA INTERFACE
+  // 4. PREPARAÇÃO DA INTERFACE
   const isAdminPath = pathname.startsWith('/admin');
-
-  // Buscar nome da loja para exibição no header (apenas se tiver vínculo)
+  
   let storeName = 'VendaFácil';
   if (has_store || is_member) {
     const { data: storeData } = await supabase
@@ -92,13 +92,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               </div>
 
               <div className="flex items-center gap-3">
+                <div className="hidden md:block text-right">
+                  <p className="text-[10px] font-bold leading-none text-muted-foreground">{user.email}</p>
+                </div>
                 <Avatar className="h-8 w-8 ring-2 ring-primary/10">
                   <AvatarImage src={user.user_metadata?.avatar_url} />
                   <AvatarFallback><UserIcon className="h-4 w-4 text-primary" /></AvatarFallback>
                 </Avatar>
-                <div className="hidden md:block text-right">
-                  <p className="text-[10px] font-bold leading-none">{user.email}</p>
-                </div>
               </div>
             </header>
 

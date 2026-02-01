@@ -3,8 +3,8 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 /**
  * Middleware de Autenticação e Contexto de Rota.
- * 1. Mantém a sessão ativa.
- * 2. Injeta o pathname nos headers para que Server Components saibam a rota atual.
+ * 1. Mantém a sessão ativa e sincronizada com os cookies.
+ * 2. Injeta o pathname atual nos headers para os Server Layouts.
  */
 export async function middleware(request: NextRequest) {
   const url = new URL(request.url);
@@ -16,7 +16,7 @@ export async function middleware(request: NextRequest) {
   });
 
   // Injeta o pathname atual nos headers para os Server Layouts (App Router)
-  // Isso permite que Server Components saibam a rota atual de forma síncrona.
+  // Essencial para o AppLayout saber onde o usuário está sem depender do client.
   response.headers.set('x-pathname', url.pathname);
 
   const supabase = createServerClient(
@@ -43,7 +43,7 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // Garante que o auth.uid() esteja disponível no servidor para as RPCs
+  // Garante que a sessão esteja atualizada para que o auth.uid() funcione nas RPCs
   await supabase.auth.getUser();
 
   return response;

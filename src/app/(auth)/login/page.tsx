@@ -3,8 +3,8 @@
 /**
  * @fileOverview LoginPage (Dumb Form)
  * 
- * Focada apenas na autenticação.
- * O redirecionamento é gerenciado pelo AuthLayout (Server) após a mudança dos cookies de sessão.
+ * Focada apenas na autenticação via Supabase Client.
+ * Após o sucesso, força o recarregamento total para o servidor decidir o fluxo.
  */
 
 import { useState } from 'react';
@@ -51,8 +51,11 @@ export default function LoginPage() {
         setErrorMsg(error.message === 'Invalid login credentials' ? 'E-mail ou senha incorretos.' : error.message);
         setLoading(false);
       } else {
-        // SUCESSO: Forçamos o recarregamento completo para que o servidor veja os novos cookies de sessão imediatamente.
-        // O AuthLayout ou AppLayout do servidor decidirão a rota final (Dashboard ou Onboarding).
+        /**
+         * 🚨 SUCESSO: Redirecionamento Síncrono via Browser
+         * Ao usar window.location.href, garantimos que a próxima requisição
+         * passe pelo Middleware e pelo Server Layout com os novos cookies de sessão.
+         */
         window.location.href = '/dashboard';
       }
     } catch (err) {
