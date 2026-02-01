@@ -3,16 +3,15 @@
 /**
  * @fileOverview Página de Planos (Sincronizada e Segura)
  * 
- * Implementa proteção de hidratação para evitar exceções de cliente no Next.js 15.
+ * Implementa proteção de hidratação e formatação defensiva de datas.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
   ShieldCheck, 
   Loader2, 
   Calendar,
-  AlertTriangle,
-  CheckCircle2
+  AlertTriangle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/components/auth-provider';
@@ -23,7 +22,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PLANS_CONFIG, CHECKOUT_LINKS } from '@/lib/billing/checkoutLinks';
 import type { PlanID } from '@/lib/billing/checkoutLinks';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 export default function BillingPage() {
@@ -32,7 +31,6 @@ export default function BillingPage() {
   const [isStartingTrial, setIsStartingTrial] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
 
-  // Proteção contra erro de hidratação (crucial para Next.js 15 em produção)
   useEffect(() => {
     setIsMounted(true);
   }, []);
@@ -66,6 +64,18 @@ export default function BillingPage() {
     const finalUrl = `${url}${url.includes('?') ? '&' : '?'}external_reference=${encodeURIComponent(externalReference)}`;
     window.open(finalUrl, '_blank');
   };
+
+  // Formatação segura de data para evitar exceções de cliente
+  const formattedExpiryDate = useMemo(() => {
+    if (!accessStatus?.data_fim_acesso) return null;
+    try {
+      const date = parseISO(accessStatus.data_fim_acesso);
+      if (!isValid(date)) return null;
+      return format(date, "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
+    } catch {
+      return null;
+    }
+  }, [accessStatus?.data_fim_acesso]);
 
   if (!isMounted || storeStatus === 'loading_auth' || storeStatus === 'loading_status') {
     return (
@@ -108,13 +118,13 @@ export default function BillingPage() {
               <p className="text-sm text-muted-foreground font-bold italic opacity-80">{accessStatus?.mensagem}</p>
             </div>
 
-            {accessStatus?.data_fim_acesso && (
+            {formattedExpiryDate && (
               <div className="flex items-center gap-4 px-6 py-4 bg-muted/50 rounded-xl border border-primary/5">
                 <Calendar className="h-6 w-6 text-primary/60" />
                 <div>
                   <p className="text-[10px] uppercase font-black text-muted-foreground tracking-widest mb-0.5">Válido até</p>
                   <p className="font-black text-foreground text-lg">
-                    {format(parseISO(accessStatus.data_fim_acesso), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
+                    {formattedExpiryDate}
                   </p>
                 </div>
               </div>
@@ -202,3 +212,5 @@ export default function BillingPage() {
     </div>
   );
 }
+
+import { CheckCircle2 } from 'lucide-react';

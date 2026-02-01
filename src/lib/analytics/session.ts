@@ -2,15 +2,24 @@
 
 const SESSION_KEY = 'vf_session_id';
 
+/**
+ * Recupera ou cria um ID de sessão persistente.
+ * Implementação segura com try-catch para evitar crash em ambientes que bloqueiam localStorage.
+ */
 export function getOrCreateSessionId(): string {
   if (typeof window === 'undefined') return '';
 
-  let sessionId = localStorage.getItem(SESSION_KEY);
-  if (!sessionId) {
-    sessionId = crypto.randomUUID();
-    localStorage.setItem(SESSION_KEY, sessionId);
+  try {
+    let sessionId = localStorage.getItem(SESSION_KEY);
+    if (!sessionId) {
+      sessionId = crypto.randomUUID();
+      localStorage.setItem(SESSION_KEY, sessionId);
+    }
+    return sessionId;
+  } catch (err) {
+    console.warn('[SESSION_ID_ACCESS_DENIED] Usando fallback volátil.');
+    return 'volatile_' + Math.random().toString(36).substring(7);
   }
-  return sessionId;
 }
 
 export function getDeviceType(): 'desktop' | 'mobile' | 'tablet' {

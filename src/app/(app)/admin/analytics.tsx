@@ -3,12 +3,12 @@
 /**
  * @fileOverview Painel de Analytics (Admin) - Seguro e Defensivo
  * 
- * Implementa agregação no frontend e proteção contra hidratação.
+ * Implementa agregação no frontend e proteção rigorosa contra erros de data.
  */
 
 import { useEffect, useState, useMemo } from 'react';
 import type { DateRange } from 'react-day-picker';
-import { addDays, startOfToday, format, parseISO, startOfDay, endOfDay } from 'date-fns';
+import { addDays, startOfToday, format, parseISO, startOfDay, endOfDay, isValid } from 'date-fns';
 import {
   Activity,
   Eye,
@@ -47,6 +47,7 @@ export default function AdminAnalytics() {
 
   useEffect(() => {
     const fetchRawEvents = async () => {
+      if (!isMounted) return;
       setLoading(true);
       try {
         const from = startOfDay(dateRange?.from || addDays(startOfToday(), -6)).toISOString();
@@ -86,9 +87,16 @@ export default function AdminAnalytics() {
       if (ev.event_name === 'page_view') acc.views += 1;
       if (ev.event_name === 'report_opened' || ev.event_name === 'report_viewed') acc.reports += 1;
       
-      const createdAt = ev.created_at || new Date().toISOString();
-      const day = format(new Date(createdAt), 'yyyy-MM-dd');
-      acc.byDay[day] = (acc.byDay[day] || 0) + 1;
+      try {
+        const createdAt = ev.created_at || new Date().toISOString();
+        const dateObj = new Date(createdAt);
+        if (isValid(dateObj)) {
+          const day = format(dateObj, 'yyyy-MM-dd');
+          acc.byDay[day] = (acc.byDay[day] || 0) + 1;
+        }
+      } catch (e) {
+        console.warn('[ANALYTICS_DATE_PARSE_FAIL]', ev.created_at);
+      }
 
       const name = ev.event_name || 'unknown';
       acc.topEvents[name] = (acc.topEvents[name] || 0) + 1;
@@ -104,10 +112,16 @@ export default function AdminAnalytics() {
   }, [events]);
 
   const chartData = useMemo(() => {
-    return Object.entries(metrics.byDay).map(([day, count]) => ({
-      date: format(parseISO(day), 'dd/MM'),
-      total: count
-    }));
+    return Object.entries(metrics.byDay).map(([day, count]) => {
+      try {
+        return {
+          date: format(parseISO(day), 'dd/MM'),
+          total: count
+        };
+      } catch {
+        return { date: '-', total: count };
+      }
+    });
   }, [metrics.byDay]);
 
   const sortedTopEvents = useMemo(() => {
@@ -179,7 +193,7 @@ export default function AdminAnalytics() {
 }
 
 function MetricCard({ title, value, icon }: { title: string, value: any, icon: any }) {
-  const displayValue = typeof value === 'number' ? value.toLocaleString() : value;
+  const displayValue = typeof value === 'number' ? value.toLocaleString() : (value || 0);
   return (
     <Card className="border-primary/5 shadow-sm">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -187,7 +201,7 @@ function MetricCard({ title, value, icon }: { title: string, value: any, icon: a
         <div className="h-4 w-4 text-primary opacity-50">{icon}</div>
       </CardHeader>
       <CardContent>
-        <div className="text-2xl font-black tracking-tighter">{displayValue ?? 0}</div>
+        <div className="text-2xl font-black tracking-tighter">{displayValue}</div>
       </CardContent>
     </Card>
   );
