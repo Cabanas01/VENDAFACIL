@@ -1,6 +1,6 @@
 /**
- * @fileOverview Interface REST direta para a API Google Gemini v1.
- * Utiliza o modelo gemini-1.0-pro para garantir compatibilidade universal em todos os projetos.
+ * @fileOverview Interface REST direta para a API Google Gemini v1beta.
+ * Utiliza o modelo gemini-2.0-flash conforme solicitação do usuário para performance máxima.
  */
 
 export async function askGemini(prompt: string, jsonMode: boolean = false) {
@@ -10,9 +10,9 @@ export async function askGemini(prompt: string, jsonMode: boolean = false) {
     throw new Error('CONFIG_MISSING');
   }
 
-  // Gemini 1.0 Pro é o modelo mais estável e disponível universalmente no endpoint v1
-  const model = 'gemini-1.0-pro';
-  const endpoint = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${API_KEY}`;
+  const model = 'gemini-2.0-flash';
+  // Usando v1beta conforme o curl de sucesso do usuário
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
   const body: any = {
     contents: [
@@ -23,8 +23,6 @@ export async function askGemini(prompt: string, jsonMode: boolean = false) {
     ],
   };
 
-  // Observação: JSON mode no 1.0 Pro via REST v1 pode ser menos restrito que no 1.5,
-  // mas o parâmetro é suportado para forçar a estrutura se a versão da API permitir.
   if (jsonMode) {
     body.generationConfig = {
       response_mime_type: 'application/json',
@@ -34,7 +32,10 @@ export async function askGemini(prompt: string, jsonMode: boolean = false) {
   try {
     const res = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'X-goog-api-key': API_KEY 
+      },
       body: JSON.stringify(body),
     });
 
@@ -51,7 +52,7 @@ export async function askGemini(prompt: string, jsonMode: boolean = false) {
       throw new Error('EMPTY_RESPONSE');
     }
 
-    // Limpeza de blocos de código markdown se o modelo ignorar o jsonMode e retornar texto puro
+    // Limpeza de blocos de código markdown se o modelo retornar texto puro com backticks
     let cleanText = text;
     if (jsonMode && text.includes('```json')) {
       cleanText = text.replace(/```json|```/g, '').trim();
