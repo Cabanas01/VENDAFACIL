@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { PageHeader } from '@/components/page-header';
@@ -12,20 +12,21 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { 
   ArrowLeft, 
-  Users, 
-  ShoppingCart, 
-  ShieldCheck, 
   User, 
   MapPin, 
   Unlock,
   Loader2,
-  AlertTriangle
+  ShieldCheck,
+  Mail,
+  Activity
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { GrantPlanDialog } from '../../grant-plan-dialog';
 import { useToast } from '@/hooks/use-toast';
+import { getPlanLabel } from '@/lib/plan-label';
 
-const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val / 100);
+const formatCurrency = (val: number) => 
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val / 100);
 
 export default function AdminStoreDetailsPage() {
   const { id } = useParams();
@@ -34,7 +35,7 @@ export default function AdminStoreDetailsPage() {
   
   const [loading, setLoading] = useState(true);
   const [store, setStore] = useState<any>(null);
-  const [customers, setCustomers] = useState<any[]>([]);
+  const [customersCount, setCustomersCount] = useState(0);
   const [sales, setSales] = useState<any[]>([]);
   const [isGrantDialogOpen, setIsGrantDialogOpen] = useState(false);
 
@@ -43,14 +44,14 @@ export default function AdminStoreDetailsPage() {
     try {
       const [storeRes, customersRes, salesRes] = await Promise.all([
         supabase.from('stores').select('*, users(email), store_access(*)').eq('id', id).single(),
-        supabase.from('customers').select('*').eq('store_id', id).order('created_at', { ascending: false }),
+        supabase.from('customers').select('id', { count: 'exact', head: true }).eq('store_id', id),
         supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', id).order('created_at', { ascending: false })
       ]);
 
       if (storeRes.error) throw storeRes.error;
 
       setStore(storeRes.data);
-      setCustomers(customersRes.data || []);
+      setCustomersCount(customersRes.count || 0);
       setSales(salesRes.data || []);
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Erro ao carregar dados', description: err.message });
@@ -63,126 +64,174 @@ export default function AdminStoreDetailsPage() {
     if (id) loadData();
   }, [id]);
 
-  if (loading) return <div className="h-[60vh] flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>;
+  if (loading) return (
+    <div className="h-[60vh] flex flex-col items-center justify-center gap-4">
+      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <p className="text-muted-foreground text-sm font-bold uppercase tracking-tighter">Sincronizando com o servidor...</p>
+    </div>
+  );
+
+  const faturamentoTotal = sales.reduce((acc, s) => acc + (s.total_cents || 0), 0);
+  const volumeVendas = sales.length;
+  const access = store.store_access?.[0];
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => router.back()}>
+        <Button variant="ghost" size="icon" className="rounded-full" onClick={() => router.back()}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
-        <PageHeader 
-          title={store.name || 'Loja sem Nome'} 
-          subtitle={`Gestão administrativa da unidade ${store.id}`} 
-        />
+        <div>
+          <h1 className="text-4xl font-black tracking-tighter uppercase font-headline">{store.name || 'Loja sem Nome'}</h1>
+          <p className="text-sm text-muted-foreground font-bold">Gestão administrativa da unidade <span className="font-mono">{store.id}</span></p>
+        </div>
       </div>
 
+      {/* Métricas Principais */}
       <div className="grid gap-6 md:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-xs uppercase text-muted-foreground">Faturamento Total</CardTitle></CardHeader>
+        <Card className="border-primary/5 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Faturamento Total</CardTitle>
+          </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrency(sales.reduce((acc, s) => acc + s.total_cents, 0))}
-            </div>
+            <div className="text-3xl font-black">{formatCurrency(faturamentoTotal)}</div>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-xs uppercase text-muted-foreground">Volume de Vendas</CardTitle></CardHeader>
-          <CardContent><div className="text-2xl font-bold">{sales.length}</div></CardContent>
+        <Card className="border-primary/5 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Volume de Vendas</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-black">{volumeVendas}</div>
+          </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-xs uppercase text-muted-foreground">Clientes Cadastrados</CardTitle></CardHeader>
-          <CardContent><div className="text-2xl font-bold">{customers.length}</div></CardContent>
+        <Card className="border-primary/5 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Clientes Cadastrados</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-black">{customersCount}</div>
+          </CardContent>
         </Card>
       </div>
 
-      <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="overview">Informações Gerais</TabsTrigger>
-          <TabsTrigger value="access">Plano & Licença</TabsTrigger>
-          <TabsTrigger value="activity">Atividade Recente</TabsTrigger>
+      <Tabs defaultValue="access" className="space-y-6">
+        <TabsList className="bg-muted/50 p-1">
+          <TabsTrigger value="overview" className="font-bold text-xs uppercase px-6">Informações Gerais</TabsTrigger>
+          <TabsTrigger value="access" className="font-bold text-xs uppercase px-6">Plano & Licença</TabsTrigger>
+          <TabsTrigger value="activity" className="font-bold text-xs uppercase px-6">Atividade Recente</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview">
+        <TabsContent value="overview" className="animate-in slide-in-from-bottom-2 duration-300">
           <div className="grid gap-6 md:grid-cols-2">
             <Card>
-              <CardHeader><CardTitle className="text-lg flex items-center gap-2"><User className="h-5 w-5" /> Proprietário</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-lg flex items-center gap-2 font-headline"><User className="h-5 w-5 text-primary" /> Proprietário</CardTitle></CardHeader>
               <CardContent className="space-y-4">
-                <div>
-                  <label className="text-xs text-muted-foreground">E-mail de Login</label>
-                  <p className="font-medium">{store.users?.email || 'N/A'}</p>
+                <div className="flex items-center gap-2 bg-muted/30 p-3 rounded-lg border border-primary/5">
+                  <Mail className="h-4 w-4 text-primary" />
+                  <div>
+                    <label className="text-[10px] text-muted-foreground uppercase font-black">E-mail de Login</label>
+                    <p className="font-bold text-sm">{store.users?.email || 'N/A'}</p>
+                  </div>
                 </div>
-                <div>
-                  <label className="text-xs text-muted-foreground">CNPJ</label>
-                  <p className="font-mono">{store.cnpj || '-'}</p>
+                <div className="bg-muted/30 p-3 rounded-lg border border-primary/5">
+                  <label className="text-[10px] text-muted-foreground uppercase font-black">CNPJ Registrado</label>
+                  <p className="font-mono font-bold text-sm">{store.cnpj || '-'}</p>
                 </div>
               </CardContent>
             </Card>
 
             <Card>
-              <CardHeader><CardTitle className="text-lg flex items-center gap-2"><MapPin className="h-5 w-5" /> Localização</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-lg flex items-center gap-2 font-headline"><MapPin className="h-5 w-5 text-primary" /> Localização</CardTitle></CardHeader>
               <CardContent>
-                <p className="text-sm">
-                  {store.address?.street}, {store.address?.number}<br/>
-                  {store.address?.neighborhood} - {store.address?.city}/{store.address?.state}<br/>
-                  CEP: {store.address?.cep}
-                </p>
+                <div className="p-4 bg-muted/30 rounded-lg border border-primary/5">
+                  <p className="text-sm font-bold leading-relaxed">
+                    {store.address?.street}, {store.address?.number}<br/>
+                    {store.address?.neighborhood} - {store.address?.city}/{store.address?.state}<br/>
+                    <span className="text-xs text-muted-foreground font-mono">CEP: {store.address?.cep}</span>
+                  </p>
+                </div>
               </CardContent>
             </Card>
           </div>
         </TabsContent>
 
-        <TabsContent value="access">
-          <Card className="border-primary/20 bg-primary/5">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2"><ShieldCheck className="text-primary" /> Status do Licenciamento</CardTitle>
+        <TabsContent value="access" className="animate-in slide-in-from-bottom-2 duration-300">
+          <Card className="border-primary/20 bg-muted/5 shadow-lg">
+            <CardHeader className="border-b bg-muted/10">
+              <CardTitle className="flex items-center gap-2 text-xl font-headline font-black">
+                <ShieldCheck className="h-6 w-6 text-primary" /> 
+                Status do Licenciamento
+              </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex justify-between items-end border-b pb-4">
+            <CardContent className="space-y-10 py-8">
+              <div className="flex justify-between items-end">
                 <div>
-                  <p className="text-xs text-muted-foreground uppercase font-bold">Plano Atual</p>
-                  <p className="text-2xl font-black text-primary capitalize">{store.store_access?.[0]?.plano_tipo || 'Sem Plano'}</p>
+                  <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest mb-1">Plano Atual</p>
+                  <p className="text-4xl font-black text-primary uppercase tracking-tighter">
+                    {getPlanLabel(access?.plano_tipo) || 'Sem Plano'}
+                  </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs text-muted-foreground uppercase font-bold">Expiração</p>
-                  <p className="font-bold">
-                    {store.store_access?.[0]?.data_fim_acesso 
-                      ? format(new Date(store.store_access[0].data_fim_acesso), 'dd/MM/yyyy') 
+                  <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest mb-1">Expiração</p>
+                  <p className="text-xl font-black">
+                    {access?.data_fim_acesso 
+                      ? format(new Date(access.data_fim_acesso), 'dd/MM/yyyy') 
                       : '-'}
                   </p>
                 </div>
               </div>
-              <div className="flex gap-3">
-                <Button className="flex-1" onClick={() => setIsGrantDialogOpen(true)}>
-                  <Unlock className="h-4 w-4 mr-2" /> Alterar Acesso Manualmente
-                </Button>
-              </div>
+              
+              <Button 
+                className="w-full h-14 text-lg font-black shadow-lg shadow-primary/20 transition-all hover:scale-[1.01]" 
+                onClick={() => setIsGrantDialogOpen(true)}
+              >
+                <Unlock className="h-5 w-5 mr-3" /> Alterar Acesso Manualmente
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="activity">
+        <TabsContent value="activity" className="animate-in slide-in-from-bottom-2 duration-300">
           <Card>
-            <CardHeader><CardTitle>Últimas 50 Vendas</CardTitle></CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="flex items-center gap-2"><Activity className="h-5 w-5 text-primary" /> Últimas 50 Vendas</CardTitle>
+              <Badge variant="outline" className="font-bold">{sales.length} Registros</Badge>
+            </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Data</TableHead>
-                    <TableHead>Total</TableHead>
-                    <TableHead>Método</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sales.map(s => (
-                    <TableRow key={s.id}>
-                      <TableCell className="text-xs">{format(new Date(s.created_at), 'dd/MM/yy HH:mm')}</TableCell>
-                      <TableCell className="font-bold">{formatCurrency(s.total_cents)}</TableCell>
-                      <TableCell className="capitalize text-xs">{s.payment_method}</TableCell>
+              <div className="rounded-md border overflow-hidden">
+                <Table>
+                  <TableHeader className="bg-muted/50">
+                    <TableRow>
+                      <TableHead className="text-[10px] uppercase font-black">Data/Hora</TableHead>
+                      <TableHead className="text-right text-[10px] uppercase font-black">Total</TableHead>
+                      <TableHead className="text-center text-[10px] uppercase font-black">Método</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {sales.map(s => (
+                      <TableRow key={s.id} className="hover:bg-muted/5">
+                        <TableCell className="text-[11px] font-bold">
+                          {format(new Date(s.created_at), 'dd/MM/yy HH:mm:ss')}
+                        </TableCell>
+                        <TableCell className="text-right font-black text-primary">
+                          {formatCurrency(s.total_cents)}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Badge variant="secondary" className="capitalize text-[9px] font-black">{s.payment_method}</Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {sales.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={3} className="text-center py-20 text-muted-foreground font-bold italic">
+                          Nenhuma transação registrada nesta unidade.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

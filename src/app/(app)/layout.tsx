@@ -1,3 +1,4 @@
+
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
@@ -66,12 +67,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <header className="h-16 border-b bg-background flex items-center justify-between px-6 sticky top-0 z-50">
               <div className="flex items-center gap-4">
                 <div className="flex flex-col">
-                  <h3 className="text-[11px] font-black tracking-tighter uppercase text-primary mb-0.5">
+                  <h3 className="text-[10px] font-black tracking-tighter uppercase text-primary mb-0.5">
                     {isAdminPath ? 'Portal SaaS Admin' : 'VendaFácil'}
                   </h3>
                   <div className="flex items-center gap-1.5">
-                    <Badge variant="outline" className="text-[8px] h-3.5 px-1.5 font-black uppercase bg-muted/30 border-primary/10 text-primary">
-                      {is_admin ? 'Super Admin' : 'Ambiente Logado'}
+                    <Badge variant="outline" className="text-[8px] h-3.5 px-1.5 font-black uppercase bg-primary/5 border-primary/10 text-primary">
+                      {is_admin ? 'Super Admin' : 'Conta Ativa'}
                     </Badge>
                   </div>
                 </div>
@@ -79,10 +80,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
               <div className="flex items-center gap-3">
                 <div className="hidden md:block text-right">
-                  <p className="text-[10px] font-bold text-muted-foreground">{user.email}</p>
+                  <p className="text-[10px] font-black text-muted-foreground lowercase">{user.email}</p>
                 </div>
-                <Avatar className="h-8 w-8 ring-2 ring-primary/10">
-                  <AvatarFallback><UserIcon className="h-4 w-4 text-primary" /></AvatarFallback>
+                <Avatar className="h-8 w-8 ring-2 ring-primary/10 shadow-sm">
+                  <AvatarFallback className="bg-primary/5 text-primary font-bold text-xs">
+                    {user.email?.charAt(0).toUpperCase()}
+                  </AvatarFallback>
                 </Avatar>
               </div>
             </header>

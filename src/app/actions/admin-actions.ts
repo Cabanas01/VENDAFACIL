@@ -1,9 +1,8 @@
+
 'use server';
 
 /**
  * @fileOverview Ações administrativas seguras (Server-Side).
- * 
- * Garante que operações críticas sejam validadas no servidor antes da execução.
  */
 
 import { createSupabaseServerClient } from '@/lib/supabase/server';
@@ -17,23 +16,30 @@ export type GrantPlanPayload = {
 
 /**
  * Concede um plano manualmente a uma loja.
- * Valida o status de administrador no servidor via RPC de bootstrap.
+ * Valida o status de administrador no servidor de forma robusta.
  */
 export async function grantPlanAction(payload: GrantPlanPayload) {
   const supabase = await createSupabaseServerClient();
 
-  // 1. Verificação de Segurança no Servidor (Usando a RPC de bootstrap que é garantida)
-  const { data: status, error: bootstrapErr } = await supabase.rpc('get_user_bootstrap_status');
-
-  if (bootstrapErr || !status || !(status as any).is_admin) {
-    console.error('[ADMIN_ACTION_DENIED]', { bootstrapErr, status });
-    return { 
-      success: false, 
-      error: 'not admin' 
-    };
+  // 1. Validar Sessão
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return { success: false, error: 'Sessão inválida ou expirada.' };
   }
 
-  // 2. Execução da Concessão
+  // 2. Validar Status de Admin na Tabela de Usuários
+  const { data: profile, error: profileError } = await supabase
+    .from('users')
+    .select('is_admin')
+    .eq('id', user.id)
+    .single();
+
+  if (profileError || !profile?.is_admin) {
+    console.error('[ADMIN_ACTION_DENIED]', { userId: user.id, profileError });
+    return { success: false, error: 'not admin' };
+  }
+
+  // 3. Execução da Concessão via RPC (Security Definer)
   const { error: grantErr } = await supabase.rpc('admin_grant_store_access', {
     p_store_id: payload.storeId,
     p_plano_tipo: payload.planoTipo,
@@ -44,11 +50,10 @@ export async function grantPlanAction(payload: GrantPlanPayload) {
 
   if (grantErr) {
     console.error('[ADMIN_GRANT_ERROR]', grantErr);
-    // Se o erro vier do banco como "not admin", repassamos para a UI tratar
-    return { success: false, error: grantErr.message === 'not admin' ? 'not admin' : grantErr.message };
+    return { success: false, error: grantErr.message };
   }
 
-  // 3. Limpeza de Cache para refletir mudanças na UI
+  // 4. Sincronizar Cache
   revalidatePath('/admin/stores');
   revalidatePath(`/admin/stores/${payload.storeId}`);
 
