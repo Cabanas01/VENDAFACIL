@@ -16,38 +16,18 @@ export default function PDVSimplesPage() {
           <section>
             <h2>Por que escolher um PDV simples?</h2>
             <p>
-              No dia a dia de um pequeno negócio, cada segundo conta. Você não pode perder tempo tentando entender tabelas complexas ou sistemas que travam. Um <strong>PDV simples</strong> como o VendaFácil foi desenhado para ser "clicar e vender". Nossa filosofia é remover a barreira tecnológica entre você e seu cliente.
+              No dia a dia de um pequeno negócio, cada segundo conta. Um <strong>PDV simples</strong> como o VendaFácil foi desenhado para ser "clicar e vender". Nossa filosofia é remover a barreira tecnológica entre você e seu cliente.
             </p>
           </section>
 
           <section>
             <h2>Recursos essenciais para um controle de vendas prático</h2>
-            <p>
-              Muitas ferramentas pecam pelo excesso. No VendaFácil, focamos naquilo que realmente faz a diferença na sua operação:
-            </p>
             <ul>
-              <li><strong>Interface Limpa:</strong> Sem anúncios ou botões inúteis que confundem o operador.</li>
-              <li><strong>Busca Rápida:</strong> Localize produtos pelo nome, categoria ou código de barras instantaneamente.</li>
-              <li><strong>Fechamento de Caixa:</strong> Saiba exatamente quanto entrou em dinheiro, PIX ou cartão sem precisar de calculadoras.</li>
-              <li><strong>Gestão de Clientes:</strong> Um cadastro básico para saber quem são seus melhores compradores.</li>
+              <li><strong>Interface Limpa:</strong> Sem botões inúteis que confundem o operador.</li>
+              <li><strong>Busca Rápida:</strong> Localize produtos instantaneamente.</li>
+              <li><strong>Fechamento de Caixa:</strong> Saiba exatamente quanto entrou em cada meio de pagamento.</li>
+              <li><strong>Gestão de Clientes:</strong> Saiba quem são seus melhores compradores.</li>
             </ul>
-          </section>
-
-          <section>
-            <h2>Ideal para quem está começando</h2>
-            <p>
-              Se você é MEI ou possui uma loja pequena e ainda usa caderno ou planilhas de Excel, o VendaFácil é o seu próximo passo. A simplicidade do nosso sistema permite uma transição suave do papel para o digital, dando um ar muito mais profissional para o seu negócio diante dos clientes.
-            </p>
-            <p>
-              Ao utilizar um PDV simples, você diminui erros humanos de digitação e cálculos, garantindo que o valor cobrado e o estoque baixado estejam sempre corretos.
-            </p>
-          </section>
-
-          <section>
-            <h2>Experimente a facilidade do VendaFácil</h2>
-            <p>
-              Nosso sistema foi validado por centenas de lojistas que buscavam apenas uma coisa: agilidade. Não deixe que a tecnologia seja um problema para sua empresa. Torne sua gestão transparente e foque no que você faz de melhor: atender seus clientes e crescer suas vendas.
-            </p>
           </section>
         </div>
       }

@@ -35,10 +35,10 @@ export default function PillarPDVPage() {
           <section>
             <h2>O que é PDV (Ponto de Venda)?</h2>
             <p>
-              A sigla <strong>PDV</strong> significa <strong>Ponto de Venda</strong>. No sentido mais amplo, é o local onde uma transação comercial é concluída. Historicamente, o PDV era apenas o balcão da loja onde ficava a caixa registradora. No entanto, em 2024, o PDV evoluiu para ser um ecossistema completo de gestão.
+              A sigla <strong>PDV</strong> significa <strong>Ponto de Venda</strong>. No sentido mais amplo, é o local onde uma transação comercial é concluída. Historicamente, o PDV era apenas o balcão da loja onde ficava a caixa registradora. Em 2024, o PDV evoluiu para ser um ecossistema completo de gestão.
             </p>
             <p>
-              Um sistema de PDV moderno não apenas "passa as compras", mas integra o <strong>controle de estoque</strong>, a gestão de clientes, o fluxo de caixa e a inteligência de dados em uma única interface. É o cérebro da operação de varejo.
+              Um sistema de PDV moderno não apenas "passa as compras", mas integra o <strong>controle de estoque</strong>, a gestão de clientes, o fluxo de caixa e a inteligência de dados em uma única interface.
             </p>
           </section>
 
@@ -48,47 +48,22 @@ export default function PillarPDVPage() {
               A grande revolução dos últimos anos foi a migração do software local para a nuvem. Entenda a diferença:
             </p>
             <ul>
-              <li><strong>PDV Tradicional:</strong> Exige instalação em computadores caros, backups manuais e manutenção física. Se o computador quebra, as vendas param.</li>
-              <li><strong>PDV Online (Cloud):</strong> Funciona no navegador. Não exige instalação, os dados são salvos em tempo real na nuvem e você pode vender até pelo celular se o seu computador principal falhar.</li>
+              <li><strong>PDV Tradicional:</strong> Exige instalação em computadores caros, backups manuais e manutenção física.</li>
+              <li><strong>PDV Online (Cloud):</strong> Funciona no navegador. Não exige instalação, os dados são salvos em tempo real na nuvem e você pode vender até pelo celular.</li>
             </ul>
           </section>
 
           <section>
             <h2>Por que pequenos negócios precisam de um sistema de PDV?</h2>
             <p>
-              Muitos microempreendedores (MEI) ainda utilizam o caderninho ou planilhas de Excel. Embora funcionem no início, essas ferramentas são limitadas e propensas a erros. Veja por que profissionalizar:
+              Muitos microempreendedores (MEI) ainda utilizam o caderninho ou planilhas de Excel. Veja por que profissionalizar:
             </p>
             <ol>
-              <li><strong>Agilidade no Atendimento:</strong> Com um PDV online, o tempo de fila diminui drasticamente através do uso de leitores de código de barras e buscas rápidas.</li>
-              <li><strong>Controle de CMV (Custo de Mercadoria Vendida):</strong> O sistema calcula automaticamente sua margem de lucro real em cada venda.</li>
-              <li><strong>Gestão de Estoque em Tempo Real:</strong> Cada item vendido é baixado do sistema instantaneamente, evitando rupturas de estoque ou vendas de produtos inexistentes.</li>
-              <li><strong>Fechamento de Caixa sem Furos:</strong> O monitoramento de entradas por dinheiro, cartão e PIX garante que o saldo no fim do dia esteja sempre correto.</li>
+              <li><strong>Agilidade no Atendimento:</strong> O tempo de fila diminui drasticamente com buscas rápidas.</li>
+              <li><strong>Controle de CMV:</strong> O sistema calcula automaticamente sua margem de lucro real.</li>
+              <li><strong>Gestão de Estoque:</strong> Cada item vendido é baixado do sistema instantaneamente.</li>
+              <li><strong>Fechamento de Caixa:</strong> Monitoramento de entradas por dinheiro, cartão e PIX.</li>
             </ol>
-          </section>
-
-          <section>
-            <h2>Como escolher o melhor software de PDV?</h2>
-            <p>
-              Na hora de escolher, o pequeno lojista deve focar em três pilares: <strong>Simplicidade, Estabilidade e Custo</strong>. Um sistema complexo demais afasta os funcionários e torna a operação lenta. O VendaFácil foi desenhado para ser intuitivo: em menos de 10 minutos, qualquer pessoa está pronta para operar o caixa.
-            </p>
-          </section>
-
-          <section>
-            <h2>Perguntas Frequentes (FAQ)</h2>
-            <div className="space-y-6">
-              <div>
-                <strong>O sistema PDV funciona offline?</strong>
-                <p className="text-sm">A maioria dos PDVs modernos exige conexão, mas o VendaFácil é otimizado para carregar rapidamente mesmo em conexões instáveis de 4G/5G.</p>
-              </div>
-              <div>
-                <strong>Preciso de hardware caro para ter um PDV?</strong>
-                <p className="text-sm">Não. Com o VendaFácil, você pode usar o computador que já possui, um tablet ou até um smartphone.</p>
-              </div>
-              <div>
-                <strong>Como o PDV ajuda no controle de impostos?</strong>
-                <p className="text-sm">Ele organiza todas as suas transações, facilitando a exportação de dados para o seu contador e garantindo que você tenha o controle do faturamento para declarações anuais.</p>
-              </div>
-            </div>
           </section>
         </div>
       }

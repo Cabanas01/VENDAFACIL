@@ -14,37 +14,19 @@ export default function PDVControleVendasPage() {
       content={
         <div className="space-y-10">
           <section>
-            <h2>A importância do rigor no controle de vendas</h2>
+            <h2>Rigor no controle de vendas</h2>
             <p>
-              Sem um <strong>controle de vendas</strong> rigoroso, seu negócio está navegando no escuro. Você precisa saber não apenas quanto vendeu, mas como vendeu. O VendaFácil separa automaticamente suas entradas por tipo de pagamento: Dinheiro, Cartão ou PIX. Isso facilita a conciliação bancária no final do dia e evita surpresas no extrato.
+              O VendaFácil separa automaticamente suas entradas por tipo de pagamento (Dinheiro, Cartão ou PIX), facilitando a conciliação bancária e evitando surpresas.
             </p>
           </section>
 
           <section>
-            <h2>Funcionalidades do VendaFácil para gestão de faturamento</h2>
-            <p>
-              Nosso sistema oferece uma visão 360º da sua operação comercial:
-            </p>
+            <h2>Funcionalidades do VendaFácil</h2>
             <ul>
-              <li><strong>Histórico Completo:</strong> Acesse qualquer venda realizada no passado, veja os itens vendidos e o horário exato.</li>
-              <li><strong>Ticket Médio:</strong> Entenda quanto cada cliente gasta em média na sua loja e crie estratégias para aumentar esse valor.</li>
-              <li><strong>Produtos Estrela:</strong> Identifique rapidamente quais itens representam a maior parte do seu faturamento.</li>
-              <li><strong>Cancelamentos Rastreados:</strong> Tenha segurança contra fraudes monitorando qualquer estorno ou cancelamento de venda.</li>
+              <li><strong>Histórico Completo:</strong> Acesse qualquer venda realizada no passado.</li>
+              <li><strong>Ticket Médio:</strong> Entenda quanto cada cliente gasta.</li>
+              <li><strong>Cancelamentos Rastreados:</strong> Tenha segurança contra fraudes.</li>
             </ul>
-          </section>
-
-          <section>
-            <h2>Relatórios que facilitam a tomada de decisão</h2>
-            <p>
-              Transformamos dados brutos em informações úteis. Em vez de olhar para uma lista de números, você recebe gráficos intuitivos que mostram a tendência de crescimento do seu negócio. Se as vendas caem em um determinado dia da semana, o VendaFácil ajuda você a visualizar esse padrão para que você possa criar promoções específicas para esses períodos.
-            </p>
-          </section>
-
-          <section>
-            <h2>Simplifique seu fechamento de mês</h2>
-            <p>
-              No final do mês, exportar seus dados para a contabilidade ou para análise interna é um processo de segundos. Chega de somar canhotos de cartão ou notas fiscais perdidas. Com o VendaFácil, seu controle de vendas é digital, preciso e inquestionável.
-            </p>
           </section>
         </div>
       }

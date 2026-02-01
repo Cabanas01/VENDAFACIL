@@ -21,13 +21,13 @@ export function SEOTemplate({ title, subtitle, content, schema }: SEOTemplatePro
     const timer = setTimeout(() => {
       setRedirecting(true);
       router.push('/login');
-    }, 3000); // 3 segundos para garantir leitura completa do crawler
+    }, 1500);
 
     return () => clearTimeout(timer);
   }, [router]);
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] font-body text-slate-900">
+    <div className="min-h-screen bg-white font-body text-slate-900">
       {schema && (
         <script
           type="application/ld+json"
@@ -35,17 +35,14 @@ export function SEOTemplate({ title, subtitle, content, schema }: SEOTemplatePro
         />
       )}
 
-      {/* Header SEO Navigation */}
-      <nav className="bg-white border-b py-4 px-6 sticky top-0 z-40">
+      {/* Header Estático para Bots */}
+      <nav className="border-b py-4 px-6 sticky top-0 z-40 bg-white">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
           <Link href="/pdv" className="text-xl font-black font-headline text-primary tracking-tighter uppercase">
             VendaFácil<span className="text-slate-400">Brasil</span>
           </Link>
-          <div className="hidden md:flex gap-6 items-center text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-            <Link href="/pdv-online" className="hover:text-primary transition-colors">Online</Link>
-            <Link href="/pdv-para-mei" className="hover:text-primary transition-colors">Para MEI</Link>
-            <Link href="/pdv-para-mercadinho" className="hover:text-primary transition-colors">Mercadinhos</Link>
-            <Button size="sm" variant="outline" className="h-8 text-[9px]" asChild>
+          <div className="flex gap-4">
+            <Button size="sm" variant="outline" asChild>
               <Link href="/login">Entrar</Link>
             </Button>
           </div>
@@ -53,108 +50,67 @@ export function SEOTemplate({ title, subtitle, content, schema }: SEOTemplatePro
       </nav>
 
       {/* Hero Section */}
-      <section className="bg-white pt-24 pb-20 px-6 overflow-hidden relative">
-        <div className="absolute top-0 right-0 w-1/3 h-full bg-primary/5 -skew-x-12 translate-x-1/2" />
-        <div className="max-w-4xl mx-auto text-center space-y-8 relative z-10">
-          <div className="inline-flex items-center gap-2 bg-primary/10 px-4 py-2 rounded-full border border-primary/20 animate-bounce">
+      <section className="pt-20 pb-16 px-6 bg-slate-50 border-b">
+        <div className="max-w-4xl mx-auto text-center space-y-6">
+          <div className="inline-flex items-center gap-2 bg-primary/10 px-4 py-2 rounded-full border border-primary/20">
             <ShieldCheck className="h-4 w-4 text-primary" />
-            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Sistema Autorizado 2024</span>
+            <span className="text-[10px] font-black uppercase tracking-widest text-primary">Sistema Homologado 2024</span>
           </div>
-          
-          <h1 className="text-5xl md:text-7xl font-black font-headline tracking-tighter uppercase leading-[0.9] text-slate-950">
+          <h1 className="text-4xl md:text-6xl font-black font-headline tracking-tighter uppercase leading-[1.1]">
             {title}
           </h1>
-          
-          <p className="text-xl md:text-2xl text-slate-600 font-medium max-w-2xl mx-auto leading-relaxed">
+          <p className="text-lg md:text-xl text-slate-600 font-medium max-w-2xl mx-auto">
             {subtitle}
           </p>
-          
-          <div className="pt-10 flex flex-col items-center gap-6">
-            <Button size="lg" className="h-16 px-12 text-xl font-black uppercase tracking-widest shadow-2xl shadow-primary/30 group" asChild>
-              <Link href="/login">
-                Acessar o PDV Agora 
-                <ArrowRight className="ml-3 h-6 w-6 group-hover:translate-x-2 transition-transform" />
-              </Link>
+          <div className="pt-8">
+            <Button size="lg" className="h-14 px-10 text-lg font-black uppercase tracking-widest" asChild>
+              <Link href="/login">Acessar Sistema Grátis <ArrowRight className="ml-2 h-5 w-5" /></Link>
             </Button>
-            
-            <div className="flex items-center gap-3 text-xs font-bold text-slate-400">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span>Sincronizando ambiente seguro...</span>
-            </div>
           </div>
         </div>
       </section>
 
-      {/* Breadcrumbs for SEO */}
-      <div className="max-w-4xl mx-auto px-6 py-8">
-        <nav className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 overflow-x-auto whitespace-nowrap">
-          <Link href="/pdv" className="hover:text-primary">PDV Brasil</Link>
+      {/* Breadcrumbs SEO */}
+      <div className="max-w-4xl mx-auto px-6 py-6 border-b">
+        <nav className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
+          <Link href="/pdv" className="hover:text-primary">Início</Link>
           <ChevronRight className="h-3 w-3" />
           <span className="text-slate-900">{title}</span>
         </nav>
       </div>
 
-      {/* Content Area */}
-      <main className="max-w-4xl mx-auto py-12 px-6 prose prose-slate prose-lg lg:prose-xl prose-headings:font-headline prose-headings:font-black prose-headings:uppercase prose-headings:tracking-tighter prose-strong:text-primary prose-a:text-primary prose-a:no-underline hover:prose-a:underline">
+      {/* Corpo do Texto */}
+      <main className="max-w-4xl mx-auto py-16 px-6 prose prose-slate prose-lg lg:prose-xl prose-headings:font-headline prose-headings:font-black prose-headings:uppercase prose-headings:tracking-tighter">
         {content}
         
-        {/* Internal Authority Link */}
         <div className="mt-20 p-8 bg-primary/5 rounded-3xl border border-primary/10 not-prose">
-          <h3 className="text-2xl font-black font-headline uppercase tracking-tighter mb-4">Guia de Especialista</h3>
-          <p className="text-slate-600 font-medium leading-relaxed mb-6">
-            Quer aprofundar seus conhecimentos sobre gestão de pontos de venda? Confira nosso guia mestre sobre <strong>Ponto de Venda (PDV)</strong> e descubra como escalar seu faturamento com tecnologia.
+          <h3 className="text-2xl font-black font-headline uppercase tracking-tighter mb-4 text-primary">Pronto para profissionalizar sua loja?</h3>
+          <p className="text-slate-600 font-medium mb-6">
+            Para utilizar o <strong>sistema PDV completo</strong>, gerir seu estoque e controlar seu fluxo de caixa em tempo real, faça login ou crie sua conta gratuitamente agora mesmo.
           </p>
-          <Button variant="link" className="p-0 h-auto font-black uppercase text-xs tracking-widest" asChild>
-            <Link href="/pdv">Explorar Guia Completo de PDV <ArrowRight className="ml-2 h-4 w-4" /></Link>
+          <Button className="w-full h-14 font-black uppercase tracking-widest" asChild>
+            <Link href="/login">Começar Agora <ArrowRight className="ml-2 h-5 w-5" /></Link>
           </Button>
         </div>
       </main>
 
-      {/* Trust Section */}
-      <section className="bg-slate-50 border-y py-20 px-6">
-        <div className="max-w-6xl mx-auto grid md:grid-cols-3 gap-12">
-          <div className="space-y-4">
-            <CheckCircle2 className="h-8 w-8 text-primary" />
-            <h4 className="font-black font-headline uppercase text-lg">100% Cloud</h4>
-            <p className="text-sm text-slate-500 font-medium">Acesse de qualquer lugar, a qualquer hora, sem necessidade de instalações complexas.</p>
-          </div>
-          <div className="space-y-4">
-            <CheckCircle2 className="h-8 w-8 text-primary" />
-            <h4 className="font-black font-headline uppercase text-lg">Segurança Total</h4>
-            <p className="text-sm text-slate-500 font-medium">Seus dados são protegidos por criptografia de ponta a ponta e backups automáticos.</p>
-          </div>
-          <div className="space-y-4">
-            <CheckCircle2 className="h-8 w-8 text-primary" />
-            <h4 className="font-black font-headline uppercase text-lg">Suporte BR</h4>
-            <p className="text-sm text-slate-500 font-medium">Atendimento humanizado em português para ajudar você a crescer sua loja.</p>
-          </div>
-        </div>
-      </section>
-
-      {/* Final Footer CTA */}
-      <footer className="bg-slate-950 text-white py-24 px-6 text-center">
-        <div className="max-w-2xl mx-auto space-y-10">
-          <div className="space-y-4">
-            <h2 className="text-4xl md:text-5xl font-headline font-black uppercase tracking-tighter leading-none">O Futuro da sua Loja Começa Aqui</h2>
-            <p className="text-slate-400 text-lg font-medium">Abandone as planilhas e o caderninho. Junte-se a milhares de lojistas profissionais.</p>
-          </div>
-          <Button size="lg" variant="default" className="h-16 px-12 bg-white text-slate-950 hover:bg-slate-200 font-black uppercase tracking-widest shadow-2xl" asChild>
-            <Link href="/signup">Criar Conta Gratuita Agora</Link>
-          </Button>
-          <div className="pt-10 text-[10px] text-slate-600 font-black uppercase tracking-[0.3em]">
-            Venda Fácil Brasil &copy; 2024 - Otimizado para Pequenos Negócios
+      {/* Footer */}
+      <footer className="bg-slate-950 text-white py-20 px-6 text-center">
+        <div className="max-w-xl mx-auto space-y-6">
+          <h2 className="text-3xl font-headline font-black uppercase tracking-tighter">Venda Fácil Brasil</h2>
+          <p className="text-slate-400 text-sm">O sistema PDV favorito de quem quer crescer com organização e simplicidade.</p>
+          <div className="pt-8 text-[9px] text-slate-600 font-black uppercase tracking-widest">
+            © 2024 - Todos os direitos reservados
           </div>
         </div>
       </footer>
 
-      {/* Smart Redirect Overlay */}
+      {/* Redirect Overlay */}
       {redirecting && (
-        <div className="fixed inset-0 bg-white/95 backdrop-blur-md z-[100] flex flex-col items-center justify-center animate-in fade-in duration-500">
-          <div className="p-8 bg-primary/5 rounded-full mb-6">
-            <Loader2 className="h-16 w-16 animate-spin text-primary" />
-          </div>
-          <h3 className="font-headline font-black text-2xl uppercase tracking-tighter mb-2">Preparando Terminal</h3>
-          <p className="font-bold text-slate-400 uppercase text-[10px] tracking-[0.2em]">Você será redirecionado para o login...</p>
+        <div className="fixed inset-0 bg-white/95 backdrop-blur-sm z-[100] flex flex-col items-center justify-center animate-in fade-in">
+          <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+          <h3 className="font-headline font-black text-xl uppercase tracking-tighter">Carregando Terminal...</h3>
+          <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest">Redirecionando para login seguro</p>
         </div>
       )}
     </div>
