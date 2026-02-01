@@ -1,9 +1,9 @@
 'use client';
 
 /**
- * @fileOverview Componente de Cliente para IA.
+ * @fileOverview Componente de IA
  * 
- * Recebe o status de configuração do servidor e gerencia o snapshot de dados.
+ * Sincronizado com dados reais e mensagens amigáveis para estados vazios.
  */
 
 import { useAuth } from '@/components/auth-provider';
@@ -16,7 +16,10 @@ export default function StoreAiContent({ isAiConfigured }: { isAiConfigured: boo
   const dataSnapshot = useMemo(() => {
     if (!isAiConfigured) return null;
 
-    const limitedProducts = products.slice(0, 100).map(p => ({
+    // Proteção: se não houver dados, não envia snapshot vazio que gere análise errada
+    if (products.length === 0 && sales.length === 0) return null;
+
+    const limitedProducts = products.slice(0, 50).map(p => ({
       nome: p.name,
       categoria: p.category,
       preco: (p.price_cents || 0) / 100,
@@ -25,7 +28,7 @@ export default function StoreAiContent({ isAiConfigured }: { isAiConfigured: boo
       min: p.min_stock_qty
     }));
 
-    const limitedSales = sales.slice(0, 30).map(s => ({
+    const limitedSales = sales.slice(0, 20).map(s => ({
       data: s.created_at,
       total: (s.total_cents || 0) / 100,
       metodo: s.payment_method,
@@ -36,11 +39,11 @@ export default function StoreAiContent({ isAiConfigured }: { isAiConfigured: boo
       loja: {
         nome: store?.name,
         plano: accessStatus?.plano_nome,
-        data_expiracao: accessStatus?.data_fim_acesso,
+        expira: accessStatus?.data_fim_acesso,
       },
-      resumo_estoque: limitedProducts,
-      vendas_recentes: limitedSales,
-      clientes_count: (customers || []).length
+      estoque: limitedProducts,
+      vendas: limitedSales,
+      total_clientes: (customers || []).length
     };
   }, [store, products, sales, customers, accessStatus, isAiConfigured]);
 
@@ -53,12 +56,13 @@ export default function StoreAiContent({ isAiConfigured }: { isAiConfigured: boo
 
   return (
     <ChatInterface 
-      title="Assistente de Negócios"
-      subtitle="Insights baseados no seu estoque, vendas e faturamento real."
+      title="Assistente Estratégico"
+      subtitle="Análise baseada nos seus dados operacionais reais."
       contextData={dataSnapshot}
       scope="store"
       suggestions={suggestions}
       isAiConfigured={isAiConfigured}
+      emptyStateMessage={!dataSnapshot ? "Ainda não há dados suficientes (produtos ou vendas) para gerar esta análise inteligente." : undefined}
     />
   );
 }

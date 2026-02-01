@@ -3,15 +3,16 @@
 /**
  * @fileOverview BillingPage (Dumb View)
  * 
- * Exibe planos e status com datas completas (incluindo ano).
+ * Exibe planos e status com polling leve para detectar confirmação de pagamento.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   CheckCircle2, 
   ShieldCheck, 
   Loader2, 
-  Calendar
+  Calendar,
+  AlertTriangle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/components/auth-provider';
@@ -25,9 +26,19 @@ import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 export default function BillingPage() {
-  const { user, store, accessStatus, fetchStoreData } = useAuth();
+  const { user, store, accessStatus, refreshStatus } = useAuth();
   const { toast } = useToast();
   const [isStartingTrial, setIsStartingTrial] = useState(false);
+
+  // Polling leve para detectar atualização do webhook após pagamento
+  useEffect(() => {
+    if (!accessStatus?.acesso_liberado) {
+      const interval = setInterval(() => {
+        refreshStatus();
+      }, 30000); // 30 segundos
+      return () => clearInterval(interval);
+    }
+  }, [accessStatus?.acesso_liberado, refreshStatus]);
 
   const handleStartTrial = async () => {
     setIsStartingTrial(true);
@@ -35,17 +46,10 @@ export default function BillingPage() {
       const response = await fetch('/api/billing/start-trial', { method: 'POST' });
       const result = await response.json();
 
-      if (!response.ok) {
-        throw new Error(result.error || 'Erro ao ativar trial.');
-      }
+      if (!response.ok) throw new Error(result.error || 'Erro ao ativar trial.');
 
-      toast({ 
-        title: 'Avaliação Ativada!', 
-        description: 'Você tem 7 dias de acesso completo.' 
-      });
-      
-      if (user) await fetchStoreData(user.id);
-      
+      toast({ title: 'Avaliação Ativada!', description: 'Você tem 7 dias de acesso completo.' });
+      await refreshStatus();
     } catch (error: any) {
       toast({ variant: 'destructive', title: 'Falha ao ativar', description: error.message });
     } finally {
@@ -77,7 +81,7 @@ export default function BillingPage() {
         </p>
       </div>
 
-      <Card className="border-primary/20 bg-muted/30">
+      <Card className="border-primary/20 bg-muted/30 shadow-lg">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <ShieldCheck className="h-5 w-5 text-primary" /> Situação do seu Acesso
@@ -87,26 +91,32 @@ export default function BillingPage() {
           <div className="flex flex-col md:flex-row items-center justify-between gap-6 p-6 bg-background rounded-xl border">
             <div className="space-y-2 text-center md:text-left">
               <div className="flex items-center justify-center md:justify-start gap-2">
-                <span className="text-2xl font-bold">{accessStatus?.plano_nome || 'Sem Plano'}</span>
-                <Badge variant={accessStatus?.acesso_liberado ? 'default' : 'destructive'}>
+                <span className="text-2xl font-black uppercase tracking-tighter">{accessStatus?.plano_nome || 'Sem Plano'}</span>
+                <Badge variant={accessStatus?.acesso_liberado ? 'default' : 'destructive'} className="font-black text-[10px] uppercase">
                   {accessStatus?.acesso_liberado ? 'Acesso Liberado' : 'Acesso Bloqueado'}
                 </Badge>
               </div>
-              <p className="text-sm text-muted-foreground">{accessStatus?.mensagem}</p>
+              <p className="text-sm text-muted-foreground font-medium">{accessStatus?.mensagem}</p>
             </div>
 
             {accessStatus?.data_fim_acesso && (
-              <div className="flex items-center gap-4 px-6 py-3 bg-muted rounded-lg border">
+              <div className="flex items-center gap-4 px-6 py-3 bg-muted/50 rounded-lg border border-primary/10">
                 <Calendar className="h-5 w-5 text-primary" />
                 <div>
-                  <p className="text-[10px] uppercase font-bold text-muted-foreground">Válido até</p>
-                  <p className="font-bold">
+                  <p className="text-[9px] uppercase font-black text-muted-foreground tracking-widest">Válido até</p>
+                  <p className="font-black text-foreground">
                     {format(parseISO(accessStatus.data_fim_acesso), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
                   </p>
                 </div>
               </div>
             )}
           </div>
+          {!accessStatus?.acesso_liberado && (
+            <div className="mt-4 flex items-center gap-2 text-[11px] text-orange-600 bg-orange-50 p-2 rounded border border-orange-100 font-bold uppercase">
+              <AlertTriangle className="h-3 w-3" />
+              Aguardando confirmação do Hotmart. Esta tela atualizará automaticamente.
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -126,24 +136,24 @@ export default function BillingPage() {
               isCurrent && "border-green-500 bg-green-50/5 ring-1 ring-green-500/20"
             )}>
               {isPopular && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest">
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest">
                   Mais Popular
                 </div>
               )}
 
               <CardHeader className="text-center">
-                <CardTitle className="text-xl font-headline font-bold">{plan.name}</CardTitle>
-                <CardDescription className="text-xs line-clamp-2 h-8">{plan.description}</CardDescription>
+                <CardTitle className="text-xl font-headline font-black uppercase tracking-tight">{plan.name}</CardTitle>
+                <CardDescription className="text-xs line-clamp-2 h-8 font-medium">{plan.description}</CardDescription>
               </CardHeader>
 
               <CardContent className="flex-1 space-y-6">
                 <div className="text-center">
                   <span className="text-3xl font-black">{plan.price}</span>
-                  <span className="text-muted-foreground text-sm">/{plan.periodicity}</span>
+                  <span className="text-muted-foreground text-xs font-bold">/{plan.periodicity}</span>
                 </div>
                 <ul className="space-y-3">
                   {plan.benefits.map((benefit, i) => (
-                    <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
+                    <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground font-medium">
                       <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0 mt-0.5" /> 
                       <span>{benefit}</span>
                     </li>
@@ -154,7 +164,7 @@ export default function BillingPage() {
               <CardFooter>
                 {isTrial ? (
                   <Button 
-                    className="w-full h-11 font-bold" 
+                    className="w-full h-11 font-black uppercase text-[11px] tracking-widest" 
                     variant="outline"
                     onClick={handleStartTrial}
                     disabled={isStartingTrial || store?.trial_used || isCurrent}
@@ -162,12 +172,12 @@ export default function BillingPage() {
                     {isStartingTrial ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                      store?.trial_used ? 'Avaliação já utilizada' : 'Começar 7 dias grátis'
+                      store?.trial_used ? 'Avaliação Utilizada' : 'Começar 7 dias grátis'
                     )}
                   </Button>
                 ) : (
                   <Button 
-                    className="w-full h-11 font-bold shadow-sm" 
+                    className="w-full h-11 font-black uppercase text-[11px] tracking-widest shadow-sm" 
                     variant={isPopular ? 'default' : 'secondary'}
                     onClick={() => handleCheckout(planId)}
                     disabled={isCurrent}
