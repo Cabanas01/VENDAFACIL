@@ -6,15 +6,72 @@ import { AnalyticsTracker } from "@/components/analytics-tracker";
 import { AdSenseScript } from "@/components/adsense-script";
 import "./globals.css";
 
+/**
+ * @fileOverview Root Layout com Otimização de SEO (Metadata API)
+ */
+
 export const metadata: Metadata = {
-  title: "VendaFacil",
-  description: "Seu ponto de venda fácil e inteligente.",
+  title: {
+    default: 'VendaFácil | PDV Online Simples para Pequenos Negócios',
+    template: '%s | VendaFácil'
+  },
+  description: 'O PDV online mais simples e rápido para pequenos negócios. Controle suas vendas, caixa, clientes e estoque em um só lugar. Teste grátis agora.',
+  keywords: [
+    'pdv online',
+    'sistema pdv',
+    'pdv simples',
+    'pdv para pequenos negócios',
+    'sistema de vendas',
+    'frente de caixa online',
+    'controle de estoque simples',
+    'venda fácil brasil'
+  ],
+  authors: [{ name: 'VendaFácil Team' }],
+  creator: 'VendaFácil',
+  publisher: 'VendaFácil',
+  formatDetection: {
+    email: false,
+    address: false,
+    telephone: false,
+  },
+  metadataBase: new URL('https://www.vendafacilbrasil.shop'),
+  alternates: {
+    canonical: '/',
+  },
+  openGraph: {
+    title: 'VendaFácil | PDV Online para Pequenos Negócios',
+    description: 'Sistema PDV online completo para controlar vendas e estoque sem complicação.',
+    url: 'https://www.vendafacilbrasil.shop',
+    siteName: 'VendaFácil',
+    locale: 'pt_BR',
+    type: 'website',
+    images: [
+      {
+        url: '/logo.png',
+        width: 512,
+        height: 512,
+        alt: 'VendaFácil Logo',
+      },
+    ],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-video-preview': -1,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
+  },
 };
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
+  themeColor: '#0f172a',
 };
 
 export default function RootLayout({
@@ -39,24 +96,23 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&display=swap"
           rel="stylesheet"
         />
-        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-        <meta name="theme-color" content="#0f172a" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <link rel="manifest" href="/manifest.webmanifest" />
         <link rel="apple-touch-icon" href="/logo.png" />
       </head>
       <body className="font-body antialiased min-h-screen">
         <Suspense fallback={null}>
           <Providers>
-            {/* AdSense condicional (apenas para free) */}
+            {/* AdSense condicional */}
             <AdSenseScript />
             
-            {/* Rastreador de eventos sincronizado (GA + Backend) */}
+            {/* Analytics */}
             <AnalyticsTracker />
             {children}
           </Providers>
         </Suspense>
         
-        {/* Google Analytics Base Script */}
         <Script 
           src="https://www.googletagmanager.com/gtag/js?id=G-FZGT4B73XF" 
           strategy="afterInteractive" 
