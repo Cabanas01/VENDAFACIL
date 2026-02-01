@@ -4,8 +4,7 @@
  * @fileOverview Fluxo de IA para análise estratégica do VendaFácil.
  * 
  * Implementado via Genkit v1.x.
- * Nota: Removida exportação de 'runtime' para cumprir as regras do Next.js 15 
- * que permite apenas funções assíncronas em arquivos "use server".
+ * Nota: Somente funções assíncronas são exportadas para cumprir as regras do Next.js 15.
  */
 
 import { ai } from '@/ai/genkit';
@@ -33,14 +32,13 @@ export type AiChatOutput = z.infer<typeof AiChatOutputSchema>;
 
 /**
  * Função principal de execução da IA (Gatekeeper).
+ * Valida estritamente a chave GOOGLE_GENAI_API_KEY.
  */
 export async function askAi(input: AiChatInput): Promise<AiChatOutput> {
-  const apiKey = process.env.GOOGLE_GENAI_API_KEY || 
-                 process.env.GEMINI_API_KEY || 
-                 process.env.GOOGLE_API_KEY;
+  const apiKey = process.env.GOOGLE_GENAI_API_KEY;
   
   if (!apiKey) {
-    console.error('[AI_GATEKEEPER] Chave de API ausente no servidor.');
+    console.error('[AI_GATEKEEPER] GOOGLE_GENAI_API_KEY ausente no servidor.');
     return { text: '', error: 'API_KEY_MISSING' };
   }
 
@@ -72,7 +70,6 @@ const aiChatFlow = ai.defineFlow(
     const lastUserMessage = input.messages[input.messages.length - 1]?.content || 'Resuma meus dados.';
 
     try {
-      // O modelo gemini-1.0-pro será usado conforme configurado no src/ai/genkit.ts
       const { text } = await ai.generate({
         system: systemPrompt,
         messages: [
