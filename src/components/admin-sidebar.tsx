@@ -1,4 +1,3 @@
-
 'use client';
 
 import Link from 'next/link';
@@ -63,30 +62,38 @@ export function AdminSidebar() {
   };
 
   return (
-    <Sidebar className="border-r border-primary/10">
-      <SidebarHeader className="p-4 border-b border-sidebar-border bg-primary/5">
+    <Sidebar className="border-r border-slate-200 bg-slate-50">
+      <SidebarHeader className="p-4 border-b border-slate-200 bg-white">
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-lg bg-primary flex items-center justify-center text-primary-foreground shadow-lg">
+          <div className="h-10 w-10 rounded-lg bg-primary flex items-center justify-center text-white shadow-md">
             <ShieldCheck className="h-6 w-6" />
           </div>
           <div className="flex flex-col overflow-hidden">
-            <h2 className="text-sm font-black tracking-tighter text-primary uppercase">Painel SaaS</h2>
-            <p className="text-[10px] text-muted-foreground font-bold truncate italic">Administração Central</p>
+            <h2 className="text-sm font-black tracking-tighter text-slate-900 uppercase">Painel SaaS</h2>
+            <p className="text-[10px] text-slate-500 font-bold truncate italic">Administração Central</p>
           </div>
         </div>
       </SidebarHeader>
 
-      <SidebarContent className="py-2">
+      <SidebarContent className="py-4">
         <SidebarGroup>
-          <SidebarGroupLabel className="text-[9px] font-black uppercase tracking-widest px-4 mb-2">Gestão</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-widest px-4 text-slate-500 mb-2">Gestão</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {adminNavItems.map((item) => (
                 <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton asChild isActive={isActive(item.href, item.exact)} className="h-10 px-4">
-                    <Link href={item.href} className="flex items-center gap-3 font-bold text-xs">
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.label}</span>
+                  <SidebarMenuButton 
+                    asChild 
+                    isActive={isActive(item.href, item.exact)} 
+                    className={`h-10 px-4 transition-all ${
+                      isActive(item.href, item.exact) 
+                        ? 'bg-primary text-white shadow-sm font-black' 
+                        : 'text-slate-600 hover:bg-slate-200 hover:text-slate-900'
+                    }`}
+                  >
+                    <Link href={item.href} className="flex items-center gap-3">
+                      <item.icon className={`h-4 w-4 ${isActive(item.href, item.exact) ? 'text-white' : 'text-slate-400'}`} />
+                      <span className="text-xs font-bold">{item.label}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -95,16 +102,24 @@ export function AdminSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup className="mt-4">
-          <SidebarGroupLabel className="text-[9px] font-black uppercase tracking-widest px-4 mb-2">Sistema</SidebarGroupLabel>
+        <SidebarGroup className="mt-6">
+          <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-widest px-4 text-slate-500 mb-2">Sistema</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {systemNavItems.map((item) => (
                 <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton asChild isActive={isActive(item.href, item.exact)} className="h-10 px-4">
-                    <Link href={item.href} className="flex items-center gap-3 font-bold text-xs">
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.label}</span>
+                  <SidebarMenuButton 
+                    asChild 
+                    isActive={isActive(item.href, item.exact)} 
+                    className={`h-10 px-4 transition-all ${
+                      isActive(item.href, item.exact) 
+                        ? 'bg-primary text-white shadow-sm font-black' 
+                        : 'text-slate-600 hover:bg-slate-200 hover:text-slate-900'
+                    }`}
+                  >
+                    <Link href={item.href} className="flex items-center gap-3">
+                      <item.icon className={`h-4 w-4 ${isActive(item.href, item.exact) ? 'text-white' : 'text-slate-400'}`} />
+                      <span className="text-xs font-bold">{item.label}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -114,11 +129,11 @@ export function AdminSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="p-4 border-t border-sidebar-border">
+      <SidebarFooter className="p-4 border-t border-slate-200 bg-white">
         <Button 
           variant="outline" 
           size="sm" 
-          className="w-full mb-4 gap-2 text-[10px] font-black uppercase tracking-widest border-primary/20 hover:bg-primary/5 h-10"
+          className="w-full mb-4 gap-2 text-[10px] font-black uppercase tracking-widest border-slate-200 text-slate-600 hover:bg-slate-50 h-10"
           onClick={() => router.push('/dashboard')}
         >
           <ArrowLeft className="h-3 w-3" /> Voltar para Loja
@@ -126,23 +141,23 @@ export function AdminSidebar() {
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="w-full flex items-center justify-between px-2 h-14 hover:bg-primary/5">
-              <div className="flex items-center gap-2 overflow-hidden">
-                <Avatar className="h-8 w-8 rounded-full ring-2 ring-primary/20 shadow-sm">
-                  <AvatarFallback className="bg-primary/10 text-primary font-black text-[10px]">{user?.email?.charAt(0).toUpperCase()}</AvatarFallback>
+            <Button variant="ghost" className="w-full flex items-center justify-between px-2 h-14 hover:bg-slate-50 group">
+              <div className="flex items-center gap-2 overflow-hidden text-left">
+                <Avatar className="h-9 w-9 rounded-full ring-2 ring-slate-100 group-hover:ring-primary/20 transition-all">
+                  <AvatarFallback className="bg-primary/10 text-primary font-black text-xs">{user?.email?.charAt(0).toUpperCase()}</AvatarFallback>
                 </Avatar>
-                <div className="flex flex-col items-start overflow-hidden text-left">
-                  <span className="text-[10px] font-black truncate w-full text-foreground lowercase">{user?.email}</span>
-                  <span className="text-[9px] text-primary uppercase font-black tracking-[0.15em]">SaaS Admin</span>
+                <div className="flex flex-col items-start overflow-hidden">
+                  <span className="text-[11px] font-black truncate w-full text-slate-900 lowercase">{user?.email}</span>
+                  <span className="text-[9px] text-primary uppercase font-black tracking-widest">SaaS Admin</span>
                 </div>
               </div>
-              <ChevronDown className="h-3 w-3 text-muted-foreground" />
+              <ChevronDown className="h-4 w-4 text-slate-400 group-hover:text-slate-600" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel className="text-[10px] font-black uppercase tracking-widest">Gestão SaaS</DropdownMenuLabel>
+          <DropdownMenuContent align="end" className="w-64 border-slate-200 p-2">
+            <DropdownMenuLabel className="text-[10px] font-black uppercase tracking-widest text-slate-500 px-3 mb-1">Gestão SaaS</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => logout()} className="text-destructive font-bold text-xs">
+            <DropdownMenuItem onClick={() => logout()} className="text-red-600 font-bold text-xs hover:bg-red-50 focus:bg-red-50 cursor-pointer py-3 rounded-md">
               <LogOut className="mr-3 h-4 w-4" /> Sair do Sistema
             </DropdownMenuItem>
           </DropdownMenuContent>
