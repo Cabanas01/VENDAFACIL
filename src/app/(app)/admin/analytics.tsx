@@ -4,6 +4,7 @@
  * @fileOverview Painel de Analytics Admin
  * 
  * Corrigido para alinhar com a RPC get_analytics_summary(p_store_id, p_start, p_end).
+ * Ajustado erro de fechamento de tag JSX que quebrava o build.
  */
 
 import { useEffect, useState, useMemo } from 'react';
@@ -137,7 +138,7 @@ export default function AdminAnalytics() {
                 <CardContent>
                      {loading ? <Skeleton className="h-[300px] w-full" /> : <SalesOverTimeChart data={chartData} />}
                 </CardContent>
-            </div>
+            </Card>
         </div>
     </div>
   );
