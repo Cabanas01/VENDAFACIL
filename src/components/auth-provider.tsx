@@ -1,20 +1,19 @@
 'use client';
 
 /**
- * @fileOverview AuthProvider (Data Sync Only)
+ * @fileOverview AuthProvider (DATA SYNC ONLY)
  * 
- * Sincroniza os dados do banco com o estado do cliente para uso em componentes.
- * NÃO realiza redirecionamentos ou lógica de roteamento.
+ * Responsável apenas por manter os dados da loja em sincronia no cliente.
+ * Toda a lógica de roteamento foi movida para o Server Layout para evitar flicker.
  */
 
-import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import type { 
   Store, 
   Product, 
   Sale, 
   CashRegister, 
-  BootstrapStatus,
   StoreAccessStatus,
   CartItem,
   Customer,
@@ -24,7 +23,6 @@ import { processSaleAction } from '@/app/actions/sales-actions';
 
 type AuthContextType = {
   user: User | null;
-  bootstrap: BootstrapStatus | null;
   store: Store | null;
   accessStatus: StoreAccessStatus | null;
   products: Product[];
@@ -53,7 +51,6 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [bootstrap, setBootstrap] = useState<BootstrapStatus | null>(null);
   const [store, setStore] = useState<Store | null>(null);
   const [accessStatus, setAccessStatus] = useState<StoreAccessStatus | null>(null);
   
@@ -61,57 +58,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [sales, setSales] = useState<Sale[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [cashRegisters, setCashRegistersState] = useState<CashRegister[]>([]);
-  
-  const initialized = useRef(false);
 
   const fetchAppData = useCallback(async (userId: string) => {
     try {
-      const { data: status } = await supabase.rpc('get_user_bootstrap_status');
-      if (status) setBootstrap(status);
+      const { data: ownerStore } = await supabase.from('stores').select('id').eq('user_id', userId).maybeSingle();
+      let storeId = ownerStore?.id;
 
-      if (status?.has_store || status?.is_member) {
-        // Busca a loja ativa (Dono ou Membro)
-        const { data: ownerStore } = await supabase.from('stores').select('id').eq('user_id', userId).maybeSingle();
-        let storeId = ownerStore?.id;
+      if (!storeId) {
+        const { data: memberEntry } = await supabase.from('store_members').select('store_id').eq('user_id', userId).maybeSingle();
+        storeId = memberEntry?.store_id;
+      }
 
-        if (!storeId) {
-          const { data: memberEntry } = await supabase.from('store_members').select('store_id').eq('user_id', userId).maybeSingle();
-          storeId = memberEntry?.store_id;
-        }
+      if (storeId) {
+        const [accessRes, storeRes, prodRes, salesRes, cashRes, custRes] = await Promise.all([
+          supabase.rpc('get_store_access_status', { p_store_id: storeId }),
+          supabase.from('stores').select('*').eq('id', storeId).single(),
+          supabase.from('products').select('*').eq('store_id', storeId).order('name'),
+          supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeId).order('created_at', { ascending: false }),
+          supabase.from('cash_registers').select('*').eq('store_id', storeId).order('opened_at', { ascending: false }),
+          supabase.from('customers').select('*').eq('store_id', storeId).order('name'),
+        ]);
 
-        if (storeId) {
-          const [accessRes, storeRes, prodRes, salesRes, cashRes, custRes] = await Promise.all([
-            supabase.rpc('get_store_access_status', { p_store_id: storeId }),
-            supabase.from('stores').select('*').eq('id', storeId).single(),
-            supabase.from('products').select('*').eq('store_id', storeId).order('name'),
-            supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeId).order('created_at', { ascending: false }),
-            supabase.from('cash_registers').select('*').eq('store_id', storeId).order('opened_at', { ascending: false }),
-            supabase.from('customers').select('*').eq('store_id', storeId).order('name'),
-          ]);
-
-          setAccessStatus(accessRes.data?.[0] || null);
-          setStore(storeRes.data);
-          setProducts(prodRes.data || []);
-          setSales(salesRes.data || []);
-          setCashRegistersState(cashRes.data || []);
-          setCustomers(custRes.data || []);
-        }
+        setAccessStatus(accessRes.data?.[0] || null);
+        setStore(storeRes.data);
+        setProducts(prodRes.data || []);
+        setSales(salesRes.data || []);
+        setCashRegistersState(cashRes.data || []);
+        setCustomers(custRes.data || []);
       }
     } catch (err) {
-      console.error('[DATA_SYNC_ERROR]', err);
+      console.error('[CLIENT_SYNC_ERROR]', err);
     }
   }, []);
 
-  const refreshStatus = useCallback(async () => {
-    const { data: { user: sessionUser } } = await supabase.auth.getUser();
-    if (sessionUser) await fetchAppData(sessionUser.id);
-  }, [fetchAppData]);
-
   useEffect(() => {
-    if (initialized.current) return;
-    initialized.current = true;
-
-    // Inicialização da sessão
     supabase.auth.getUser().then(({ data: { user: sessionUser } }) => {
       if (sessionUser) {
         setUser({ id: sessionUser.id, email: sessionUser.email || '' });
@@ -125,13 +105,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         fetchAppData(session.user.id);
       } else {
         setUser(null);
-        setBootstrap(null);
         setStore(null);
       }
     });
 
     return () => subscription.unsubscribe();
   }, [fetchAppData]);
+
+  const refreshStatus = useCallback(async () => {
+    if (user) await fetchAppData(user.id);
+  }, [user, fetchAppData]);
 
   const logout = async () => {
     await supabase.auth.signOut();
@@ -148,7 +131,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       p_timezone: storeData.timezone || 'America/Sao_Paulo',
     });
     if (error) throw error;
-    // Força recarregamento para que o Server Layout reavalie o bootstrap
     window.location.href = '/dashboard';
   };
 
@@ -174,7 +156,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider value={{ 
-      user, bootstrap, store, accessStatus, products, sales, customers, cashRegisters,
+      user, store, accessStatus, products, sales, customers, cashRegisters,
       refreshStatus, createStore, updateStore, updateUser, removeStoreMember,
       addProduct, addCustomer, updateProduct, updateProductStock, removeProduct,
       findProductByBarcode, addSale, setCashRegisters, deleteAccount, logout 

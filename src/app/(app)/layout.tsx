@@ -5,15 +5,15 @@ import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { MainNav } from '@/components/main-nav';
 import { AdminSidebar } from '@/components/admin-sidebar';
 import { Providers } from '@/app/providers';
-import { User as UserIcon } from 'lucide-react';
+import { User as UserIcon, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 /**
  * @fileOverview AppLayout (SERVER-SIDE PRIVATE GATEKEEPER)
  * 
- * Este layout protege as rotas privadas.
- * A decisão de acesso ocorre no SERVIDOR antes de renderizar qualquer HTML.
+ * Este layout é o único responsável por decidir para onde o usuário logado deve ir.
+ * A lógica roda no servidor antes de enviar qualquer HTML ao navegador.
  */
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = createSupabaseServerClient();
@@ -26,40 +26,42 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     redirect('/login');
   }
 
-  // 2. Buscar Status Atômico via RPC
+  // 2. Chamar RPC de Bootstrap (Atômico)
   const { data: status, error: rpcError } = await supabase.rpc('get_user_bootstrap_status');
   
   if (rpcError || !status) {
     console.error('[BOOTSTRAP_ERROR]', rpcError);
+    // Em caso de erro crítico no banco, forçamos logout para evitar estado inconsistente
     redirect('/login');
   }
 
-  const { has_store, is_member, is_admin } = status;
+  // Status retornado pela RPC: { has_store, is_member, is_admin }
+  const { has_store, is_member, is_admin } = status as any;
 
-  // 🚫 ONBOARDING SÓ PARA NOVO USUÁRIO REAL
-  // Definimos que Onboarding é a EXCEÇÃO (apenas se não tiver nada)
+  // 3. REGRA DE OURO: Quem é um "Novo Usuário" (funil de onboarding)?
   const isNewUser = !has_store && !is_member && !is_admin;
 
-  // 3. EXECUÇÃO DOS REDIRECTS SÍNCRONOS (SERVER-SIDE)
+  // 4. REDIRECTS SÍNCRONOS (Nível de Rede)
   
-  // Se for um usuário novo e não estiver no onboarding, força ir pra lá
+  // Caso A: Usuário novo tentando acessar o sistema sem passar pelo onboarding
   if (isNewUser && !pathname.startsWith('/onboarding')) {
     redirect('/onboarding');
   }
 
-  // Se NÃO for um usuário novo (já tem loja, é membro ou admin) e tentar entrar no onboarding, tira ele de lá
+  // Caso B: Usuário existente (com loja ou admin) tentando acessar o onboarding
   if (!isNewUser && pathname.startsWith('/onboarding')) {
     redirect('/dashboard');
   }
 
-  // Proteção de rotas /admin
+  // Caso C: Proteção de área administrativa
   if (pathname.startsWith('/admin') && !is_admin) {
     redirect('/dashboard');
   }
 
+  // 5. RENDERIZAÇÃO DA INTERFACE
   const isAdminPath = pathname.startsWith('/admin');
 
-  // Buscar nome da loja para o Header (se não for novo usuário)
+  // Buscar nome da loja (apenas se não for novo usuário)
   let storeName = 'VendaFácil';
   if (!isNewUser) {
     const { data: storeData } = await supabase
