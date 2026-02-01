@@ -8,12 +8,14 @@ import { Providers } from '@/app/providers';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 
-export const dynamic = 'force-dynamic';
-
 /**
  * AppLayout (Server Gatekeeper)
- * Decisões de rota síncronas antes do render.
+ * 
+ * dynamic = 'force-dynamic' é OBRIGATÓRIO para páginas que usam cookies/auth.
+ * Isso impede que o Next.js tente pré-renderizar a página durante o build.
  */
+export const dynamic = 'force-dynamic';
+
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createSupabaseServerClient();
   const headerList = await headers();

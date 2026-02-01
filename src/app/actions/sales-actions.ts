@@ -3,28 +3,15 @@
 /**
  * @fileOverview Server Action definitiva para Processamento de Vendas (PDV).
  * 
- * Segue o padrão obrigatório @supabase/ssr para garantir que auth.uid() 
- * seja propagado corretamente para o banco de dados.
+ * Corrigido para usar o helper createSupabaseServerClient() com await.
  */
 
-import { cookies } from 'next/headers';
-import { createServerClient } from '@supabase/ssr';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { getSupabaseAdmin } from '@/lib/supabase/admin';
-import type { CartItem, Database } from '@/lib/types';
+import type { CartItem } from '@/lib/types';
 
 export async function processSaleAction(storeId: string, cart: CartItem[], paymentMethod: string) {
-  const cookieStore = cookies();
-  const supabase = createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
-        },
-      },
-    }
-  );
+  const supabase = await createSupabaseServerClient();
 
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   

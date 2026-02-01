@@ -2,12 +2,13 @@ import { redirect } from 'next/navigation';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import type { ReactNode } from 'react';
 
-export const dynamic = 'force-dynamic';
-
 /**
  * AuthLayout (Public Gatekeeper)
- * Se já estiver logado, não permite ver login/signup.
+ * 
+ * dynamic = 'force-dynamic' é essencial aqui para verificar sessão real no build.
  */
+export const dynamic = 'force-dynamic';
+
 export default async function AuthLayout({ children }: { children: ReactNode }) {
   const supabase = await createSupabaseServerClient();
 

@@ -3,7 +3,7 @@
 /**
  * @fileOverview Página de Inteligência Artificial para o Admin do SaaS.
  * 
- * Analisa a saúde global do sistema, erros e faturamento dos tenants.
+ * Marcamos como dynamic para evitar falhas no build da Vercel.
  */
 
 import { useEffect, useState } from 'react';

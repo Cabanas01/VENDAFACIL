@@ -2,13 +2,13 @@ import { redirect } from 'next/navigation';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import type { ReactNode } from 'react';
 
+/**
+ * AdminLayout (Server-Side Authorization Gate)
+ * 
+ * dynamic = 'force-dynamic' impede erros de pré-renderização no build.
+ */
 export const dynamic = 'force-dynamic';
 
-/**
- * @fileOverview AdminLayout (Server-Side Authorization Gate)
- * 
- * Este layout protege todas as rotas em /admin.
- */
 export default async function AdminLayout({ children }: { children: ReactNode }) {
   const supabase = await createSupabaseServerClient();
 

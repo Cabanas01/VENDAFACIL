@@ -4,8 +4,8 @@ import { googleAI } from '@genkit-ai/google-genai';
 /**
  * @fileOverview Configuração Central do Genkit v1.x
  * 
- * Centraliza a detecção da chave de API e configura o plugin do Google AI.
- * Utilizamos a string do modelo para garantir compatibilidade com o build.
+ * Utilizamos strings identificadoras para os modelos para garantir 
+ * compatibilidade total com o build do Next.js e evitar erros de exportação.
  */
 
 export const ai = genkit({
