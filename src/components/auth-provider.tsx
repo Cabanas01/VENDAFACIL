@@ -1,4 +1,3 @@
-
 'use client';
 
 /**
@@ -8,7 +7,7 @@
  * de acesso após pagamentos assíncronos via Webhook.
  */
 
-import { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import type { 
@@ -64,6 +63,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [cashRegisters, setCashRegistersState] = useState<CashRegister[]>([]);
 
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+
   const fetchAppData = useCallback(async (userId: string) => {
     try {
       const { data: ownerStore } = await supabase.from('stores').select('id').eq('user_id', userId).maybeSingle();
@@ -100,6 +101,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const refreshStatus = useCallback(async () => {
+    if (user?.id) {
+      console.log('[AUTH_PROVIDER] Revalidando status do plano...');
+      await fetchAppData(user.id);
+    }
+  }, [user?.id, fetchAppData]);
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user: sessionUser } }) => {
       if (sessionUser) {
@@ -124,22 +132,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, [fetchAppData]);
 
-  // Implementação de Polling Leve (30s) em rotas de faturamento
+  // Implementação de Polling Leve (30s) somente em rotas de faturamento
   useEffect(() => {
-    const isBillingRoute = pathname.includes('/billing') || pathname.includes('/admin/billing');
-    if (!isBillingRoute || !user) return;
+    const isBillingPath = pathname.includes('/billing') || pathname.includes('/admin/billing');
+    
+    if (isBillingPath && user?.id) {
+      if (!pollingRef.current) {
+        console.log('[AUTH_PROVIDER] Polling de faturamento ativado.');
+        pollingRef.current = setInterval(refreshStatus, 30000);
+      }
+    } else {
+      if (pollingRef.current) {
+        console.log('[AUTH_PROVIDER] Polling de faturamento desativado.');
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    }
 
-    const interval = setInterval(() => {
-      console.log('[POLLING] Atualizando status de faturamento...');
-      fetchAppData(user.id);
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, [pathname, user, fetchAppData]);
-
-  const refreshStatus = useCallback(async () => {
-    if (user) await fetchAppData(user.id);
-  }, [user, fetchAppData]);
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+  }, [pathname, user?.id, refreshStatus]);
 
   const logout = async () => {
     await supabase.auth.signOut();
@@ -148,22 +164,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const createStore = async (storeData: any) => {
     const { data: { user: authUser } } = await supabase.auth.getUser();
-    if (!authUser) throw new Error('Sessão expirada. Faça login novamente.');
+    if (!authUser) throw new Error('Sessão expirada.');
 
-    // 1. Assegurar que o usuário existe na tabela pública (Upsert Preventivo)
-    // Isso evita o erro de violação de FK 'stores_user_id_fkey'
-    const { error: upsertError } = await supabase.from('users').upsert({ 
-      id: authUser.id, 
-      email: authUser.email,
-      name: authUser.user_metadata?.name || null
-    }, { onConflict: 'id' });
+    await supabase.from('users').upsert({ id: authUser.id, email: authUser.email }, { onConflict: 'id' });
 
-    if (upsertError) {
-      console.error('[AUTH_PROVIDER] Falha na sincronização do perfil:', upsertError);
-      throw new Error(`Erro ao preparar perfil: ${upsertError.message}`);
-    }
-
-    // 2. Chamar RPC de criação da loja
     const { error: rpcError } = await supabase.rpc('create_new_store', {
       p_name: storeData.name,
       p_legal_name: storeData.legal_name,
@@ -180,12 +184,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       p_timezone: storeData.timezone || 'America/Sao_Paulo',
     });
 
-    if (rpcError) {
-      console.error('[AUTH_PROVIDER] Erro ao criar loja:', rpcError);
-      throw rpcError;
-    }
-
-    // 3. Redirecionar forçado para garantir limpeza de cache
+    if (rpcError) throw rpcError;
     window.location.href = '/dashboard';
   };
 

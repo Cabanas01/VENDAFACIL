@@ -6,7 +6,7 @@
  */
 export function getPlanLabel(planoTipo?: string | null): string {
   if (!planoTipo) {
-    return '-';
+    return 'Sem Plano';
   }
   
   const normalized = planoTipo.toLowerCase();

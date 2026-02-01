@@ -1,22 +1,15 @@
 'use client';
 
-/**
- * @fileOverview Gestão de Faturamento Admin (CLIENT AGGREGATION)
- * 
- * Consome billing_events e agrupa métricas no frontend para evitar erros de SQL.
- */
-
 import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { DollarSign, ArrowUp, ArrowDown, Activity } from 'lucide-react';
+import { DollarSign, ArrowUp, ArrowDown, Activity, Receipt } from 'lucide-react';
 import { DateRangePicker } from '@/components/date-range-picker';
 import type { DateRange } from 'react-day-picker';
-import { addDays, startOfToday, startOfDay, endOfDay } from 'date-fns';
+import { addDays, startOfToday, format, startOfDay, endOfDay } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
-import { format } from 'date-fns';
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', {
@@ -33,14 +26,13 @@ export default function AdminBilling() {
   });
 
   useEffect(() => {
-    async function loadBillingData() {
+    async function loadBillingEvents() {
       if (!dateRange?.from) return;
       setLoading(true);
 
       const from = startOfDay(dateRange.from).toISOString();
       const to = endOfDay(dateRange.to || dateRange.from).toISOString();
 
-      // Busca dados brutos para agregação no frontend
       const { data, error } = await supabase
         .from('billing_events')
         .select('*')
@@ -52,13 +44,13 @@ export default function AdminBilling() {
       setLoading(false);
     }
 
-    loadBillingData();
+    loadBillingEvents();
   }, [dateRange]);
 
-  // Agregações no frontend (Regra de Ouro: Sem agregações aninhadas no SQL)
+  // Agregações Determinísticas (Frontend)
   const stats = useMemo(() => {
     return events.reduce((acc, ev) => {
-      const amount = ev.amount || 0;
+      const amount = Number(ev.amount) || 0;
       if (ev.event_type === 'PURCHASE_APPROVED') {
         acc.revenue += amount;
         acc.newSubscriptions += 1;
@@ -74,7 +66,7 @@ export default function AdminBilling() {
     const map: Record<string, number> = {};
     events.forEach(ev => {
       if (ev.event_type === 'PURCHASE_APPROVED') {
-        map[ev.provider] = (map[ev.provider] || 0) + (ev.amount || 0);
+        map[ev.provider] = (map[ev.provider] || 0) + (Number(ev.amount) || 0);
       }
     });
     return Object.entries(map).map(([provider, total]) => ({ provider, total }));
@@ -99,13 +91,13 @@ export default function AdminBilling() {
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             <MetricCard title="Receita Bruta" value={formatCurrency(stats.revenue)} icon={<DollarSign />} color="text-primary" />
-            <MetricCard title="Novas Assinaturas" value={stats.newSubscriptions} icon={<ArrowUp />} color="text-green-600" />
-            <MetricCard title="Cancelamentos" value={stats.cancellations} icon={<ArrowDown />} color="text-red-600" />
+            <MetricCard title="Vendas Aprovadas" value={stats.newSubscriptions} icon={<ArrowUp />} color="text-green-600" />
+            <MetricCard title="Estornos/Cancelamentos" value={stats.cancellations} icon={<ArrowDown />} color="text-red-600" />
         </div>
 
         <div className="grid gap-6 md:grid-cols-2">
             <Card className="border-none shadow-sm">
-                <CardHeader className="border-b bg-muted/10"><CardTitle className="text-xs font-black uppercase tracking-widest">Receita por Provedor</CardTitle></CardHeader>
+                <CardHeader className="border-b bg-muted/10"><CardTitle className="text-xs font-black uppercase tracking-widest">Performance por Provedor</CardTitle></CardHeader>
                 <CardContent className="pt-4">
                     <Table>
                         <TableBody>
@@ -116,7 +108,7 @@ export default function AdminBilling() {
                                 </TableRow>
                             ))}
                             {revenueByProvider.length === 0 && (
-                              <TableRow><TableCell className="text-center py-10 text-muted-foreground text-xs uppercase font-black tracking-widest">Sem transações no período.</TableCell></TableRow>
+                              <TableRow><TableCell className="text-center py-10 text-muted-foreground text-[10px] uppercase font-black">Sem movimentação financeira</TableCell></TableRow>
                             )}
                         </TableBody>
                     </Table>
@@ -124,7 +116,7 @@ export default function AdminBilling() {
             </Card>
 
             <Card className="border-none shadow-sm">
-                <CardHeader className="border-b bg-muted/10"><CardTitle className="text-xs font-black uppercase tracking-widest flex items-center gap-2"><Activity className="h-4 w-4 text-primary" /> Log Recente</CardTitle></CardHeader>
+                <CardHeader className="border-b bg-muted/10"><CardTitle className="text-xs font-black uppercase tracking-widest flex items-center gap-2"><Receipt className="h-4 w-4 text-primary" /> Log de Transações</CardTitle></CardHeader>
                 <CardContent className="p-0">
                      <Table>
                         <TableHeader className="bg-muted/30">
@@ -136,14 +128,14 @@ export default function AdminBilling() {
                         </TableHeader>
                         <TableBody>
                             {events.slice(0, 10).map(e => (
-                                <TableRow key={e.id} className="hover:bg-primary/5 transition-colors">
-                                    <TableCell className="px-6"><Badge variant="outline" className="text-[8px] font-black uppercase border-primary/20 bg-background">{e.event_type.replace(/_/g, ' ')}</Badge></TableCell>
+                                <TableRow key={e.id} className="hover:bg-primary/5 transition-colors border-b border-muted/10">
+                                    <TableCell className="px-6"><Badge variant="outline" className="text-[8px] font-black uppercase border-primary/20">{e.event_type.replace(/_/g, ' ')}</Badge></TableCell>
                                     <TableCell className="text-[10px] font-bold text-muted-foreground px-6">{format(new Date(e.created_at), 'dd/MM HH:mm')}</TableCell>
-                                    <TableCell className="text-right font-black text-xs px-6">{formatCurrency(e.amount || 0)}</TableCell>
+                                    <TableCell className="text-right font-black text-xs px-6">{formatCurrency(Number(e.amount) || 0)}</TableCell>
                                 </TableRow>
                             ))}
                             {events.length === 0 && (
-                              <TableRow><TableCell colSpan={3} className="text-center py-20 text-muted-foreground text-xs uppercase font-black tracking-[0.2em]">Nenhum evento registrado.</TableCell></TableRow>
+                              <TableRow><TableCell colSpan={3} className="text-center py-20 text-muted-foreground text-[10px] font-black uppercase tracking-widest">Nenhum registro localizado</TableCell></TableRow>
                             )}
                         </TableBody>
                     </Table>

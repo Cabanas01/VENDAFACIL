@@ -3,60 +3,51 @@
 import { getOrCreateSessionId, getDeviceType, getUserAgent } from './session';
 
 /**
- * Declaração global para o Google Analytics
- */
-declare global {
-  interface Window {
-    gtag: (command: string, name: string, params?: any) => void;
-  }
-}
-
-/**
- * Função central de rastreio (Frontend)
- * Sincroniza Google Analytics e o Backend do VendaFácil (analytics_events).
+ * Central de Rastreamento Unificada (Frontend)
+ * Sincroniza Google Analytics e Banco de Dados Interno.
  */
 export async function trackEvent(
   eventName: string, 
   metadata: Record<string, any> = {}
 ) {
+  if (typeof window === 'undefined') return;
+
   const sessionId = getOrCreateSessionId();
+  const timestamp = new Date().toISOString();
   
-  const params = {
+  const payload = {
     ...metadata,
     session_id: sessionId,
     device_type: getDeviceType(),
     user_agent: getUserAgent(),
-    url: typeof window !== 'undefined' ? window.location.href : '',
-    timestamp: new Date().toISOString(),
+    url: window.location.href,
+    timestamp,
   };
 
-  // 1. Enviar para o Google Analytics
-  if (typeof window !== 'undefined' && window.gtag) {
-    window.gtag('event', eventName, params);
+  // 1. Google Analytics Mirror
+  if (window.gtag) {
+    window.gtag('event', eventName, payload);
   }
 
-  // 2. Enviar para o Backend do VendaFácil
+  // 2. Internal Database Store (Source of Truth for Admin Panel)
   try {
     fetch('/api/analytics/track', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         event_name: eventName,
-        metadata: params,
+        metadata: payload,
       }),
     });
   } catch (err) {
-    console.warn('[ANALYTICS_TRACK_FAILED]', err);
+    console.warn('[TRACK_EVENT_FAIL]', err);
   }
 }
 
-/**
- * Hook para uso em componentes React
- */
 export function useAnalytics() {
   return {
     trackEvent,
-    trackReportOpened: (reportName: string) => trackEvent('report_opened', { report: reportName }),
-    trackAction: (actionName: string, details: any = {}) => trackEvent(`action_${actionName}`, details),
+    trackAction: (action: string, data?: any) => trackEvent(`action_${action}`, data),
+    trackReport: (name: string) => trackEvent('report_viewed', { report_name: name })
   };
 }

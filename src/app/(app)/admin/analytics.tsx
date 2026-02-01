@@ -1,21 +1,17 @@
 'use client';
 
-/**
- * @fileOverview Painel de Analytics Admin (RPC & TABLE DATA)
- * 
- * Consome analytics_events via RPC e trata estados de erro/vazio de forma resiliente.
- */
-
 import { useEffect, useState, useMemo } from 'react';
 import type { DateRange } from 'react-day-picker';
 import { addDays, startOfToday, format, parseISO, startOfDay, endOfDay } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import {
   Activity,
   Eye,
   MousePointerClick,
   FileText,
   TrendingUp,
-  Search
+  Search,
+  Loader2
 } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 
@@ -26,7 +22,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabase/client';
-import type { AnalyticsSummary } from '@/lib/types';
 import { SalesOverTimeChart } from '@/components/charts';
 
 export default function AdminAnalytics() {
@@ -38,43 +33,76 @@ export default function AdminAnalytics() {
     to: new Date(),
   });
   const [loading, setLoading] = useState(true);
-  const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
+  const [events, setEvents] = useState<any[]>([]);
   const [storeIdFilter, setStoreIdFilter] = useState(searchParams.get('store_id') || '');
 
   useEffect(() => {
-    const fetchAnalytics = async () => {
+    const fetchRawEvents = async () => {
       setLoading(true);
       try {
-        const fromDate = startOfDay(dateRange?.from || addDays(startOfToday(), -6)).toISOString();
-        const toDate = endOfDay(dateRange?.to || dateRange?.from || new Date()).toISOString();
+        const from = startOfDay(dateRange?.from || addDays(startOfToday(), -6)).toISOString();
+        const to = endOfDay(dateRange?.to || dateRange?.from || new Date()).toISOString();
 
-        // Chamada da RPC com parâmetros alinhados ao backend
-        const { data, error } = await supabase.rpc('get_analytics_summary', {
-          p_store_id: storeIdFilter || null,
-          p_start: fromDate,
-          p_end: toDate,
-        });
+        let query = supabase
+          .from('analytics_events')
+          .select('*')
+          .gte('created_at', from)
+          .lte('created_at', to)
+          .order('created_at', { ascending: true });
 
+        if (storeIdFilter) {
+          query = query.eq('store_id', storeIdFilter);
+        }
+
+        const { data, error } = await query;
         if (error) throw error;
-        setSummary(data as AnalyticsSummary);
+        setEvents(data || []);
       } catch (err: any) {
-        console.error('[ANALYTICS_RPC_ERROR]', err);
-        setSummary(null);
+        console.error('[ADMIN_ANALYTICS_ERROR]', err);
+        toast({ variant: 'destructive', title: 'Erro ao buscar eventos', description: err.message });
       } finally {
         setLoading(false);
       }
     };
 
-    fetchAnalytics();
+    fetchRawEvents();
   }, [storeIdFilter, dateRange, toast]);
-  
+
+  // Agregações em Memória (Frontend Pure)
+  const metrics = useMemo(() => {
+    return events.reduce((acc, ev) => {
+      acc.total += 1;
+      if (ev.event_name === 'page_view') acc.views += 1;
+      if (ev.event_name === 'report_opened') acc.reports += 1;
+      
+      const day = format(new Date(ev.created_at), 'yyyy-MM-dd');
+      acc.byDay[day] = (acc.byDay[day] || 0) + 1;
+
+      const name = ev.event_name || 'unknown';
+      acc.topEvents[name] = (acc.topEvents[name] || 0) + 1;
+
+      return acc;
+    }, { 
+      total: 0, 
+      views: 0, 
+      reports: 0, 
+      byDay: {} as Record<string, number>,
+      topEvents: {} as Record<string, number>
+    });
+  }, [events]);
+
   const chartData = useMemo(() => {
-    if (!summary?.events_by_day || !Array.isArray(summary.events_by_day)) return [];
-    return summary.events_by_day.map(d => ({
-        date: format(parseISO(d.day), 'dd/MM'),
-        total: d.count || 0
+    return Object.entries(metrics.byDay).map(([day, count]) => ({
+      date: format(parseISO(day), 'dd/MM'),
+      total: count
     }));
-  }, [summary]);
+  }, [metrics.byDay]);
+
+  const sortedTopEvents = useMemo(() => {
+    return Object.entries(metrics.topEvents)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+  }, [metrics.topEvents]);
 
   return (
     <div className="space-y-6">
@@ -82,10 +110,10 @@ export default function AdminAnalytics() {
             <div className="relative w-full max-w-sm">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input 
-                    placeholder="ID da Loja (UUID)..."
+                    placeholder="Filtrar por ID da Loja..."
                     value={storeIdFilter}
                     onChange={(e) => setStoreIdFilter(e.target.value)}
-                    className="pl-10 font-mono text-xs h-11"
+                    className="pl-10 h-11 font-mono text-[10px]"
                 />
             </div>
             <DateRangePicker date={dateRange} onDateChange={setDateRange} />
@@ -95,17 +123,17 @@ export default function AdminAnalytics() {
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
                 {[1, 2, 3, 4].map(i => <Card key={i}><CardContent className="p-6"><Skeleton className="h-12 w-full" /></CardContent></Card>)}
             </div>
-        ) : !summary || (summary.total_events || 0) === 0 ? (
-            <Card className="border-dashed py-24 text-center text-muted-foreground bg-muted/5">
+        ) : events.length === 0 ? (
+            <Card className="border-dashed py-24 text-center bg-muted/5">
                 <TrendingUp className="h-12 w-12 mx-auto mb-4 opacity-10" />
-                <p className="font-black uppercase text-[10px] tracking-[0.2em]">Nenhum tráfego registrado no período</p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Sem atividade no período selecionado</p>
             </Card>
         ) : (
              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-                <MetricCard title="Eventos Totais" value={summary.total_events} icon={<Activity />} />
-                <MetricCard title="Views de Perfil" value={summary.total_profile_views} icon={<Eye />} />
-                <MetricCard title="Cliques Únicos" value={summary.total_unique_clicks} icon={<MousePointerClick />} />
-                <MetricCard title="Relatórios Abertos" value={summary.total_reports_opened} icon={<FileText />} />
+                <MetricCard title="Eventos Totais" value={metrics.total} icon={<Activity />} />
+                <MetricCard title="Page Views" value={metrics.views} icon={<Eye />} />
+                <MetricCard title="Relatórios" value={metrics.reports} icon={<FileText />} />
+                <MetricCard title="Engajamento" value={events.length > 0 ? (metrics.total / events.length * 100).toFixed(0) + '%' : '0%'} icon={<MousePointerClick />} />
             </div>
         )}
         
@@ -113,24 +141,22 @@ export default function AdminAnalytics() {
             <Card className="md:col-span-1 border-none shadow-sm">
                 <CardHeader className="bg-muted/10 border-b"><CardTitle className="text-[10px] font-black uppercase tracking-widest">Top Ações</CardTitle></CardHeader>
                 <CardContent className="pt-4">
-                     {loading ? <Skeleton className="h-40 w-full" /> : (
-                        <Table>
-                            <TableBody>
-                                {summary?.top_event_names?.map((event, i) => (
-                                    <TableRow key={i} className="hover:bg-transparent border-none">
-                                        <TableCell className="font-bold text-[9px] uppercase text-muted-foreground py-2">{event.event_name.replace(/_/g, ' ')}</TableCell>
-                                        <TableCell className="text-right font-black text-primary py-2">{event.count || 0}</TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                     )}
+                     <Table>
+                        <TableBody>
+                            {sortedTopEvents.map(([name, count]) => (
+                                <TableRow key={name} className="hover:bg-transparent border-none">
+                                    <TableCell className="font-bold text-[10px] uppercase text-muted-foreground py-2">{name.replace(/_/g, ' ')}</TableCell>
+                                    <TableCell className="text-right font-black text-primary py-2">{count}</TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
                 </CardContent>
             </Card>
             <Card className="md:col-span-2 border-none shadow-sm">
-                <CardHeader className="bg-muted/10 border-b"><CardTitle className="text-[10px] font-black uppercase tracking-widest text-primary">Curva de Engajamento</CardTitle></CardHeader>
+                <CardHeader className="bg-muted/10 border-b"><CardTitle className="text-[10px] font-black uppercase tracking-widest text-primary">Volume de Eventos / Dia</CardTitle></CardHeader>
                 <CardContent className="pt-6">
-                     {loading ? <Skeleton className="h-[300px] w-full" /> : <SalesOverTimeChart data={chartData} />}
+                     <SalesOverTimeChart data={chartData} />
                 </CardContent>
             </Card>
         </div>
@@ -138,7 +164,7 @@ export default function AdminAnalytics() {
   );
 }
 
-function MetricCard({ title, value, icon }: { title: string, value: number | undefined, icon: any }) {
+function MetricCard({ title, value, icon }: { title: string, value: any, icon: any }) {
   return (
     <Card className="border-primary/5 shadow-sm">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -146,7 +172,7 @@ function MetricCard({ title, value, icon }: { title: string, value: number | und
         <div className="h-4 w-4 text-primary opacity-50">{icon}</div>
       </CardHeader>
       <CardContent>
-        <div className="text-2xl font-black tracking-tighter">{(value ?? 0).toLocaleString('pt-BR')}</div>
+        <div className="text-2xl font-black tracking-tighter">{value}</div>
       </CardContent>
     </Card>
   );
