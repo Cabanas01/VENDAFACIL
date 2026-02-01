@@ -1,23 +1,22 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+/**
+ * @fileOverview Gestão de Faturamento Admin
+ * 
+ * Corrigido para buscar billing_events e calcular métricas agregadas no frontend,
+ * respeitando o backend estável sem RPCs de agregação complexa.
+ */
+
+import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase/client';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
-import { DollarSign, ArrowUp, ArrowDown, Activity } from 'lucide-react';
+import { DollarSign, ArrowUp, ArrowDown, Activity, CreditCard } from 'lucide-react';
 import { DateRangePicker } from '@/components/date-range-picker';
 import type { DateRange } from 'react-day-picker';
-import { addDays, startOfToday, format } from 'date-fns';
-
-type BillingStat = {
-    total_revenue: number;
-    new_subscriptions: number;
-    cancellations: number;
-    revenue_by_provider: { provider: string, total: number }[];
-    recent_events: any[];
-}
+import { addDays, startOfToday, format, startOfDay, endOfDay } from 'date-fns';
+import { Badge } from '@/components/ui/badge';
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', {
@@ -25,58 +24,73 @@ const formatCurrency = (value: number) =>
     currency: 'BRL',
   }).format(value);
 
-
 export default function AdminBilling() {
-  const [stats, setStats] = useState<BillingStat | null>(null);
+  const [events, setEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: addDays(startOfToday(), -29),
     to: new Date(),
   });
 
   useEffect(() => {
-    async function loadBillingStats() {
+    async function loadBillingData() {
       if (!dateRange?.from) return;
       setLoading(true);
-      setErrorMsg(null);
 
-      const fromDate = dateRange.from.toISOString();
-      const toDate = (dateRange.to || dateRange.from).toISOString();
+      const from = startOfDay(dateRange.from).toISOString();
+      const to = endOfDay(dateRange.to || dateRange.from).toISOString();
 
-      const { data, error } = await supabase.rpc('get_billing_analytics', {
-          p_from: fromDate,
-          p_to: toDate,
-      });
+      // Busca direta na tabela billing_events
+      const { data, error } = await supabase
+        .from('billing_events')
+        .select('*')
+        .gte('created_at', from)
+        .lte('created_at', to)
+        .order('created_at', { ascending: false });
 
       if (error) {
-        setErrorMsg(`Erro ao buscar estatísticas de faturamento: ${error.message}`);
-        setStats(null);
+        console.error('Erro ao buscar eventos:', error);
+        setEvents([]);
       } else {
-        setStats(data[0] as BillingStat);
+        setEvents(data || []);
       }
       setLoading(false);
     }
 
-    loadBillingStats();
+    loadBillingData();
   }, [dateRange]);
+
+  // Agregações no frontend para evitar erros SQL
+  const stats = useMemo(() => {
+    return events.reduce((acc, ev) => {
+      if (ev.event_type === 'PURCHASE_APPROVED') {
+        acc.revenue += (ev.amount || 0);
+        acc.newSubscriptions += 1;
+      }
+      if (ev.event_type === 'CANCELLED' || ev.event_type === 'REFUNDED') {
+        acc.cancellations += 1;
+      }
+      return acc;
+    }, { revenue: 0, newSubscriptions: 0, cancellations: 0 });
+  }, [events]);
+
+  const revenueByProvider = useMemo(() => {
+    const map: Record<string, number> = {};
+    events.forEach(ev => {
+      if (ev.event_type === 'PURCHASE_APPROVED') {
+        map[ev.provider] = (map[ev.provider] || 0) + (ev.amount || 0);
+      }
+    });
+    return Object.entries(map).map(([provider, total]) => ({ provider, total }));
+  }, [events]);
 
   if (loading) {
     return (
       <div className="space-y-6">
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-            <Card><CardHeader><Skeleton className="h-5 w-32" /></CardHeader><CardContent><Skeleton className="h-8 w-24" /></CardContent></Card>
-            <Card><CardHeader><Skeleton className="h-5 w-32" /></CardHeader><CardContent><Skeleton className="h-8 w-24" /></CardContent></Card>
-            <Card><CardHeader><Skeleton className="h-5 w-32" /></CardHeader><CardContent><Skeleton className="h-8 w-24" /></CardContent></Card>
+        <div className="grid gap-6 md:grid-cols-3">
+            {[1, 2, 3].map(i => <Card key={i}><CardContent className="p-6"><Skeleton className="h-12 w-full" /></CardContent></Card>)}
         </div>
-        <Card>
-            <CardHeader><CardTitle>Eventos Recentes</CardTitle></CardHeader>
-            <CardContent>
-                <Skeleton className="h-8 w-full" />
-                <Skeleton className="h-8 w-full mt-2" />
-                <Skeleton className="h-8 w-full mt-2" />
-            </CardContent>
-        </Card>
+        <Card><CardContent className="p-6"><Skeleton className="h-40 w-full" /></CardContent></Card>
       </div>
     );
   }
@@ -86,92 +100,72 @@ export default function AdminBilling() {
         <div className="flex justify-end">
             <DateRangePicker date={dateRange} onDateChange={setDateRange} />
         </div>
-        {errorMsg && (
-          <Alert variant="destructive" className="mb-4">
-            <AlertDescription>{errorMsg}</AlertDescription>
-          </Alert>
-        )}
+
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Receita Total</CardTitle>
-                    <DollarSign className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold">{formatCurrency(stats?.total_revenue ?? 0)}</div>
-                </CardContent>
-            </Card>
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Novas Assinaturas</CardTitle>
-                    <ArrowUp className="h-4 w-4 text-green-500" />
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold">{stats?.new_subscriptions ?? 0}</div>
-                </CardContent>
-            </Card>
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Cancelamentos</CardTitle>
-                    <ArrowDown className="h-4 w-4 text-red-500" />
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold">{stats?.cancellations ?? 0}</div>
-                </CardContent>
-            </Card>
+            <MetricCard title="Receita Bruta" value={formatCurrency(stats.revenue)} icon={<DollarSign />} color="text-primary" />
+            <MetricCard title="Assinaturas Pagas" value={stats.newSubscriptions} icon={<ArrowUp />} color="text-green-600" />
+            <MetricCard title="Cancelamentos/Estornos" value={stats.cancellations} icon={<ArrowDown />} color="text-red-600" />
         </div>
 
         <div className="grid gap-6 md:grid-cols-2">
             <Card>
-                <CardHeader>
-                    <CardTitle>Receita por Provedor</CardTitle>
-                </CardHeader>
+                <CardHeader><CardTitle className="text-sm font-black uppercase tracking-widest">Receita por Provedor</CardTitle></CardHeader>
                 <CardContent>
                     <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Provedor</TableHead>
-                                <TableHead className="text-right">Total</TableHead>
-                            </TableRow>
-                        </TableHeader>
                         <TableBody>
-                            {stats?.revenue_by_provider?.map(p => (
+                            {revenueByProvider.map(p => (
                                 <TableRow key={p.provider}>
-                                    <TableCell className="font-medium capitalize">{p.provider}</TableCell>
-                                    <TableCell className="text-right">{formatCurrency(p.total)}</TableCell>
+                                    <TableCell className="font-bold uppercase text-xs">{p.provider}</TableCell>
+                                    <TableCell className="text-right font-black">{formatCurrency(p.total)}</TableCell>
                                 </TableRow>
                             ))}
+                            {revenueByProvider.length === 0 && <TableRow><TableCell className="text-center py-10 text-muted-foreground">Sem dados.</TableCell></TableRow>}
                         </TableBody>
                     </Table>
                 </CardContent>
             </Card>
 
             <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2"><Activity /> Eventos Recentes de Assinatura</CardTitle>
-                </CardHeader>
+                <CardHeader><CardTitle className="text-sm font-black uppercase tracking-widest flex items-center gap-2"><Activity className="h-4 w-4" /> Log de Transações</CardTitle></CardHeader>
                 <CardContent>
                      <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead>Evento</TableHead>
-                                <TableHead>Provedor</TableHead>
-                                <TableHead>Data</TableHead>
+                                <TableHead className="text-[10px] uppercase font-black">Evento</TableHead>
+                                <TableHead className="text-[10px] uppercase font-black">Data</TableHead>
+                                <TableHead className="text-right text-[10px] uppercase font-black">Valor</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {stats?.recent_events?.map(e => (
+                            {events.slice(0, 10).map(e => (
                                 <TableRow key={e.id}>
-                                    <TableCell className="font-medium">{e.event_type}</TableCell>
-                                    <TableCell className="capitalize">{e.provider}</TableCell>
-                                    <TableCell>{format(new Date(e.created_at), 'dd/MM/yy HH:mm')}</TableCell>
+                                    <TableCell>
+                                      <Badge variant="outline" className="text-[9px] font-black uppercase">{e.event_type.replace(/_/g, ' ')}</Badge>
+                                    </TableCell>
+                                    <TableCell className="text-[10px] font-bold">{format(new Date(e.created_at), 'dd/MM HH:mm')}</TableCell>
+                                    <TableCell className="text-right font-black text-xs">{formatCurrency(e.amount || 0)}</TableCell>
                                 </TableRow>
                             ))}
+                            {events.length === 0 && <TableRow><TableCell colSpan={3} className="text-center py-10 text-muted-foreground text-xs font-bold uppercase tracking-widest">Nenhuma transação no período.</TableCell></TableRow>}
                         </TableBody>
                     </Table>
                 </CardContent>
             </Card>
         </div>
     </div>
+  );
+}
+
+function MetricCard({ title, value, icon, color }: { title: string, value: any, icon: any, color: string }) {
+  return (
+    <Card className="border-primary/5">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{title}</CardTitle>
+        <div className={color}>{icon}</div>
+      </CardHeader>
+      <CardContent>
+        <div className="text-2xl font-black tracking-tighter">{value}</div>
+      </CardContent>
+    </Card>
   );
 }

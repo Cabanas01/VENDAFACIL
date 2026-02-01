@@ -8,16 +8,16 @@
 
 import { useState, useEffect } from 'react';
 import { 
-  CheckCircle2, 
   ShieldCheck, 
   Loader2, 
   Calendar,
-  AlertTriangle
+  AlertTriangle,
+  CheckCircle2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/components/auth-provider';
 import { useToast } from '@/hooks/use-toast';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { PLANS_CONFIG, CHECKOUT_LINKS } from '@/lib/billing/checkoutLinks';
@@ -32,13 +32,11 @@ export default function BillingPage() {
 
   // Polling leve para detectar atualização do webhook após pagamento
   useEffect(() => {
-    if (!accessStatus?.acesso_liberado) {
-      const interval = setInterval(() => {
-        refreshStatus();
-      }, 30000); // 30 segundos
-      return () => clearInterval(interval);
-    }
-  }, [accessStatus?.acesso_liberado, refreshStatus]);
+    const interval = setInterval(() => {
+      refreshStatus();
+    }, 30000); // 30 segundos
+    return () => clearInterval(interval);
+  }, [refreshStatus]);
 
   const handleStartTrial = async () => {
     setIsStartingTrial(true);
@@ -75,36 +73,36 @@ export default function BillingPage() {
   return (
     <div className="max-w-6xl mx-auto space-y-12 py-8">
       <div className="text-center space-y-4">
-        <h1 className="text-4xl font-extrabold tracking-tight font-headline text-primary">Plano e Assinatura</h1>
-        <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+        <h1 className="text-4xl font-black tracking-tight font-headline text-primary uppercase">Plano e Assinatura</h1>
+        <p className="text-lg text-muted-foreground max-w-2xl mx-auto font-medium">
           Escolha como quer impulsionar o seu negócio. Teste grátis ou escolha um plano profissional.
         </p>
       </div>
 
-      <Card className="border-primary/20 bg-muted/30 shadow-lg">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <ShieldCheck className="h-5 w-5 text-primary" /> Situação do seu Acesso
+      <Card className="border-primary/10 bg-muted/30 shadow-sm overflow-hidden">
+        <CardHeader className="bg-primary/5 border-b">
+          <CardTitle className="flex items-center gap-2 text-sm uppercase font-black tracking-widest">
+            <ShieldCheck className="h-4 w-4 text-primary" /> Situação do seu Acesso
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6 p-6 bg-background rounded-xl border">
+        <CardContent className="pt-6">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6 p-6 bg-background rounded-xl border border-primary/10">
             <div className="space-y-2 text-center md:text-left">
-              <div className="flex items-center justify-center md:justify-start gap-2">
-                <span className="text-2xl font-black uppercase tracking-tighter">{accessStatus?.plano_nome || 'Sem Plano'}</span>
-                <Badge variant={accessStatus?.acesso_liberado ? 'default' : 'destructive'} className="font-black text-[10px] uppercase">
-                  {accessStatus?.acesso_liberado ? 'Acesso Liberado' : 'Acesso Bloqueado'}
+              <div className="flex items-center justify-center md:justify-start gap-3">
+                <span className="text-3xl font-black uppercase tracking-tighter">{accessStatus?.plano_nome || 'Sem Plano'}</span>
+                <Badge variant={accessStatus?.acesso_liberado ? 'default' : 'destructive'} className="font-black text-[10px] uppercase h-5">
+                  {accessStatus?.acesso_liberado ? 'Acesso Ativo' : 'Acesso Bloqueado'}
                 </Badge>
               </div>
-              <p className="text-sm text-muted-foreground font-medium">{accessStatus?.mensagem}</p>
+              <p className="text-sm text-muted-foreground font-bold italic opacity-80">{accessStatus?.mensagem}</p>
             </div>
 
             {accessStatus?.data_fim_acesso && (
-              <div className="flex items-center gap-4 px-6 py-3 bg-muted/50 rounded-lg border border-primary/10">
-                <Calendar className="h-5 w-5 text-primary" />
+              <div className="flex items-center gap-4 px-6 py-4 bg-muted/50 rounded-xl border border-primary/5">
+                <Calendar className="h-6 w-6 text-primary/60" />
                 <div>
-                  <p className="text-[9px] uppercase font-black text-muted-foreground tracking-widest">Válido até</p>
-                  <p className="font-black text-foreground">
+                  <p className="text-[10px] uppercase font-black text-muted-foreground tracking-widest mb-0.5">Válido até</p>
+                  <p className="font-black text-foreground text-lg">
                     {format(parseISO(accessStatus.data_fim_acesso), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
                   </p>
                 </div>
@@ -112,9 +110,9 @@ export default function BillingPage() {
             )}
           </div>
           {!accessStatus?.acesso_liberado && (
-            <div className="mt-4 flex items-center gap-2 text-[11px] text-orange-600 bg-orange-50 p-2 rounded border border-orange-100 font-bold uppercase">
+            <div className="mt-4 flex items-center gap-2 text-[10px] text-orange-600 bg-orange-50 p-3 rounded-lg border border-orange-100 font-black uppercase tracking-widest">
               <AlertTriangle className="h-3 w-3" />
-              Aguardando confirmação do Hotmart. Esta tela atualizará automaticamente.
+              Aguardando confirmação bancária. A tela atualizará em segundos.
             </div>
           )}
         </CardContent>
@@ -131,40 +129,40 @@ export default function BillingPage() {
 
           return (
             <Card key={planId} className={cn(
-              "flex flex-col relative transition-all duration-300 hover:shadow-xl border-border/50",
-              isPopular && "border-primary shadow-lg scale-105 z-10",
+              "flex flex-col relative transition-all duration-300 border-primary/5",
+              isPopular && "border-primary shadow-2xl scale-105 z-10",
               isCurrent && "border-green-500 bg-green-50/5 ring-1 ring-green-500/20"
             )}>
               {isPopular && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest">
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-[10px] font-black px-4 py-1.5 rounded-full uppercase tracking-[0.2em] shadow-lg shadow-primary/20">
                   Mais Popular
                 </div>
               )}
 
-              <CardHeader className="text-center">
-                <CardTitle className="text-xl font-headline font-black uppercase tracking-tight">{plan.name}</CardTitle>
-                <CardDescription className="text-xs line-clamp-2 h-8 font-medium">{plan.description}</CardDescription>
+              <CardHeader className="text-center pb-8 border-b border-primary/5">
+                <CardTitle className="text-xl font-headline font-black uppercase tracking-tighter">{plan.name}</CardTitle>
+                <CardDescription className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground">{plan.description}</CardDescription>
               </CardHeader>
 
-              <CardContent className="flex-1 space-y-6">
+              <CardContent className="flex-1 space-y-8 pt-8 px-6">
                 <div className="text-center">
-                  <span className="text-3xl font-black">{plan.price}</span>
-                  <span className="text-muted-foreground text-xs font-bold">/{plan.periodicity}</span>
+                  <span className="text-4xl font-black tracking-tighter">{plan.price}</span>
+                  <span className="text-muted-foreground text-[10px] font-black uppercase ml-1 opacity-60">/{plan.periodicity}</span>
                 </div>
-                <ul className="space-y-3">
+                <ul className="space-y-4">
                   {plan.benefits.map((benefit, i) => (
-                    <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground font-medium">
-                      <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0 mt-0.5" /> 
-                      <span>{benefit}</span>
+                    <li key={i} className="flex items-start gap-3 text-xs text-muted-foreground font-bold">
+                      <CheckCircle2 className="h-4 w-4 text-primary shrink-0 mt-0.5" /> 
+                      <span className="leading-tight">{benefit}</span>
                     </li>
                   ))}
                 </ul>
               </CardContent>
 
-              <CardFooter>
+              <CardFooter className="pt-6 px-6 pb-8 border-t border-primary/5">
                 {isTrial ? (
                   <Button 
-                    className="w-full h-11 font-black uppercase text-[11px] tracking-widest" 
+                    className="w-full h-12 font-black uppercase text-[11px] tracking-widest" 
                     variant="outline"
                     onClick={handleStartTrial}
                     disabled={isStartingTrial || store?.trial_used || isCurrent}
@@ -172,17 +170,17 @@ export default function BillingPage() {
                     {isStartingTrial ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                      store?.trial_used ? 'Avaliação Utilizada' : 'Começar 7 dias grátis'
+                      store?.trial_used ? 'Avaliação Utilizada' : 'Testar 7 Dias Grátis'
                     )}
                   </Button>
                 ) : (
                   <Button 
-                    className="w-full h-11 font-black uppercase text-[11px] tracking-widest shadow-sm" 
+                    className="w-full h-12 font-black uppercase text-[11px] tracking-widest shadow-xl shadow-primary/10" 
                     variant={isPopular ? 'default' : 'secondary'}
                     onClick={() => handleCheckout(planId)}
                     disabled={isCurrent}
                   >
-                    {isCurrent ? 'Seu Plano Atual' : 'Assinar Agora'}
+                    {isCurrent ? 'Plano Ativo' : 'Assinar Agora'}
                   </Button>
                 )}
               </CardFooter>
