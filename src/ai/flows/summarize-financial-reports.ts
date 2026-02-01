@@ -2,6 +2,8 @@
 
 /**
  * @fileOverview Sumarização de Relatórios Financeiros via Genkit 1.x
+ * 
+ * Refatorado para usar ai.generate diretamente e garantir compatibilidade com a API v1.
  */
 
 import {ai} from '@/ai/genkit';
@@ -23,34 +25,27 @@ const SummarizeFinancialReportsOutputSchema = z.object({
 export type SummarizeFinancialReportsOutput = z.infer<typeof SummarizeFinancialReportsOutputSchema>;
 
 export async function summarizeFinancialReports(input: SummarizeFinancialReportsInput): Promise<SummarizeFinancialReportsOutput> {
-  return summarizeFinancialReportsFlow(input);
-}
+  const response = await ai.generate({
+    model: 'googleai/gemini-1.5-flash',
+    messages: [
+      { 
+        role: 'system', 
+        content: [{ text: `Você é um analista financeiro sênior especializado em varejo. Analise os dados e forneça uma visão estratégica.
+        Sua resposta deve ser estruturada com os campos: summary, trends, opportunities, risks.` }] 
+      },
+      { 
+        role: 'user', 
+        content: [{ text: `DADOS DO RELATÓRIO:\n${input.financialReportData}` }] 
+      }
+    ],
+    output: {
+      schema: SummarizeFinancialReportsOutputSchema
+    }
+  });
 
-const summarizeFinancialReportsPrompt = ai.definePrompt({
-  name: 'summarizeFinancialReportsPrompt',
-  model: 'googleai/gemini-1.5-flash',
-  input: {schema: SummarizeFinancialReportsInputSchema},
-  output: {schema: SummarizeFinancialReportsOutputSchema},
-  prompt: `Você é um analista financeiro sênior especializado em varejo. Analise os dados abaixo e forneça uma visão estratégica em Markdown:
-
-DADOS DO RELATÓRIO:
-{{{financialReportData}}}
-
-Sua resposta deve conter:
-1. Resumo Executivo (o que aconteceu no período)
-2. Tendências Identificadas (padrões de consumo ou gastos)
-3. Oportunidades de Lucro (onde a loja pode ganhar mais)
-4. Riscos Detectados (estoque parado, margem baixa, etc)`,
-});
-
-const summarizeFinancialReportsFlow = ai.defineFlow(
-  {
-    name: 'summarizeFinancialReportsFlow',
-    inputSchema: SummarizeFinancialReportsInputSchema,
-    outputSchema: SummarizeFinancialReportsOutputSchema,
-  },
-  async input => {
-    const {output} = await summarizeFinancialReportsPrompt(input);
-    return output!;
+  if (!response.output) {
+    throw new Error('Falha ao gerar saída estruturada da IA.');
   }
-);
+
+  return response.output;
+}

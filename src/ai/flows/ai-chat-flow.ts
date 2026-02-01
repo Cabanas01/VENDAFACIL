@@ -4,7 +4,7 @@
  * @fileOverview Fluxo de Chat de IA (SaaS Advisor)
  * 
  * Implementado via Genkit v1.x.
- * Utiliza mensagens de sistema no histórico para máxima compatibilidade com a API do Google.
+ * A instrução de sistema é passada como mensagem para evitar erro 400 na API v1.
  */
 
 import { ai } from '@/ai/genkit';
@@ -43,7 +43,8 @@ export async function askAi(input: AiChatInput): Promise<AiChatOutput> {
 
     const lastUserMessage = input.messages[input.messages.length - 1]?.content || 'Resuma meus dados.';
 
-    // Construção de mensagens com Role System para evitar erro de "systemInstruction" no payload
+    // Construção de mensagens usando role: system dentro do array de conteúdos.
+    // Isso é mais compatível que o parâmetro systemInstruction no topo do payload.
     const response = await ai.generate({
       model: 'googleai/gemini-1.5-flash',
       messages: [
