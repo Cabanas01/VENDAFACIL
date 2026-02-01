@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Suspense } from "react";
 import Script from "next/script";
 import { Providers } from "./providers";
+import { AnalyticsTracker } from "@/components/analytics-tracker";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -45,11 +46,13 @@ export default function RootLayout({
       <body className="font-body antialiased min-h-screen">
         <Suspense fallback={null}>
           <Providers>
+            {/* Rastreador de eventos unificado (GA + Backend) */}
+            <AnalyticsTracker />
             {children}
           </Providers>
         </Suspense>
         
-        {/* Google Analytics (gtag.js) */}
+        {/* Google Analytics (gtag.js) Base */}
         <Script 
           src="https://www.googletagmanager.com/gtag/js?id=G-FZGT4B73XF" 
           strategy="afterInteractive" 
@@ -60,7 +63,7 @@ export default function RootLayout({
             function gtag(){dataLayer.push(arguments);}
             gtag('js', new Date());
             gtag('config', 'G-FZGT4B73XF', {
-              page_path: window.location.pathname,
+              send_page_view: false // Desabilitamos o automático pois o AnalyticsTracker lidará com isso sincronizado
             });
           `}
         </Script>

@@ -1,66 +1,64 @@
 'use client';
 
-import { useCallback } from 'react';
-import { useDebouncedCallback } from 'use-debounce';
-import { supabase } from '@/lib/supabase/client';
-import { useAuth } from '@/components/auth-provider';
 import { getOrCreateSessionId, getDeviceType, getUserAgent } from './session';
 
-export function useAnalytics() {
-  const { user, store } = useAuth();
+/**
+ * Declaração global para o Google Analytics
+ */
+declare global {
+  interface Window {
+    gtag: (command: string, name: string, params?: any) => void;
+  }
+}
 
-  const updateSession = useDebouncedCallback(async (sessionId: string) => {
-    if (!store || !user || !sessionId) return;
-    
-    await supabase.from('user_sessions').upsert({
-      session_id: sessionId,
-      store_id: store.id,
-      user_id: user.id,
-      last_seen_at: new Date().toISOString(),
-      user_agent: getUserAgent(),
-      device_type: getDeviceType(),
-    }, { onConflict: 'session_id' });
-  }, 10000); // Update session last_seen_at at most every 10 seconds
-
-  const trackEvent = useCallback(async (
-    eventName: string,
-    metadata: Record<string, any> = {},
-    eventGroup: string = 'analytics'
-  ) => {
-    if (!user || !store) return;
-
-    const sessionId = getOrCreateSessionId();
-    if (!sessionId) return;
-
-    await supabase.from('user_events').insert({
-      store_id: store.id,
-      user_id: user.id,
-      session_id: sessionId,
-      event_name: eventName,
-      event_group: eventGroup,
-      metadata,
-    });
-    
-    // Also update the session on any tracked event
-    updateSession(sessionId);
-
-  }, [user, store, updateSession]);
-
-  const trackReportOpened = useCallback((reportName: string) => {
-    trackEvent('report_opened', { report: reportName });
-  }, [trackEvent]);
+/**
+ * Função central de rastreio (Frontend)
+ * Sincroniza Google Analytics e o Backend do VendaFácil.
+ */
+export async function trackEvent(
+  eventName: string, 
+  metadata: Record<string, any> = {}
+) {
+  const sessionId = getOrCreateSessionId();
   
-  const registerUniqueClick = useCallback(async (target: string, metadata: Record<string, any> = {}) => {
-      if (!user || !store) return;
-      const sessionId = getOrCreateSessionId();
-      await supabase.rpc('rpc_register_unique_click', {
-          p_store_id: store.id,
-          p_session_id: sessionId,
-          p_target: target,
-          p_metadata: metadata
-      });
-      updateSession(sessionId);
-  }, [user, store, updateSession]);
+  const params = {
+    ...metadata,
+    session_id: sessionId,
+    device_type: getDeviceType(),
+    user_agent: getUserAgent(),
+    url: typeof window !== 'undefined' ? window.location.href : '',
+    timestamp: new Date().toISOString(),
+  };
 
-  return { trackEvent, trackReportOpened, registerUniqueClick };
+  // 1. Enviar para o Google Analytics (se disponível)
+  if (typeof window !== 'undefined' && window.gtag) {
+    window.gtag('event', eventName, params);
+  }
+
+  // 2. Enviar para o nosso Backend (Endpoint Interno)
+  // Usamos fetch/background para não bloquear a experiência do usuário
+  try {
+    fetch('/api/analytics/track', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        event_name: eventName,
+        metadata: params,
+      }),
+    });
+  } catch (err) {
+    // Analytics falhar não deve quebrar o app
+    console.warn('[ANALYTICS_SYNC_FAILED]', err);
+  }
+}
+
+/**
+ * Hook para uso em componentes React
+ */
+export function useAnalytics() {
+  return {
+    trackEvent,
+    trackReportOpened: (reportName: string) => trackEvent('report_opened', { report: reportName }),
+    trackAction: (actionName: string, details: any = {}) => trackEvent(`action_${actionName}`, details),
+  };
 }
