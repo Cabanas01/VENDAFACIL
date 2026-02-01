@@ -6,6 +6,7 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
+import {gemini15Flash} from '@genkit-ai/google-genai';
 
 const SummarizeFinancialReportsInputSchema = z.object({
   financialReportData: z.string().describe('Dados do relatório financeiro para sumarização.'),
@@ -28,7 +29,7 @@ export async function summarizeFinancialReports(input: SummarizeFinancialReports
 
 const summarizeFinancialReportsPrompt = ai.definePrompt({
   name: 'summarizeFinancialReportsPrompt',
-  model: 'googleai/gemini-1.5-flash',
+  model: gemini15Flash,
   input: {schema: SummarizeFinancialReportsInputSchema},
   output: {schema: SummarizeFinancialReportsOutputSchema},
   prompt: `Você é um analista financeiro sênior especializado em varejo. Analise os dados abaixo e forneça uma visão estratégica em Markdown:
