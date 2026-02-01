@@ -3,6 +3,21 @@
 import { getOrCreateSessionId, getDeviceType, getUserAgent } from './session';
 
 /**
+ * Captura parâmetros de UTM da URL para rastreio de marketing.
+ */
+function getUtmParams() {
+  if (typeof window === 'undefined') return {};
+  const params = new URLSearchParams(window.location.search);
+  return {
+    source: params.get('utm_source') || 'direto',
+    medium: params.get('utm_medium') || 'nenhum',
+    campaign: params.get('utm_campaign') || 'nenhuma',
+    content: params.get('utm_content') || 'nenhum',
+    term: params.get('utm_term') || 'nenhum',
+  };
+}
+
+/**
  * Central de Rastreamento Unificada (Frontend)
  * Sincroniza Google Analytics e Banco de Dados Interno.
  */
@@ -13,10 +28,12 @@ export async function trackEvent(
   if (typeof window === 'undefined') return;
 
   const sessionId = getOrCreateSessionId();
+  const utms = getUtmParams();
   const timestamp = new Date().toISOString();
   
   const payload = {
     ...metadata,
+    ...utms,
     session_id: sessionId,
     device_type: getDeviceType(),
     user_agent: getUserAgent(),
@@ -29,7 +46,7 @@ export async function trackEvent(
     window.gtag('event', eventName, payload);
   }
 
-  // 2. Internal Database Store (Source of Truth for Admin Panel)
+  // 2. Internal Database Store
   try {
     fetch('/api/analytics/track', {
       method: 'POST',

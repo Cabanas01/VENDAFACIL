@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import Link from 'next/link';
+import { trackEvent } from '@/lib/analytics/track';
 
 const loginSchema = z.object({
   email: z.string().email('E-mail inválido'),
@@ -25,6 +26,10 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    trackEvent('login_view');
+  }, []);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -45,11 +50,7 @@ export default function LoginPage() {
         setErrorMsg(error.message === 'Invalid login credentials' ? 'E-mail ou senha incorretos.' : error.message);
         setLoading(false);
       } else {
-        /**
-         * REDIRECIONAMENTO LIMPO (IMPORTANTE)
-         * Usar window.location força uma nova request HTTP ao servidor.
-         * Isso garante que os cookies de sessão sejam enviados para o AppLayout (Server Component).
-         */
+        trackEvent('login_success', { email: values.email });
         window.location.href = '/dashboard';
       }
     } catch (err) {

@@ -1,13 +1,6 @@
 'use client';
 
-/**
- * @fileOverview SignupPage (Dumb Form)
- * 
- * Apenas dispara o signUp do Supabase. 
- * NÃO redireciona após o sucesso. O AppLayout decidirá o fluxo.
- */
-
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -19,6 +12,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import Link from 'next/link';
+import { trackEvent } from '@/lib/analytics/track';
 
 const signupSchema = z.object({
   email: z.string().email('E-mail inválido'),
@@ -35,6 +29,10 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    trackEvent('signup_view');
+  }, []);
 
   const form = useForm<SignupFormValues>({
     resolver: zodResolver(signupSchema),
@@ -54,6 +52,7 @@ export default function SignupPage() {
       if (error) {
         setErrorMsg(error.message);
       } else {
+        trackEvent('signup_success', { email: values.email });
         setSuccess(true);
       }
     } catch (err) {
