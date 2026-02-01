@@ -3,17 +3,15 @@
 /**
  * @fileOverview Componente para injeção condicional do Google AdSense.
  * 
- * Exibe anúncios apenas para usuários que NÃO possuem um plano pago ativo
- * e que NÃO estão na tela de autenticação.
+ * Exibe anúncios apenas para usuários que NÃO possuem um plano pago ativo.
+ * Para a verificação do Google, o script deve estar acessível nas páginas públicas (como o Login).
  */
 
 import Script from 'next/script';
 import { useAuth } from '@/components/auth-provider';
 import { useEffect, useState } from 'react';
-import { usePathname } from 'next/navigation';
 
 export function AdSenseScript() {
-  const pathname = usePathname();
   const { accessStatus } = useAuth();
   const [mounted, setMounted] = useState(false);
 
@@ -23,13 +21,7 @@ export function AdSenseScript() {
 
   if (!mounted) return null;
 
-  // 1. Bloqueio por Rota (Não exibir no login ou signup)
-  const isAuthPage = pathname === '/login' || pathname === '/signup' || pathname?.startsWith('/auth');
-  if (isAuthPage) {
-    return null;
-  }
-
-  // 2. Bloqueio por Plano (Não exibir para pagadores)
+  // Bloqueio por Plano: Não carregar para usuários que já pagaram
   const paidPlans = ['semanal', 'mensal', 'anual', 'vitalicio', 'weekly', 'monthly', 'yearly'];
   const isPaidUser = accessStatus?.acesso_liberado && 
                      paidPlans.includes(accessStatus?.plano_tipo?.toLowerCase() || '');
@@ -38,6 +30,8 @@ export function AdSenseScript() {
     return null;
   }
 
+  // Nota: O robô do AdSense precisa encontrar este script para verificar o site.
+  // Como o sistema redireciona visitantes anônimos para o login, o script DEVE estar lá.
   return (
     <Script
       async
