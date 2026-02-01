@@ -31,9 +31,6 @@ export default function BillingPage() {
   const { toast } = useToast();
   const [isStartingTrial, setIsStartingTrial] = useState(false);
 
-  /**
-   * Ativa o período de teste chamando a API interna.
-   */
   const handleStartTrial = async () => {
     setIsStartingTrial(true);
     try {
@@ -41,24 +38,18 @@ export default function BillingPage() {
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || 'Ocorreu um erro ao tentar ativar seu período de teste.');
+        throw new Error(result.error || 'Erro ao ativar trial.');
       }
 
       toast({ 
         title: 'Avaliação Ativada!', 
-        description: 'Você agora tem 7 dias de acesso completo para testar o sistema.' 
+        description: 'Você tem 7 dias de acesso completo.' 
       });
       
-      if (user) {
-        await fetchStoreData(user.id);
-      }
+      if (user) await fetchStoreData(user.id);
       
     } catch (error: any) {
-      toast({
-        variant: 'destructive',
-        title: 'Não foi possível ativar',
-        description: error.message,
-      });
+      toast({ variant: 'destructive', title: 'Falha ao ativar', description: error.message });
     } finally {
       setIsStartingTrial(false);
     }
@@ -68,11 +59,7 @@ export default function BillingPage() {
     if (!store || !user) return;
     const url = CHECKOUT_LINKS.hotmart[planId];
     if (!url) {
-        toast({
-            variant: 'destructive',
-            title: 'Checkout Indisponível',
-            description: 'O link de pagamento para este plano ainda não foi configurado.'
-        });
+        toast({ variant: 'destructive', title: 'Checkout Indisponível' });
         return;
     }
 
@@ -81,7 +68,6 @@ export default function BillingPage() {
     window.open(finalUrl, '_blank');
   };
 
-  // IDs correspondentes às chaves de PLANS_CONFIG
   const planOrder: PlanID[] = ['trial', 'semanal', 'mensal', 'anual'];
 
   return (

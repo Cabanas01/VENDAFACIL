@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase/admin';
-import crypto from 'crypto';
 import { addDays } from 'date-fns';
 
 const HOTMART_WEBHOOK_SECRET = process.env.HOTMART_WEBHOOK_SECRET;
@@ -8,7 +7,8 @@ const HOTMART_WEBHOOK_SECRET = process.env.HOTMART_WEBHOOK_SECRET;
 async function logEvent(payload: any, status: string, details: object = {}) {
     const supabaseAdmin = getSupabaseAdmin();
     const { event, data } = payload;
-    const [store_id, plan_id, user_id] = (data.purchase?.external_reference || '||').split('|');
+    const externalRef = data?.purchase?.external_reference || data?.subscription?.external_reference || '||';
+    const [store_id, plan_id, user_id] = externalRef.split('|');
 
     await supabaseAdmin.from('subscription_events').insert({
         provider: 'hotmart',
@@ -25,44 +25,34 @@ async function logEvent(payload: any, status: string, details: object = {}) {
 export async function POST(request: Request) {
   const supabaseAdmin = getSupabaseAdmin();
   const rawBody = await request.text();
-  
-  if (HOTMART_WEBHOOK_SECRET) {
-      const hottok = request.headers.get('hottok'); 
-      const hash = crypto
-        .createHmac('sha256', HOTMART_WEBHOOK_SECRET)
-        .update(rawBody)
-        .digest('hex');
+  const hottok = request.headers.get('hottok');
 
-      if (hash !== hottok) {
-          console.warn('Hotmart webhook: Invalid signature');
-          return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
-      }
+  // Validação simplificada para o hottok padrão do Hotmart
+  if (HOTMART_WEBHOOK_SECRET && hottok !== HOTMART_WEBHOOK_SECRET) {
+      console.warn('Hotmart webhook: Invalid token');
+      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
   }
 
   const payload = JSON.parse(rawBody);
 
   try {
-    // Idempotency check
-    const { data: existingEvent, error: checkError } = await supabaseAdmin
+    // Idempotência
+    const { data: existingEvent } = await supabaseAdmin
         .from('subscription_events')
         .select('id')
         .eq('event_id', payload.id)
-        .single();
-    
-    if (checkError && checkError.code !== 'PGRST116') {
-        throw new Error(`DB idempotency check failed: ${checkError.message}`);
-    }
+        .maybeSingle();
 
     if (existingEvent) {
-        return NextResponse.json({ success: true, message: 'Event already processed' }, { status: 200 });
+        return NextResponse.json({ success: true, message: 'Already processed' });
     }
 
     const { event, data } = payload;
-    const externalReference = data.purchase?.external_reference;
+    const externalReference = data?.purchase?.external_reference || data?.subscription?.external_reference;
 
-    if (!externalReference && ['PURCHASE_APPROVED', 'SUBSCRIPTION_CANCELED'].includes(event)) {
+    if (!externalReference && ['PURCHASE_APPROVED', 'SUBSCRIPTION_RENEWED', 'PLAN_CHANGED'].includes(event)) {
       await logEvent(payload, 'error_missing_ref');
-      return NextResponse.json({ success: true, message: 'Acknowledged, but missing external_reference' });
+      return NextResponse.json({ success: true, message: 'Missing external_reference' });
     }
 
     const [store_id, plan_id, user_id] = (externalReference || '||').split('|');
@@ -75,13 +65,9 @@ export async function POST(request: Request) {
       case 'PURCHASE_APPROVED':
       case 'SUBSCRIPTION_RENEWED':
       case 'PLAN_CHANGED':
-        if (!store_id || !plan_id || !user_id) {
-            await logEvent(payload, 'error_invalid_ref');
-            return NextResponse.json({ success: true, message: 'Acknowledged, but invalid external_reference' });
-        }
-        
-        // Mapeamento de durações e tipos compatíveis com a constraint do banco
-        const normalizedPlanId = plan_id.toLowerCase();
+        if (!store_id) return NextResponse.json({ success: true });
+
+        const normalizedPlanId = (plan_id || '').toLowerCase();
         
         if (normalizedPlanId === 'weekly' || normalizedPlanId === 'semanal') {
           durationDays = 7;
@@ -95,13 +81,10 @@ export async function POST(request: Request) {
           durationDays = 365;
           planName = 'Anual';
           finalPlanType = 'anual';
-        } else if (normalizedPlanId === 'free' || normalizedPlanId === 'trial' || normalizedPlanId === 'avaliacao') {
+        } else {
           durationDays = 7;
           planName = 'Avaliação';
           finalPlanType = 'trial';
-        } else {
-          await logEvent(payload, 'error_unknown_plan');
-          return NextResponse.json({ success: true, message: 'Acknowledged, but unknown plan_id' });
         }
         
         const now = new Date();
@@ -122,7 +105,7 @@ export async function POST(request: Request) {
 
         if (accessError) {
           await logEvent(payload, 'error_db_update', { db_error: accessError.message });
-          throw new Error(`DB access upsert failed: ${accessError.message}`);
+          throw new Error(accessError.message);
         }
         
         await logEvent(payload, 'processed_access_granted');
@@ -130,24 +113,14 @@ export async function POST(request: Request) {
 
       case 'PURCHASE_CANCELED':
       case 'PURCHASE_REFUNDED':
-      case 'CHARGEBACK':
       case 'SUBSCRIPTION_CANCELED':
-         if (!store_id) {
-            await logEvent(payload, 'error_missing_ref_for_cancellation');
-            return NextResponse.json({ success: true, message: 'Acknowledged, but missing store_id for cancellation' });
+         if (store_id) {
+            await supabaseAdmin
+                .from('store_access')
+                .update({ status_acesso: 'bloqueado', renovavel: false })
+                .eq('store_id', store_id);
+            await logEvent(payload, 'processed_access_revoked');
         }
-
-        const { error: cancelError } = await supabaseAdmin
-            .from('store_access')
-            .update({ status_acesso: 'bloqueado', renovavel: false })
-            .eq('store_id', store_id);
-
-        if (cancelError) {
-             await logEvent(payload, 'error_db_update', { db_error: cancelError.message });
-             console.error(`Failed to block access for store ${store_id}:`, cancelError.message);
-        }
-
-        await logEvent(payload, 'processed_access_revoked');
         break;
       
       default:
@@ -155,11 +128,10 @@ export async function POST(request: Request) {
         break;
     }
     
-    return NextResponse.json({ success: true }, { status: 200 });
+    return NextResponse.json({ success: true });
 
   } catch (error: any) {
-      console.error('Hotmart webhook error:', error);
       await logEvent(payload, 'error_exception', { error: error.message });
-      return NextResponse.json({ success: true, message: 'Exception handled.' }, { status: 200 });
+      return NextResponse.json({ success: true });
   }
 }
