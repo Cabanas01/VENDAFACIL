@@ -5,7 +5,7 @@ import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { MainNav } from '@/components/main-nav';
 import { AdminSidebar } from '@/components/admin-sidebar';
 import { Providers } from '@/app/providers';
-import { User as UserIcon, Loader2 } from 'lucide-react';
+import { User as UserIcon } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
@@ -31,14 +31,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   
   if (rpcError || !status) {
     console.error('[BOOTSTRAP_ERROR]', rpcError);
-    // Em caso de erro crítico no banco, forçamos logout para evitar estado inconsistente
     redirect('/login');
   }
 
   // Status retornado pela RPC: { has_store, is_member, is_admin }
   const { has_store, is_member, is_admin } = status as any;
 
-  // 3. REGRA DE OURO: Quem é um "Novo Usuário" (funil de onboarding)?
+  // 3. REGRA DE OURO: Novo Usuário é quem NÃO tem loja, NÃO é membro e NÃO é admin.
   const isNewUser = !has_store && !is_member && !is_admin;
 
   // 4. REDIRECTS SÍNCRONOS (Nível de Rede)
@@ -48,9 +47,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     redirect('/onboarding');
   }
 
-  // Caso B: Usuário existente (com loja ou admin) tentando acessar o onboarding
+  // Caso B: Usuário existente (com loja, membro ou admin) tentando acessar o onboarding
   if (!isNewUser && pathname.startsWith('/onboarding')) {
-    redirect('/dashboard');
+    redirect(is_admin ? '/admin' : '/dashboard');
   }
 
   // Caso C: Proteção de área administrativa
@@ -61,9 +60,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // 5. RENDERIZAÇÃO DA INTERFACE
   const isAdminPath = pathname.startsWith('/admin');
 
-  // Buscar nome da loja (apenas se não for novo usuário)
+  // Buscar nome da loja para exibição no header (apenas se tiver vínculo)
   let storeName = 'VendaFácil';
-  if (!isNewUser) {
+  if (has_store || is_member) {
     const { data: storeData } = await supabase
       .from('stores')
       .select('name')

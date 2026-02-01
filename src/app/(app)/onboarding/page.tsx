@@ -4,7 +4,7 @@
  * @fileOverview OnboardingPage (Dumb Form)
  * 
  * Esta página é focada APENAS na coleta dos dados da nova loja.
- * O controle de quem pode ver esta página é feito pelo AppLayout (Server Component).
+ * O controle de quem pode ver esta página é feito pelo AppLayout (Server Component) de forma síncrona.
  */
 
 import { useState, useEffect } from 'react';
@@ -64,6 +64,7 @@ export default function OnboardingPage() {
   const { setValue, watch, trigger } = form;
   const cleanCnpj = (watch('cnpj') || '').replace(/\D/g, '');
 
+  // Autofill via BrasilAPI
   useEffect(() => {
     if (cleanCnpj.length !== 14) return;
 

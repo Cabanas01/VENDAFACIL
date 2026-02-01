@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 /**
  * @fileOverview AuthLayout (SERVER-SIDE PUBLIC GATEKEEPER)
  * 
- * Este layout impede que usuários LOGADOS acessem a página de login.
+ * Este layout impede que usuários LOGADOS acessem as páginas de login/signup.
  * Se houver sessão, redireciona síncronamente para o portal privado.
  */
 export default async function AuthLayout({ children }: { children: ReactNode }) {

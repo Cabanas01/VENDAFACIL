@@ -4,7 +4,7 @@
  * @fileOverview LoginPage (Dumb Form)
  * 
  * Focada apenas na autenticação.
- * O redirecionamento é gerenciado pelo AuthLayout (Server) após a mudança dos cookies.
+ * O redirecionamento é gerenciado pelo AuthLayout (Server) após a mudança dos cookies de sessão.
  */
 
 import { useState } from 'react';
@@ -51,8 +51,8 @@ export default function LoginPage() {
         setErrorMsg(error.message === 'Invalid login credentials' ? 'E-mail ou senha incorretos.' : error.message);
         setLoading(false);
       } else {
-        // SUCESSO: Forçamos o recarregamento completo para que o servidor veja os novos cookies imediatamente.
-        // O AuthLayout ou AppLayout do servidor decidirão a rota final.
+        // SUCESSO: Forçamos o recarregamento completo para que o servidor veja os novos cookies de sessão imediatamente.
+        // O AuthLayout ou AppLayout do servidor decidirão a rota final (Dashboard ou Onboarding).
         window.location.href = '/dashboard';
       }
     } catch (err) {

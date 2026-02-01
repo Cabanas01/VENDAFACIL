@@ -15,7 +15,8 @@ export async function middleware(request: NextRequest) {
     },
   });
 
-  // Injeta o pathname atual nos headers para os Server Layouts
+  // Injeta o pathname atual nos headers para os Server Layouts (App Router)
+  // Isso permite que Server Components saibam a rota atual de forma síncrona.
   response.headers.set('x-pathname', url.pathname);
 
   const supabase = createServerClient(
@@ -42,7 +43,7 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // Garante que o auth.uid() esteja disponível no servidor
+  // Garante que o auth.uid() esteja disponível no servidor para as RPCs
   await supabase.auth.getUser();
 
   return response;
@@ -50,6 +51,13 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
+    /*
+     * Match all request paths except for the ones starting with:
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * - api/webhooks (webhook routes)
+     */
     '/((?!_next/static|_next/image|favicon.ico|api/webhooks/.*).*)',
   ],
 };

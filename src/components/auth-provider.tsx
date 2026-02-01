@@ -4,7 +4,7 @@
  * @fileOverview AuthProvider (DATA SYNC ONLY)
  * 
  * Responsável apenas por manter os dados da loja em sincronia no cliente.
- * Toda a lógica de roteamento foi movida para o Server Layout para evitar flicker.
+ * Toda a lógica de roteamento e permissão foi movida para os Server Layouts.
  */
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -61,6 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchAppData = useCallback(async (userId: string) => {
     try {
+      // Tenta localizar a loja vinculada ao usuário
       const { data: ownerStore } = await supabase.from('stores').select('id').eq('user_id', userId).maybeSingle();
       let storeId = ownerStore?.id;
 
@@ -92,6 +93,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    // Sincronização inicial
     supabase.auth.getUser().then(({ data: { user: sessionUser } }) => {
       if (sessionUser) {
         setUser({ id: sessionUser.id, email: sessionUser.email || '' });
@@ -99,6 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
+    // Listener de mudanças de estado
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session?.user) {
         setUser({ id: session.user.id, email: session.user.email || '' });
@@ -131,6 +134,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       p_timezone: storeData.timezone || 'America/Sao_Paulo',
     });
     if (error) throw error;
+    // Força recarregamento para que o Server Layout detecte a nova loja e redirecione
     window.location.href = '/dashboard';
   };
 
@@ -142,6 +146,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return result;
   }, [store, refreshStatus]);
 
+  // Outras funções de CRUD simplificadas
   const updateStore = async (data: any) => { if (store) { await supabase.from('stores').update(data).eq('id', store.id); await refreshStatus(); } };
   const updateUser = async (data: any) => { if (user) { await supabase.from('users').update(data).eq('id', user.id); await refreshStatus(); } };
   const addProduct = async (p: any) => { if (store) { await supabase.from('products').insert({ ...p, store_id: store.id }); await refreshStatus(); } };
