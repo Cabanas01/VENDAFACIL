@@ -15,14 +15,14 @@ export default function PDVOnlinePage() {
         <div className="space-y-10">
           <section>
             <h2>O que é um PDV Online?</h2>
-            <p>Um PDV online é uma ferramenta essencial para qualquer comerciante moderno. Diferente dos sistemas antigos, o <strong>PDV online do VendaFácil</strong> funciona inteiramente no seu navegador. Isso significa que você pode realizar vendas de qualquer lugar.</p>
+            <p>Um PDV online, ou Ponto de Venda baseado na nuvem, é uma ferramenta essencial para qualquer comerciante moderno. Diferente dos sistemas antigos, o <strong>PDV online do VendaFácil</strong> funciona inteiramente no seu navegador.</p>
           </section>
           <section>
             <h2>Vantagens de utilizar um sistema de vendas web</h2>
             <ul>
               <li><strong>Acesso em tempo real:</strong> Veja suas vendas de onde você estiver.</li>
-              <li><strong>Segurança:</strong> Dados salvos automaticamente na nuvem.</li>
-              <li><strong>Custo reduzido:</strong> Sem investimento em hardware pesado.</li>
+              <li><strong>Segurança de dados:</strong> Suas informações são salvas automaticamente na nuvem.</li>
+              <li><strong>Custo reduzido:</strong> Não exige investimentos em hardware pesado.</li>
             </ul>
           </section>
         </div>

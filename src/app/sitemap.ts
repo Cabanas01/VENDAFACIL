@@ -12,8 +12,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
     '/pdv-para-pequenos-negocios',
     '/pdv-controle-de-caixa',
     '/pdv-controle-de-vendas',
-    '/software-pdv',
-    '/sistema-pdv',
+    '/pdv-controle-de-estoque',
+    '/pdv-fechamento-de-caixa',
     '/pdv-barato',
     '/pdv-facil',
     '/pdv-gratuito',
@@ -26,6 +26,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
     '/melhor-pdv',
     '/pdv-ou-planilha',
     '/sistema-pdv-gratuito',
+    '/software-pdv',
+    '/sistema-pdv',
     '/vendafacilbrasil',
     '/venda-facil-brasil-pdv',
     '/venda-facil-brasil-pdv-online',
@@ -35,10 +37,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
   const mainRoutes = ['', '/login', '/signup'];
 
-  return [...mainRoutes, ...seoRoutes].map(route => ({
+  const routes = [...mainRoutes, ...seoRoutes].map(route => ({
     url: `${baseUrl}${route}`,
     lastModified: now,
-    changeFrequency: 'daily',
+    changeFrequency: 'daily' as const,
     priority: route === '/pdv' ? 1.0 : route === '' ? 0.9 : 0.8,
   }));
+
+  return routes;
 }
