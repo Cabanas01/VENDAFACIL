@@ -3,7 +3,8 @@
 /**
  * @fileOverview Fluxo de IA para análise estratégica do VendaFácil.
  * 
- * Esta Server Action é a única porta de entrada para a IA. 
+ * Implementado via Genkit v1.x.
+ * Removido 'export const runtime' para evitar erro de compilação no Next.js 15.
  */
 
 import { ai } from '@/ai/genkit';
@@ -31,7 +32,6 @@ export type AiChatOutput = z.infer<typeof AiChatOutputSchema>;
 
 /**
  * Função principal de execução da IA (Gatekeeper).
- * Validamos a infraestrutura internamente para evitar erros 500 no Next.js.
  */
 export async function askAi(input: AiChatInput): Promise<AiChatOutput> {
   const apiKey = process.env.GOOGLE_GENAI_API_KEY || 
