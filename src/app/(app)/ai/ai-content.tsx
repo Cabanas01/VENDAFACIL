@@ -14,10 +14,10 @@ import { Database, AlertCircle, Loader2 } from 'lucide-react';
 
 export default function StoreAiContent() {
   const { products, sales, store, accessStatus } = useAuth();
-  const [isMounted, setIsMounted] = useState(false);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    setIsMounted(true);
+    setReady(true);
   }, []);
 
   const hasSales = (sales || []).length > 0;
@@ -25,7 +25,7 @@ export default function StoreAiContent() {
   const canAnalyze = hasSales && hasProducts;
 
   const dataSnapshot = useMemo(() => {
-    if (!canAnalyze || !isMounted) return null;
+    if (!canAnalyze || !ready) return null;
 
     return {
       loja: {
@@ -45,7 +45,7 @@ export default function StoreAiContent() {
         metodo: s.payment_method
       }))
     };
-  }, [canAnalyze, isMounted, products, sales, store, accessStatus]);
+  }, [canAnalyze, ready, products, sales, store, accessStatus]);
 
   const suggestions = [
     "Faça um resumo do meu faturamento atual.",
@@ -54,7 +54,7 @@ export default function StoreAiContent() {
     "Como posso aumentar meu lucro este mês?"
   ];
 
-  if (!isMounted) {
+  if (!ready) {
     return (
       <div className="h-[60vh] flex flex-col items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary/20" />

@@ -31,7 +31,7 @@ const AiChatOutputSchema = z.object({
 export type AiChatOutput = z.infer<typeof AiChatOutputSchema>;
 
 /**
- * Função principal de execução da IA.
+ * Função principal de execução da IA (Gatekeeper).
  * Validamos a infraestrutura internamente para evitar erros 500 no Next.js.
  */
 export async function askAi(input: AiChatInput): Promise<AiChatOutput> {
@@ -45,7 +45,8 @@ export async function askAi(input: AiChatInput): Promise<AiChatOutput> {
   }
 
   try {
-    return await aiChatFlow(input);
+    const result = await aiChatFlow(input);
+    return result;
   } catch (error: any) {
     console.error('[AI_EXECUTION_ERROR]', error);
     return { text: '', error: 'FLOW_EXECUTION_FAILED' };
@@ -70,28 +71,31 @@ const aiChatFlow = ai.defineFlow(
 
     const lastUserMessage = input.messages[input.messages.length - 1]?.content || 'Resuma meus dados.';
 
-    const { text } = await ai.generate({
-      system: systemPrompt,
-      messages: [
-        ...history,
-        {
-          role: 'user',
-          content: [
-            { text: `DADOS DA OPERAÇÃO:\n${input.contextData}\n\n` },
-            { text: `PERGUNTA DO USUÁRIO: ${lastUserMessage}` }
+    try {
+      const { text } = await ai.generate({
+        system: systemPrompt,
+        messages: [
+          ...history,
+          {
+            role: 'user',
+            content: [
+              { text: `DADOS DA OPERAÇÃO:\n${input.contextData}\n\n` },
+              { text: `PERGUNTA DO USUÁRIO: ${lastUserMessage}` }
+            ]
+          }
+        ],
+        config: {
+          safetySettings: [
+            { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+            { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' }
           ]
         }
-      ],
-      config: {
-        safetySettings: [
-          { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
-          { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' }
-        ]
-      }
-    });
+      });
 
-    if (!text) throw new Error('EMPTY_RESPONSE');
-
-    return { text };
+      if (!text) return { text: '', error: 'EMPTY_RESPONSE' };
+      return { text };
+    } catch (err: any) {
+      return { text: '', error: err.message || 'GENKIT_ERROR' };
+    }
   }
 );
