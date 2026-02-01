@@ -37,7 +37,6 @@ import {
   Users,
   Target,
   Users2,
-  Sparkles,
   ChevronRight
 } from 'lucide-react';
 import { useAuth } from '@/components/auth-provider';
@@ -54,7 +53,6 @@ const mainNavItems = [
 
 const managementNavItems = [
   { href: '/dashboard/cmv', label: 'CMV Estratégico', icon: Target, exact: true },
-  { href: '/ai', label: 'IA Assistente', icon: Sparkles, exact: true },
   { href: '/reports', label: 'Relatórios', icon: BarChart3, exact: true },
   { href: '/team', label: 'Equipe', icon: Users2, exact: true },
 ];
@@ -153,9 +151,6 @@ export function MainNav() {
                         isActive(item.href, item.exact) ? 'opacity-100' : 'opacity-60 group-hover:opacity-100'
                       )} />
                       <span className="font-bold text-xs tracking-tight">{item.label}</span>
-                      {item.label.includes('IA') && (
-                        <Badge className="ml-auto bg-amber-500/20 text-amber-400 border-none text-[8px] h-4 font-black">PRO</Badge>
-                      )}
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
