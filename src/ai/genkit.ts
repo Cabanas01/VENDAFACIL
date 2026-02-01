@@ -4,15 +4,12 @@ import {googleAI} from '@genkit-ai/google-genai';
 /**
  * @fileOverview Configuração Central do Genkit v1.x
  * 
- * Forçamos a apiVersion 'v1' para garantir estabilidade e evitar o endpoint v1beta
- * que apresenta instabilidade na localização do modelo Gemini 1.5 Flash.
+ * Padronizado para gemini-1.0-pro para evitar erros de disponibilidade em novos projetos Cloud.
  */
 
 export const ai = genkit({
   plugins: [
-    googleAI({
-      apiVersion: 'v1',
-    }),
+    googleAI(),
   ],
-  model: 'googleai/gemini-1.5-flash',
+  model: 'googleai/gemini-1.0-pro',
 });

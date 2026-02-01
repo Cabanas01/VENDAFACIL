@@ -1,6 +1,6 @@
 /**
  * @fileOverview Interface REST direta para a API Google Gemini v1.
- * Bypassa abstrações para garantir estabilidade máxima e controle de payload.
+ * Utiliza o modelo gemini-1.0-pro para garantir compatibilidade universal em todos os projetos.
  */
 
 export async function askGemini(prompt: string, jsonMode: boolean = false) {
@@ -10,7 +10,8 @@ export async function askGemini(prompt: string, jsonMode: boolean = false) {
     throw new Error('CONFIG_MISSING');
   }
 
-  const model = 'gemini-1.5-flash';
+  // Gemini 1.0 Pro é o modelo mais estável e disponível universalmente no endpoint v1
+  const model = 'gemini-1.0-pro';
   const endpoint = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${API_KEY}`;
 
   const body: any = {
@@ -22,6 +23,8 @@ export async function askGemini(prompt: string, jsonMode: boolean = false) {
     ],
   };
 
+  // Observação: JSON mode no 1.0 Pro via REST v1 pode ser menos restrito que no 1.5,
+  // mas o parâmetro é suportado para forçar a estrutura se a versão da API permitir.
   if (jsonMode) {
     body.generationConfig = {
       response_mime_type: 'application/json',
@@ -48,7 +51,13 @@ export async function askGemini(prompt: string, jsonMode: boolean = false) {
       throw new Error('EMPTY_RESPONSE');
     }
 
-    return jsonMode ? JSON.parse(text) : text;
+    // Limpeza de blocos de código markdown se o modelo ignorar o jsonMode e retornar texto puro
+    let cleanText = text;
+    if (jsonMode && text.includes('```json')) {
+      cleanText = text.replace(/```json|```/g, '').trim();
+    }
+
+    return jsonMode ? JSON.parse(cleanText) : text;
   } catch (error: any) {
     console.error('[GEMINI_REST_EXCEPTION]', error);
     throw error;
