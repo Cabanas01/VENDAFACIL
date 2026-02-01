@@ -1,4 +1,3 @@
-
 import { NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { getSupabaseAdmin } from '@/lib/supabase/admin';
@@ -11,8 +10,7 @@ export const runtime = 'nodejs';
  */
 export async function POST() {
   try {
-    // CORREÇÃO DEFINITIVA: Usar o helper de server client com cookies
-    const supabase = createSupabaseServerClient();
+    const supabase = await createSupabaseServerClient();
     const supabaseAdmin = getSupabaseAdmin();
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -39,7 +37,6 @@ export async function POST() {
     }
 
     // 2. Chamar a RPC do banco de dados para processar a lógica de trial
-    // Usando supabaseAdmin para garantir privilégios de escrita em tabelas de acesso
     const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc('start_trial', {
       p_store_id: store.id
     });

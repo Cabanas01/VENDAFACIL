@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import type { ReactNode } from 'react';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * AuthLayout (Public Gatekeeper)
  * Se já estiver logado, não permite ver login/signup.

@@ -7,7 +7,7 @@ import { AdminSidebar } from '@/components/admin-sidebar';
 import { Providers } from '@/app/providers';
 import { User as UserIcon } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,6 +37,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const { has_store, is_member, is_admin } = status as any;
 
   // 3. Regras de Fluxo (Determinísticas)
+  // 🚨 REGRA DE OURO: Onboarding é APENAS para quem não tem nada
   const isNewUser = !has_store && !is_member && !is_admin;
 
   // Se for novo e não estiver no onboarding -> FORÇAR ONBOARDING
