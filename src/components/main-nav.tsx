@@ -90,7 +90,7 @@ export function MainNav() {
 
       <SidebarContent className="py-4">
         <SidebarGroup>
-          <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-[0.2em] px-4 text-slate-400 mb-2 opacity-100">Operacional</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-[0.2em] px-4 text-slate-100 mb-2 opacity-100">Operacional</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {mainNavItems.map((item) => (
@@ -101,7 +101,7 @@ export function MainNav() {
                     className={`px-4 h-10 transition-all hover:bg-white/10 ${
                       isActive(item.href, item.exact) 
                         ? 'bg-primary text-white shadow-lg shadow-primary/20' 
-                        : 'text-white hover:text-white'
+                        : 'text-slate-100 hover:text-white'
                     }`}
                   >
                     <Link href={item.href} className="flex items-center gap-3">
@@ -116,7 +116,7 @@ export function MainNav() {
         </SidebarGroup>
 
         <SidebarGroup className="mt-6">
-          <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-[0.2em] px-4 text-slate-400 mb-2 opacity-100">Estratégico</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-[0.2em] px-4 text-slate-100 mb-2 opacity-100">Estratégico</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {managementNavItems.map((item) => (
@@ -127,7 +127,7 @@ export function MainNav() {
                     className={`px-4 h-10 transition-all hover:bg-white/10 ${
                       isActive(item.href, item.exact) 
                         ? 'bg-primary text-white shadow-lg shadow-primary/20' 
-                        : 'text-white hover:text-white'
+                        : 'text-slate-100 hover:text-white'
                     }`}
                   >
                     <Link href={item.href} className="flex items-center gap-3">
@@ -142,7 +142,7 @@ export function MainNav() {
         </SidebarGroup>
 
         <SidebarGroup className="mt-6">
-          <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-[0.2em] px-4 text-slate-400 mb-2 opacity-100">Sistema</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-[0.2em] px-4 text-slate-100 mb-2 opacity-100">Sistema</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {configNavItems.map((item) => (
@@ -153,7 +153,7 @@ export function MainNav() {
                     className={`px-4 h-10 transition-all hover:bg-white/10 ${
                       isActive(item.href, item.exact) 
                         ? 'bg-primary text-white shadow-lg shadow-primary/20' 
-                        : 'text-white hover:text-white'
+                        : 'text-slate-100 hover:text-white'
                     }`}
                   >
                     <Link href={item.href} className="flex items-center gap-3">

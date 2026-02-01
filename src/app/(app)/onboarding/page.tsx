@@ -1,3 +1,4 @@
+
 'use client';
 
 /**
@@ -102,10 +103,19 @@ export default function OnboardingPage() {
       await createStore(values);
       toast({ title: 'Loja Ativada!', description: 'Bem-vindo ao VendaFácil.' });
     } catch (error: any) {
+      console.error('[ONBOARDING_ERROR]', error);
+      
+      let errorMessage = error.message || 'Falha ao criar loja.';
+      
+      // Tradução de erros comuns do Supabase/Postgres
+      if (errorMessage.includes('stores_user_id_fkey')) {
+        errorMessage = 'Erro de sincronização: Seu perfil de usuário ainda não foi criado no banco de dados. Tente novamente em instantes.';
+      }
+
       toast({
         variant: 'destructive',
         title: 'Erro no Cadastro',
-        description: error.message || 'Falha ao criar loja.'
+        description: errorMessage
       });
       setIsSubmitting(false);
     }
