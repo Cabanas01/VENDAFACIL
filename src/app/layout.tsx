@@ -67,6 +67,18 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Schema.org Global Organization
+  const organizationSchema = {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "VendaFácil Brasil",
+    "url": "https://www.vendafacilbrasil.shop",
+    "logo": "https://www.vendafacilbrasil.shop/logo.png",
+    "sameAs": [
+      "https://www.instagram.com/vendafacilbrasil"
+    ]
+  };
+
   return (
     <html lang="pt-BR" suppressHydrationWarning>
       <head>
@@ -88,6 +100,10 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <link rel="manifest" href="/manifest.webmanifest" />
         <link rel="apple-touch-icon" href="/logo.png" />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }}
+        />
       </head>
       <body className="font-body antialiased min-h-screen">
         <Suspense fallback={null}>

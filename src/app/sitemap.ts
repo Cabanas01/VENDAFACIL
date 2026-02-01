@@ -1,15 +1,14 @@
 import { MetadataRoute } from 'next';
 
-/**
- * @fileOverview Sitemap Gerador para SEO.
- * Define as rotas que o Google deve indexar para o domínio principal.
- */
-
 export default function sitemap(): MetadataRoute.Sitemap {
   const baseUrl = 'https://www.vendafacilbrasil.shop';
   const now = new Date();
   
-  const seoRoutes = [
+  const routes = [
+    '',
+    '/login',
+    '/signup',
+    '/pdv',
     '/pdv-online',
     '/pdv-simples',
     '/pdv-para-pequenos-negocios',
@@ -18,34 +17,18 @@ export default function sitemap(): MetadataRoute.Sitemap {
     '/pdv-para-mei',
     '/pdv-para-mercadinho',
     '/pdv-para-loja-pequena',
+    '/pdv-para-padaria',
+    '/pdv-para-restaurante',
+    '/pdv-para-farmacia',
+    '/melhor-pdv-online',
     '/software-pdv',
     '/sistema-pdv'
   ].map(route => ({
     url: `${baseUrl}${route}`,
     lastModified: now,
-    changeFrequency: 'weekly' as const,
-    priority: 0.9,
+    changeFrequency: 'daily' as const,
+    priority: route === '/pdv' ? 1.0 : route === '' ? 0.9 : 0.8,
   }));
 
-  return [
-    {
-      url: `${baseUrl}/`,
-      lastModified: now,
-      changeFrequency: 'daily',
-      priority: 1,
-    },
-    {
-      url: `${baseUrl}/login`,
-      lastModified: now,
-      changeFrequency: 'monthly',
-      priority: 0.8,
-    },
-    {
-      url: `${baseUrl}/signup`,
-      lastModified: now,
-      changeFrequency: 'monthly',
-      priority: 0.8,
-    },
-    ...seoRoutes
-  ];
+  return routes;
 }
