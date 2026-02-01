@@ -1,6 +1,5 @@
 /**
  * @fileOverview Interface REST direta para a API Google Gemini v1beta.
- * Utiliza o modelo gemini-2.0-flash conforme solicitação do usuário para performance máxima.
  */
 
 export async function askGemini(prompt: string, jsonMode: boolean = false) {
@@ -10,8 +9,8 @@ export async function askGemini(prompt: string, jsonMode: boolean = false) {
     throw new Error('CONFIG_MISSING');
   }
 
-  const model = 'gemini-2.0-flash';
-  // Usando v1beta conforme o curl de sucesso do usuário
+  // Mudança para 1.5-flash para maior compatibilidade com Free Tier
+  const model = 'gemini-1.5-flash';
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
   const body: any = {
@@ -30,14 +29,18 @@ export async function askGemini(prompt: string, jsonMode: boolean = false) {
   }
 
   try {
-    const res = await fetch(endpoint, {
+    const res = await fetch(`${endpoint}?key=${API_KEY}`, {
       method: 'POST',
       headers: { 
-        'Content-Type': 'application/json',
-        'X-goog-api-key': API_KEY 
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify(body),
     });
+
+    if (res.status === 429) {
+      console.error('[GEMINI_REST] Cota de requisições excedida (429).');
+      throw new Error('QUOTA_EXCEEDED');
+    }
 
     if (!res.ok) {
       const errText = await res.text();
@@ -52,7 +55,6 @@ export async function askGemini(prompt: string, jsonMode: boolean = false) {
       throw new Error('EMPTY_RESPONSE');
     }
 
-    // Limpeza de blocos de código markdown se o modelo retornar texto puro com backticks
     let cleanText = text;
     if (jsonMode && text.includes('```json')) {
       cleanText = text.replace(/```json|```/g, '').trim();
@@ -60,7 +62,8 @@ export async function askGemini(prompt: string, jsonMode: boolean = false) {
 
     return jsonMode ? JSON.parse(cleanText) : text;
   } catch (error: any) {
+    if (error.message === 'QUOTA_EXCEEDED' || error.message === 'CONFIG_MISSING') throw error;
     console.error('[GEMINI_REST_EXCEPTION]', error);
-    throw error;
+    throw new Error('AI_UNAVAILABLE');
   }
 }

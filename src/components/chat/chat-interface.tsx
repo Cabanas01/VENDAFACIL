@@ -6,7 +6,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Bot, User, Send, Loader2, Sparkles, Settings, AlertTriangle } from 'lucide-react';
+import { Bot, User, Send, Loader2, Sparkles, Settings, AlertTriangle, Clock } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { askAi } from '@/ai/flows/ai-chat-flow';
 
@@ -28,7 +28,7 @@ export function ChatInterface({ title, subtitle, contextData, scope, suggestions
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [infraError, setInfraError] = useState<string | null>(null);
+  const [infraError, setInfraError] = useState<'CONFIG' | 'QUOTA' | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -58,10 +58,12 @@ export function ChatInterface({ title, subtitle, contextData, scope, suggestions
       if (result.error) {
         if (result.error === 'CONFIG_MISSING') {
           setInfraError('CONFIG');
+        } else if (result.error === 'QUOTA_EXCEEDED') {
+          setInfraError('QUOTA');
         } else {
           setMessages([...newMessages, { 
             role: 'model', 
-            content: 'IA indisponível no momento. Por favor, verifique sua conexão ou tente novamente em instantes.', 
+            content: 'IA indisponível no momento. Por favor, tente novamente em instantes.', 
             isError: true 
           }]);
         }
@@ -71,7 +73,7 @@ export function ChatInterface({ title, subtitle, contextData, scope, suggestions
     } catch (err) {
       setMessages([...newMessages, { 
         role: 'model', 
-        content: 'Ocorreu uma falha técnica na comunicação com o servidor de IA.', 
+        content: 'Ocorreu uma falha na comunicação com o servidor de inteligência.', 
         isError: true 
       }]);
     } finally {
@@ -88,10 +90,30 @@ export function ChatInterface({ title, subtitle, contextData, scope, suggestions
         <div className="space-y-4 max-w-sm px-6">
           <h3 className="text-xl font-black text-yellow-900 uppercase tracking-tighter">Configuração Pendente</h3>
           <p className="text-sm text-yellow-800 font-medium leading-relaxed opacity-80">
-            A chave <strong className="font-bold">GOOGLE_GENAI_API_KEY</strong> não foi configurada no ambiente. Adicione-a para ativar seu assistente.
+            A chave <strong className="font-bold">GOOGLE_GENAI_API_KEY</strong> não foi detectada. Adicione-a nas variáveis de ambiente da Vercel.
           </p>
           <Button variant="outline" className="border-yellow-400 text-yellow-800 hover:bg-yellow-100 font-bold" onClick={() => window.location.reload()}>
-            Revalidar Infraestrutura
+            Revalidar Acesso
+          </Button>
+        </div>
+      </Card>
+    );
+  }
+
+  if (infraError === 'QUOTA') {
+    return (
+      <Card className="border-orange-200 bg-orange-50/30 py-16 flex flex-col items-center justify-center text-center">
+        <div className="p-5 bg-white rounded-full border border-orange-200 shadow-sm mb-6">
+          <Clock className="h-10 w-10 text-orange-500" />
+        </div>
+        <div className="space-y-4 max-w-sm px-6">
+          <h3 className="text-xl font-black text-orange-900 uppercase tracking-tighter">Limite de Cota Atingido</h3>
+          <p className="text-sm text-orange-800 font-medium leading-relaxed opacity-80">
+            O plano gratuito da API atingiu o limite de requisições por minuto. <br/>
+            <strong>Aguarde 60 segundos e tente novamente.</strong>
+          </p>
+          <Button variant="outline" className="border-orange-400 text-orange-800 hover:bg-orange-100 font-bold uppercase text-xs tracking-widest" onClick={() => setInfraError(null)}>
+            Tentar Novamente
           </Button>
         </div>
       </Card>
@@ -112,7 +134,7 @@ export function ChatInterface({ title, subtitle, contextData, scope, suggestions
         </div>
         <Badge variant="outline" className="gap-1 bg-background border-primary/20 text-primary font-black uppercase text-[9px]">
           <Sparkles className="h-3 w-3" />
-          Powered by Gemini 1.5
+          Gemini 1.5 Flash
         </Badge>
       </CardHeader>
 
@@ -167,7 +189,7 @@ export function ChatInterface({ title, subtitle, contextData, scope, suggestions
                 <Avatar className="h-8 w-8 bg-primary/20"><AvatarFallback className="text-[10px]">AI</AvatarFallback></Avatar>
                 <div className="bg-background border border-primary/5 rounded-2xl rounded-tl-none px-4 py-3 flex items-center gap-3 shadow-sm">
                   <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                  <span className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">Consultando IA...</span>
+                  <span className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">Consultando Inteligência...</span>
                 </div>
               </div>
             )}

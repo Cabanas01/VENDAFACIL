@@ -1,7 +1,7 @@
 'use server';
 
 /**
- * @fileOverview Sumarização de Relatórios Financeiros via REST v1 (Modo JSON)
+ * @fileOverview Sumarização de Relatórios Financeiros via REST v1
  */
 
 import { askGemini } from '@/lib/ai/gemini';
@@ -26,8 +26,13 @@ ${input.financialReportData}`;
   try {
     const result = await askGemini(prompt, true);
     return result as SummarizeFinancialReportsOutput;
-  } catch (error) {
-    console.error('[REPORT_AI_ERROR]', error);
+  } catch (error: any) {
+    console.error('[REPORT_AI_ERROR]', error.message);
+    
+    if (error.message === 'QUOTA_EXCEEDED') {
+      throw new Error('Limite de cota excedido. Tente novamente em 1 minuto.');
+    }
+    
     throw new Error('Falha ao processar análise do relatório.');
   }
 }
