@@ -1,7 +1,8 @@
+
 'use client';
 
 /**
- * @fileOverview Gestão de Tenants (Admin)
+ * @fileOverview Gestão de Tenants (Admin) - Versão com Abas
  * 
  * Exibe todas as lojas do sistema com proteção contra dados inconsistentes.
  */
@@ -15,11 +16,13 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
-import { MoreHorizontal, Eye, Lock, Trash2, Gift } from 'lucide-react';
+import { MoreHorizontal, Eye, Lock, Trash2, Gift, Calendar } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { GrantPlanDialog } from './grant-plan-dialog';
 import { getPlanLabel } from '@/lib/plan-label';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 export type StoreRow = {
   id: string;
@@ -74,7 +77,7 @@ export default function AdminStores() {
     try {
       let query = supabase
         .from('stores')
-        .select('id, name, user_id, status, business_type, store_access(plano_tipo)');
+        .select('id, name, user_id, status, business_type, store_access(plano_tipo, data_fim_acesso)');
 
       if (activeTab !== 'all') {
         query = query.eq('business_type', activeTab);
@@ -134,11 +137,12 @@ export default function AdminStores() {
         <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Loja</TableHead>
-                <TableHead>Dono (Email)</TableHead>
-                <TableHead>Plano</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
+                <TableHead className="font-black text-[10px] uppercase tracking-widest px-6">Loja</TableHead>
+                <TableHead className="font-black text-[10px] uppercase tracking-widest px-6">Dono (Email)</TableHead>
+                <TableHead className="font-black text-[10px] uppercase tracking-widest px-6">Plano</TableHead>
+                <TableHead className="font-black text-[10px] uppercase tracking-widest px-6">Status</TableHead>
+                <TableHead className="font-black text-[10px] uppercase tracking-widest px-6">Expira em</TableHead>
+                <TableHead className="text-right font-black text-[10px] uppercase tracking-widest px-6">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -148,37 +152,47 @@ export default function AdminStores() {
                 const config = statusConfig[s?.status?.toLowerCase()] || { variant: 'outline', label: s?.status || 'N/A' };
                 
                 return (
-                  <TableRow key={s?.id}>
-                    <TableCell>
-                      <div className="font-medium">{s?.name || 'Sem Nome'}</div>
-                      <div className="text-[10px] text-muted-foreground font-mono uppercase">{s?.id}</div>
+                  <TableRow key={s?.id} className="group hover:bg-muted/30 transition-colors">
+                    <TableCell className="px-6">
+                      <div className="font-black text-sm uppercase tracking-tighter">{s?.name || 'Sem Nome'}</div>
+                      <div className="text-[9px] text-muted-foreground font-mono uppercase">{s?.id.substring(0, 8)}</div>
                     </TableCell>
-                    <TableCell className="text-sm">{s?.owner_email || '-'}</TableCell>
-                     <TableCell>
-                      <Badge variant="outline" className="capitalize text-[10px] font-bold">
+                    <TableCell className="text-xs font-medium px-6">{s?.owner_email || '-'}</TableCell>
+                     <TableCell className="px-6">
+                      <Badge variant="outline" className="capitalize text-[10px] font-black tracking-widest bg-primary/5 text-primary border-primary/10">
                         {getPlanLabel(access?.plano_tipo)}
                       </Badge>
                     </TableCell>
-                    <TableCell>
-                      <Badge variant={config.variant} className={`${config.className ?? ''} capitalize`}>
+                    <TableCell className="px-6">
+                      <Badge variant={config.variant} className={`${config.className ?? ''} font-black text-[9px] uppercase tracking-widest`}>
                         {config.label}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="px-6 text-xs font-black uppercase tracking-tight text-foreground/80">
+                      {access?.data_fim_acesso ? (
+                        <div className="flex items-center gap-1.5">
+                          <Calendar className="h-3 w-3 text-primary/40" />
+                          {format(new Date(access.data_fim_acesso), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground font-normal">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right px-6">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button>
+                          <Button variant="ghost" size="icon" className="hover:bg-primary hover:text-white"><MoreHorizontal className="h-4 w-4" /></Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
+                        <DropdownMenuContent align="end" className="w-56">
                            <DropdownMenuItem onClick={() => router.push(`/admin/stores/${s?.id}`)}>
-                             <Eye className="mr-2 h-4 w-4" /> Ver Detalhes
+                             <Eye className="mr-2 h-4 w-4" /> Detalhes da Unidade
                            </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem onClick={() => { setSelectedStore(s); setIsGrantModalOpen(true); }}>
-                              <Gift className="mr-2 h-4 w-4" /> Conceder Plano
+                              <Gift className="mr-2 h-4 w-4" /> Conceder Licença
                           </DropdownMenuItem>
-                          <DropdownMenuItem className="text-red-500">
-                            <Trash2 className="mr-2 h-4 w-4" /> Excluir
+                          <DropdownMenuItem className="text-red-500 font-bold">
+                            <Trash2 className="mr-2 h-4 w-4" /> Excluir Tenant
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -199,25 +213,35 @@ export default function AdminStores() {
         onOpenChange={setIsGrantModalOpen}
         onSuccess={fetchStores}
       />
-      <Card>
-        <CardHeader>
-          <CardTitle>Gerenciamento de Lojas</CardTitle>
-          <CardDescription>Visualize e gerencie todos os tenants ativos no sistema.</CardDescription>
+      <Card className="border-none shadow-sm">
+        <CardHeader className="border-b bg-muted/10">
+          <CardTitle className="font-headline font-black uppercase tracking-tighter">Unidades Registradas</CardTitle>
+          <CardDescription className="text-xs font-medium">Controle central de licenciamento e status das lojas.</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           {errorMsg && (
-            <Alert variant="destructive" className="mb-4">
-              <AlertDescription>{errorMsg}</AlertDescription>
-            </Alert>
+            <div className="p-4">
+              <Alert variant="destructive">
+                <AlertDescription className="font-bold">{errorMsg}</AlertDescription>
+              </Alert>
+            </div>
           )}
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-3 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-11 h-auto gap-1">
-              {businessCategories.map(cat => (
-                  <TabsTrigger key={cat} value={cat} className="text-[10px] py-1">{categoryLabels[cat]}</TabsTrigger>
-              ))}
-            </TabsList>
+            <div className="px-6 pt-4 bg-muted/5">
+              <TabsList className="flex flex-wrap h-auto gap-1 bg-transparent p-0">
+                {businessCategories.map(cat => (
+                    <TabsTrigger 
+                      key={cat} 
+                      value={cat} 
+                      className="data-[state=active]:bg-primary data-[state=active]:text-white text-[10px] font-black uppercase tracking-widest px-4 py-2 border rounded-md"
+                    >
+                      {categoryLabels[cat]}
+                    </TabsTrigger>
+                ))}
+              </TabsList>
+            </div>
             {businessCategories.map(cat => (
-                <TabsContent key={cat} value={cat}>
+                <TabsContent key={cat} value={cat} className="mt-0">
                   {renderTable(stores)}
                 </TabsContent>
               ))}
