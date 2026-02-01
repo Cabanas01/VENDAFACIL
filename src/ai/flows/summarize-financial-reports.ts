@@ -1,28 +1,23 @@
 'use server';
 
 /**
- * @fileOverview Summarizes financial reports into short blurbs for extracting action items, 
- * assessing data and calling out trends, opportunities, and risks in store data.
- *
- * - summarizeFinancialReports - A function that handles the summarization of financial reports.
- * - SummarizeFinancialReportsInput - The input type for the summarizeFinancialReports function.
- * - SummarizeFinancialReportsOutput - The return type for the summarizeFinancialReports function.
+ * @fileOverview Sumarização de Relatórios Financeiros via Genkit 1.x
  */
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
 const SummarizeFinancialReportsInputSchema = z.object({
-  financialReportData: z.string().describe('The financial report data to summarize.'),
+  financialReportData: z.string().describe('Dados do relatório financeiro para sumarização.'),
 });
 
 export type SummarizeFinancialReportsInput = z.infer<typeof SummarizeFinancialReportsInputSchema>;
 
 const SummarizeFinancialReportsOutputSchema = z.object({
-  summary: z.string().describe('A summarized blurb of the financial report data.'),
-  trends: z.string().describe('Identified trends in the financial report data.'),
-  opportunities: z.string().describe('Identified opportunities in the financial report data.'),
-  risks: z.string().describe('Identified risks in the financial report data.'),
+  summary: z.string(),
+  trends: z.string(),
+  opportunities: z.string(),
+  risks: z.string(),
 });
 
 export type SummarizeFinancialReportsOutput = z.infer<typeof SummarizeFinancialReportsOutputSchema>;
@@ -35,20 +30,16 @@ const summarizeFinancialReportsPrompt = ai.definePrompt({
   name: 'summarizeFinancialReportsPrompt',
   input: {schema: SummarizeFinancialReportsInputSchema},
   output: {schema: SummarizeFinancialReportsOutputSchema},
-  prompt: `You are an expert financial analyst tasked with summarizing financial reports for store owners. Analyze the provided financial report data and provide:
+  prompt: `Você é um analista financeiro sênior. Sumarize os dados abaixo em Markdown:
 
-- A short, concise summary of the report.
-- Identify any significant trends.
-- Highlight potential opportunities for growth or improvement.
-- Point out any risks or areas of concern.
-
-Financial Report Data:
+Dados:
 {{{financialReportData}}}
 
-Summary:
-Trends:
-Opportunities:
-Risks:`,
+Forneça:
+1. Resumo Conciso
+2. Tendências Identificadas
+3. Oportunidades de Lucro
+4. Riscos Detectados`,
 });
 
 const summarizeFinancialReportsFlow = ai.defineFlow(
