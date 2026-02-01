@@ -123,7 +123,7 @@ export default function BillingPage() {
                 <div>
                   <p className="text-[10px] uppercase font-bold text-muted-foreground">Válido até</p>
                   <p className="font-bold">
-                    {format(parseISO(accessStatus.data_fim_acesso), "dd 'de' MMMM", { locale: ptBR })}
+                    {format(parseISO(accessStatus.data_fim_acesso), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
                   </p>
                 </div>
               </div>
