@@ -28,7 +28,7 @@ export async function summarizeFinancialReports(input: SummarizeFinancialReports
 
 const summarizeFinancialReportsPrompt = ai.definePrompt({
   name: 'summarizeFinancialReportsPrompt',
-  model: 'googleai/gemini-1.5-flash',
+  model: 'gemini-1.5-flash',
   input: {schema: SummarizeFinancialReportsInputSchema},
   output: {schema: SummarizeFinancialReportsOutputSchema},
   prompt: `Você é um analista financeiro sênior especializado em varejo. Analise os dados abaixo e forneça uma visão estratégica em Markdown:

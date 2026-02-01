@@ -43,8 +43,9 @@ export async function askAi(input: AiChatInput): Promise<AiChatOutput> {
 
     const lastUserMessage = input.messages[input.messages.length - 1]?.content || 'Resuma meus dados.';
 
+    // Genkit 1.x: O modelo é inferido da configuração global ou passado como ID direto
     const response = await ai.generate({
-      model: 'googleai/gemini-1.5-flash',
+      model: 'gemini-1.5-flash',
       system: systemPrompt,
       messages: [
         ...input.messages.slice(0, -1).map(m => ({
