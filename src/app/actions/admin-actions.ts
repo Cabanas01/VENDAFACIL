@@ -20,7 +20,7 @@ export type GrantPlanPayload = {
  * Valida o status de administrador no servidor via RPC.
  */
 export async function grantPlanAction(payload: GrantPlanPayload) {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
 
   // 1. Verificação de Segurança no Servidor
   const { data: isAdmin, error: adminErr } = await supabase.rpc('get_admin_status');

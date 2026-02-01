@@ -9,6 +9,8 @@ import { User as UserIcon } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * AppLayout (Server Gatekeeper)
  * Decisões de rota síncronas antes do render.

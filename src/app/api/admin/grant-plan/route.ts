@@ -5,7 +5,7 @@ export const runtime = 'nodejs';
 
 export async function POST(req: Request) {
   try {
-    const supabase = createSupabaseServerClient();
+    const supabase = await createSupabaseServerClient();
 
     const body = await req.json().catch(() => null);
     console.log('[grant-plan] payload received:', body);
