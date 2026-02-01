@@ -36,7 +36,7 @@ export default function PillarPDVPage() {
             <h3>PDV Online vs. PDV Tradicional</h3>
             <p>A grande revolução dos últimos anos foi a migração do software local para a nuvem. Entenda a diferença:</p>
             <ul>
-              <li><strong>PDV Tradicional:</strong> Exige instalação em computadores caros, backups manuais e manutenção física. Se o computador quebra, as vendas param.</li>
+              <li><strong>PDV Tradicional:</strong> Exige instalação em computadores caros, backups manuais e manutenção física.</li>
               <li><strong>PDV Online (Cloud):</strong> Funciona no navegador. Não exige instalação, os dados são salvos em tempo real na nuvem e você pode vender até pelo celular.</li>
             </ul>
           </section>

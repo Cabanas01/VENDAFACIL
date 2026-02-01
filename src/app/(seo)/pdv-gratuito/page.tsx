@@ -17,10 +17,6 @@ export default function PDVGratuitoPage() {
             <h2>PDV Gratuito vale a pena?</h2>
             <p>Para quem está começando, um <strong>PDV gratuito</strong> é a salvação. O VendaFácil permite que você teste todas as ferramentas premium gratuitamente, garantindo que o sistema se adapte ao seu negócio antes de qualquer investimento.</p>
           </section>
-          <section>
-            <h2>O fim do controle manual</h2>
-            <p>Muitos sistemas "grátis" são limitados demais. No VendaFácil, o plano inicial oferece tudo o que o MEI precisa para largar o papel.</p>
-          </section>
         </div>
       }
     />

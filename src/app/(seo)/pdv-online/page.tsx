@@ -2,7 +2,7 @@ import { Metadata } from 'next';
 import { SEOTemplate } from '@/components/seo/seo-template';
 
 export const metadata: Metadata = {
-  title: 'PDV Online: Frente de Caixa Web e Gestão na Nuvem | VendaFácil',
+  title: 'PDV Online: Sistema de Frente de Caixa Web | VendaFácil',
   description: 'Conheça o melhor PDV online do Brasil. Sistema de frente de caixa 100% web, ideal para pequenos negócios controlarem vendas e estoque pelo navegador.',
 };
 
