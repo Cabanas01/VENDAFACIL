@@ -4,7 +4,8 @@
  * @fileOverview Fluxo de IA para análise estratégica do VendaFácil.
  * 
  * Implementado via Genkit v1.x.
- * Removido 'export const runtime' para evitar erro de compilação no Next.js 15.
+ * Nota: Não exportar 'runtime' aqui para evitar erros de compilação no Next.js 15.
+ * O ambiente Node.js é o padrão para Server Actions na Vercel.
  */
 
 import { ai } from '@/ai/genkit';
