@@ -3,7 +3,7 @@
 /**
  * @fileOverview Detalhes da Loja (Admin)
  * 
- * Layout refinado para corresponder fielmente ao design do Portal SaaS.
+ * Exibição gerencial com datas de expiração completas.
  */
 
 import { useEffect, useState } from 'react';
@@ -25,7 +25,8 @@ import {
   Activity,
   CreditCard
 } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import { GrantPlanDialog } from '../../grant-plan-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { getPlanLabel } from '@/lib/plan-label';
@@ -81,7 +82,6 @@ export default function AdminStoreDetailsPage() {
 
   return (
     <div className="space-y-10 animate-in fade-in duration-500 max-w-7xl mx-auto">
-      {/* Header com Navegação */}
       <div className="flex items-start gap-6">
         <Button 
           variant="ghost" 
@@ -99,7 +99,6 @@ export default function AdminStoreDetailsPage() {
         </div>
       </div>
 
-      {/* Métricas Principais - Estilo solicitado */}
       <div className="grid gap-6 md:grid-cols-3">
         <Card className="border-none shadow-sm bg-background">
           <CardHeader className="pb-2">
@@ -129,7 +128,6 @@ export default function AdminStoreDetailsPage() {
         </Card>
       </div>
 
-      {/* Navegação de Detalhes */}
       <Tabs defaultValue="access" className="space-y-8">
         <TabsList className="bg-transparent border-b border-muted w-full justify-start rounded-none h-auto p-0 gap-8">
           <TabsTrigger value="overview" className="data-[state=active]:border-primary data-[state=active]:bg-transparent border-b-2 border-transparent rounded-none px-0 pb-4 font-black text-[11px] uppercase tracking-widest">Informações Gerais</TabsTrigger>
@@ -201,7 +199,7 @@ export default function AdminStoreDetailsPage() {
                   <p className="text-[10px] text-muted-foreground uppercase font-black tracking-[0.2em] mb-2">Data de Expiração</p>
                   <p className="text-2xl font-black text-foreground uppercase tracking-tight">
                     {access?.data_fim_acesso 
-                      ? format(new Date(access.data_fim_acesso), 'dd / MM / yyyy') 
+                      ? format(parseISO(access.data_fim_acesso), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })
                       : '---'}
                   </p>
                   <Badge variant="outline" className="font-black text-[9px] uppercase tracking-widest border-primary/20 bg-background">

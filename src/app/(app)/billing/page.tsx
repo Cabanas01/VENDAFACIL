@@ -3,9 +3,7 @@
 /**
  * @fileOverview BillingPage (Dumb View)
  * 
- * Exibe planos e status. Não redireciona.
- * Ao ativar trial, dispara refetch e deixa AppLayout liberar o acesso.
- * Inclui tratamento de erros robusto para ativação de trial.
+ * Exibe planos e status com datas completas (incluindo ano).
  */
 
 import { useState } from 'react';
