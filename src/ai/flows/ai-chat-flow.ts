@@ -4,7 +4,7 @@
  * @fileOverview Fluxo de Chat de IA (SaaS Advisor)
  * 
  * Implementado via Genkit v1.x. 
- * Utiliza o modelo gemini-1.5-flash para análises operacionais rápidas.
+ * Utiliza o modelo Gemini 1.5 Flash para análises operacionais rápidas.
  */
 
 import { ai } from '@/ai/genkit';
@@ -43,9 +43,8 @@ export async function askAi(input: AiChatInput): Promise<AiChatOutput> {
 
     const lastUserMessage = input.messages[input.messages.length - 1]?.content || 'Resuma meus dados.';
 
-    // Genkit 1.x: O modelo é inferido da configuração global ou passado como ID direto
     const response = await ai.generate({
-      model: 'gemini-1.5-flash',
+      model: 'googleai/gemini-1.5-flash',
       system: systemPrompt,
       messages: [
         ...input.messages.slice(0, -1).map(m => ({
