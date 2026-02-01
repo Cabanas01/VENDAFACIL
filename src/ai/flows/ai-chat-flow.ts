@@ -4,8 +4,8 @@
  * @fileOverview Fluxo de IA para análise estratégica do VendaFácil.
  * 
  * Implementado via Genkit v1.x.
- * Nota: Não exportar 'runtime' aqui para evitar erros de compilação no Next.js 15.
- * O ambiente Node.js é o padrão para Server Actions na Vercel.
+ * Nota: Removida exportação de 'runtime' para cumprir as regras do Next.js 15 
+ * que permite apenas funções assíncronas em arquivos "use server".
  */
 
 import { ai } from '@/ai/genkit';
@@ -72,6 +72,7 @@ const aiChatFlow = ai.defineFlow(
     const lastUserMessage = input.messages[input.messages.length - 1]?.content || 'Resuma meus dados.';
 
     try {
+      // O modelo gemini-1.0-pro será usado conforme configurado no src/ai/genkit.ts
       const { text } = await ai.generate({
         system: systemPrompt,
         messages: [
