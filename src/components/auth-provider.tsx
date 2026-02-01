@@ -141,8 +141,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (typeof window === 'undefined') return;
     
     const isBillingPath = pathname?.includes('/billing') || pathname?.includes('/admin/billing');
+    const isRestrictedPath = pathname?.includes('/login') || pathname?.includes('/signup') || pathname?.includes('/ai');
     
-    if (isBillingPath && user?.id) {
+    if (isBillingPath && !isRestrictedPath && user?.id && storeStatus === 'ready') {
       if (!pollingRef.current) {
         console.log('[AUTH_PROVIDER] Polling de faturamento ativado.');
         pollingRef.current = setInterval(refreshStatus, 30000);
@@ -161,7 +162,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         pollingRef.current = null;
       }
     };
-  }, [pathname, user?.id, refreshStatus]);
+  }, [pathname, user?.id, storeStatus, refreshStatus]);
 
   const logout = async () => {
     await supabase.auth.signOut();

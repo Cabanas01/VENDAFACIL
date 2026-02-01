@@ -49,12 +49,13 @@ export async function POST(req: Request) {
 
     if (error) {
       console.error('[BACKEND_TRACK_ERROR]', error);
-      return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+      // Retornamos OK mesmo com erro de insert para não derrubar o frontend
+      return NextResponse.json({ ok: false, error: error.message });
     }
 
     return NextResponse.json({ ok: true });
   } catch (err: any) {
     console.error('[BACKEND_TRACK_EXCEPTION]', err);
-    return NextResponse.json({ ok: false, error: err.message }, { status: 500 });
+    return NextResponse.json({ ok: false, error: err.message });
   }
 }

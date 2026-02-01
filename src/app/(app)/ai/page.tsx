@@ -18,7 +18,7 @@ export const metadata: Metadata = {
 };
 
 export default async function StoreAiPage() {
-  // Verificação estrita no lado do servidor
+  // Verificação estrita no lado do servidor para evitar vazamento de chaves
   const isAiConfigured = !!(
     process.env.GOOGLE_GENAI_API_KEY || 
     process.env.GEMINI_API_KEY || 

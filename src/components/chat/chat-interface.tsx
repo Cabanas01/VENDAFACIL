@@ -82,13 +82,15 @@ export function ChatInterface({ title, subtitle, contextData, scope, suggestions
               Para ativar o assistente inteligente, você precisa configurar a chave <strong className="font-bold">GOOGLE_GENAI_API_KEY</strong> no seu ambiente de hospedagem ou arquivo .env local.
             </p>
           </div>
-          <Button 
-            variant="outline" 
-            className="border-yellow-400 text-[#854D0E] hover:bg-yellow-100 font-bold h-12 px-10 transition-all active:scale-95" 
-            onClick={() => window.location.reload()}
-          >
-            Verificar Novamente
-          </Button>
+          <div className="pt-4">
+            <Button 
+              variant="outline" 
+              className="border-yellow-400 text-[#854D0E] hover:bg-yellow-100 font-bold h-12 px-10 transition-all active:scale-95" 
+              onClick={() => window.location.reload()}
+            >
+              Verificar Novamente
+            </Button>
+          </div>
         </CardContent>
       </Card>
     );
