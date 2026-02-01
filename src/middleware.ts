@@ -1,14 +1,20 @@
-import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 /**
  * Middleware de Autenticação e Contexto.
  * 1. Mantém a sessão ativa.
- * 2. Injeta o pathname nos headers para os Server Layouts.
+ * 2. Injeta o pathname nos headers da REQUISIÇÃO para os Server Layouts.
  */
 export async function middleware(request: NextRequest) {
+  // Criar headers da requisição para injetar metadados
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set('x-pathname', request.nextUrl.pathname);
+
   let supabaseResponse = NextResponse.next({
-    request,
+    request: {
+      headers: requestHeaders,
+    },
   });
 
   const supabase = createServerClient(
@@ -22,7 +28,9 @@ export async function middleware(request: NextRequest) {
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
           supabaseResponse = NextResponse.next({
-            request,
+            request: {
+              headers: requestHeaders,
+            },
           });
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
@@ -31,9 +39,6 @@ export async function middleware(request: NextRequest) {
       },
     }
   );
-
-  // Injetar o pathname para que os Server Layouts saibam onde o usuário está
-  supabaseResponse.headers.set('x-pathname', request.nextUrl.pathname);
 
   // Refresh session
   await supabase.auth.getUser();

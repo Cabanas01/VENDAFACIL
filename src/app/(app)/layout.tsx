@@ -4,7 +4,6 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { MainNav } from '@/components/main-nav';
 import { AdminSidebar } from '@/components/admin-sidebar';
-import { Providers } from '@/app/providers';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 
@@ -12,7 +11,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
  * AppLayout (Server Gatekeeper)
  * 
  * dynamic = 'force-dynamic' é OBRIGATÓRIO para páginas que usam cookies/auth.
- * Isso impede que o Next.js tente pré-renderizar a página durante o build.
+ * O Providers já é provido pelo RootLayout, não deve ser repetido aqui.
  */
 export const dynamic = 'force-dynamic';
 
@@ -55,43 +54,41 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const isAdminPath = pathname.startsWith('/admin');
   
   return (
-    <Providers>
-      <SidebarProvider>
-        <div className="flex min-h-screen w-full overflow-hidden">
-          {isAdminPath ? <AdminSidebar /> : <MainNav />}
-          <SidebarInset className="flex-1 overflow-auto flex flex-col">
-            <header className="h-16 border-b bg-background flex items-center justify-between px-6 sticky top-0 z-50">
-              <div className="flex items-center gap-4">
-                <div className="flex flex-col">
-                  <h3 className="text-[10px] font-black tracking-tighter uppercase text-primary mb-0.5">
-                    {isAdminPath ? 'Portal SaaS Admin' : 'VendaFácil'}
-                  </h3>
-                  <div className="flex items-center gap-1.5">
-                    <Badge variant="outline" className="text-[8px] h-3.5 px-1.5 font-black uppercase bg-primary/5 border-primary/10 text-primary">
-                      {is_admin ? 'Super Admin' : 'Conta Ativa'}
-                    </Badge>
-                  </div>
+    <SidebarProvider>
+      <div className="flex min-h-screen w-full overflow-hidden">
+        {isAdminPath ? <AdminSidebar /> : <MainNav />}
+        <SidebarInset className="flex-1 overflow-auto flex flex-col">
+          <header className="h-16 border-b bg-background flex items-center justify-between px-6 sticky top-0 z-50">
+            <div className="flex items-center gap-4">
+              <div className="flex flex-col">
+                <h3 className="text-[10px] font-black tracking-tighter uppercase text-primary mb-0.5">
+                  {isAdminPath ? 'Portal SaaS Admin' : 'VendaFácil'}
+                </h3>
+                <div className="flex items-center gap-1.5">
+                  <Badge variant="outline" className="text-[8px] h-3.5 px-1.5 font-black uppercase bg-primary/5 border-primary/10 text-primary">
+                    {is_admin ? 'Super Admin' : 'Conta Ativa'}
+                  </Badge>
                 </div>
               </div>
+            </div>
 
-              <div className="flex items-center gap-3">
-                <div className="hidden md:block text-right">
-                  <p className="text-[10px] font-black text-muted-foreground lowercase">{user.email}</p>
-                </div>
-                <Avatar className="h-8 w-8 ring-2 ring-primary/10 shadow-sm">
-                  <AvatarFallback className="bg-primary/5 text-primary font-bold text-xs">
-                    {user.email?.charAt(0).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
+            <div className="flex items-center gap-3">
+              <div className="hidden md:block text-right">
+                <p className="text-[10px] font-black text-muted-foreground lowercase">{user.email}</p>
               </div>
-            </header>
+              <Avatar className="h-8 w-8 ring-2 ring-primary/10 shadow-sm">
+                <AvatarFallback className="bg-primary/5 text-primary font-bold text-xs">
+                  {user.email?.charAt(0).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+            </div>
+          </header>
 
-            <main className="flex-1 p-4 sm:p-6 lg:p-8 bg-[#F8FAFC]">
-              {children}
-            </main>
-          </SidebarInset>
-        </div>
-      </SidebarProvider>
-    </Providers>
+          <main className="flex-1 p-4 sm:p-6 lg:p-8 bg-[#F8FAFC]">
+            {children}
+          </main>
+        </SidebarInset>
+      </div>
+    </SidebarProvider>
   );
 }

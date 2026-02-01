@@ -27,7 +27,6 @@ import { PageHeader } from '@/components/page-header';
 import { DateRangePicker } from '@/components/date-range-picker';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { 
   SalesByPaymentMethodChart, 
   SalesByProductChart 
@@ -53,17 +52,24 @@ export default function DashboardOverviewPage() {
     const to = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
 
     return safeSales.filter((sale) => {
-      if (!sale.created_at) return false;
-      const saleDate = parseISO(sale.created_at);
-      return saleDate >= from && saleDate <= to;
+      if (!sale?.created_at) return false;
+      try {
+        const saleDate = parseISO(sale.created_at);
+        return saleDate >= from && saleDate <= to;
+      } catch {
+        return false;
+      }
     });
   }, [sales, dateRange]);
 
   const stats = useMemo(() => {
     const safeProducts = Array.isArray(products) ? products : [];
-    const revenue = filteredSales.reduce((sum, s) => sum + (s.total_cents || 0), 0);
-    const cost = filteredSales.flatMap(s => s.items || []).reduce((acc, item) => {
-      const prod = safeProducts.find(p => p.id === item.product_id);
+    const revenue = filteredSales.reduce((sum, s) => sum + (s?.total_cents || 0), 0);
+    
+    // Agregação segura de custos
+    const cost = filteredSales.flatMap(s => s?.items || []).reduce((acc, item) => {
+      if (!item) return acc;
+      const prod = safeProducts.find(p => p?.id === item.product_id);
       return acc + ((prod?.cost_cents || 0) * (item.quantity || 0));
     }, 0);
     
@@ -73,10 +79,10 @@ export default function DashboardOverviewPage() {
     return { revenue, cost, profit, cmvPercent };
   }, [filteredSales, products]);
 
-  const openCash = useMemo(() => (Array.isArray(cashRegisters) ? cashRegisters : []).find(cr => !cr.closed_at), [cashRegisters]);
-  const lowStockCount = useMemo(() => (Array.isArray(products) ? products : []).filter(p => (p.stock_qty || 0) <= (p.min_stock_qty || 0)).length, [products]);
+  const openCash = useMemo(() => (Array.isArray(cashRegisters) ? cashRegisters : []).find(cr => cr && !cr.closed_at), [cashRegisters]);
+  const lowStockCount = useMemo(() => (Array.isArray(products) ? products : []).filter(p => p && (p.stock_qty || 0) <= (p.min_stock_qty || 0)).length, [products]);
 
-  if (storeStatus === 'loading_auth' || storeStatus === 'loading_store') {
+  if (storeStatus === 'loading_auth' || storeStatus === 'loading_status') {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] gap-4 text-muted-foreground">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -171,6 +177,7 @@ export default function DashboardOverviewPage() {
       <div className="grid gap-6 md:grid-cols-2">
         <SalesByPaymentMethodChart 
           data={filteredSales.reduce((acc, s) => {
+            if (!s?.payment_method) return acc;
             const existing = acc.find(i => i.name === s.payment_method);
             if (existing) existing.value += (s.total_cents || 0);
             else acc.push({ name: s.payment_method as any, value: (s.total_cents || 0) });
@@ -178,7 +185,8 @@ export default function DashboardOverviewPage() {
           }, [] as { name: 'cash' | 'pix' | 'card', value: number }[])} 
         />
         <SalesByProductChart 
-          data={Object.entries(filteredSales.flatMap(s => s.items || []).reduce((acc, i) => {
+          data={Object.entries(filteredSales.flatMap(s => s?.items || []).reduce((acc, i) => {
+            if (!i) return acc;
             const name = i.product_name_snapshot || 'Produto';
             acc[name] = (acc[name] || 0) + (i.subtotal_cents || 0);
             return acc;

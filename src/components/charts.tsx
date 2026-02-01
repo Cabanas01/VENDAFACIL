@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import {
   Bar,
   BarChart,
@@ -28,6 +29,10 @@ const CHART_COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--c
 
 // --- Sales by Product Chart ---
 export function SalesByProductChart({ data }: { data: { name: string; total: number }[] }) {
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => setIsMounted(true), []);
+
+  if (!isMounted) return <div className="h-64 bg-muted animate-pulse rounded-lg" />;
   if (!data || data.length === 0) return <NoDataCard title="Faturamento por Produto" />;
   
   const chartData = data.slice(0, 8).map(item => ({...item, fill: 'var(--color-total)'}));
@@ -64,6 +69,10 @@ export function SalesByProductChart({ data }: { data: { name: string; total: num
 
 // --- Sales by Payment Method Chart ---
 export function SalesByPaymentMethodChart({ data }: { data: { name: 'cash' | 'pix' | 'card', value: number }[] }) {
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => setIsMounted(true), []);
+
+  if (!isMounted) return <div className="h-64 bg-muted animate-pulse rounded-lg" />;
   if (!data || data.length === 0) return <NoDataCard title="Faturamento por Forma de Pagamento" />;
 
   const paymentMethodLabels = {
@@ -72,7 +81,7 @@ export function SalesByPaymentMethodChart({ data }: { data: { name: 'cash' | 'pi
     card: 'Cartão'
   };
 
-  const chartData = data.map(item => ({ ...item, name: paymentMethodLabels[item.name] }));
+  const chartData = data.map(item => ({ ...item, name: paymentMethodLabels[item.name as keyof typeof paymentMethodLabels] || item.name }));
 
   return (
     <Card>
@@ -115,6 +124,10 @@ export function SalesByPaymentMethodChart({ data }: { data: { name: 'cash' | 'pi
 
 // --- Stock by Category Chart ---
 export function StockByCategoryChart({ data }: { data: { name: string; total: number }[] }) {
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => setIsMounted(true), []);
+
+  if (!isMounted) return <div className="h-64 bg-muted animate-pulse rounded-lg" />;
   if (!data || data.length === 0) return <NoDataCard title="Estoque por Categoria" />;
 
   const chartConfig = {
@@ -149,14 +162,18 @@ export function StockByCategoryChart({ data }: { data: { name: string; total: nu
 
 // --- Sales by Category Chart ---
 export function SalesByCategoryChart({ data }: { data: { name: string; total: number }[] }) {
-   if (!data || data.length === 0) return <NoDataCard title="Categorias mais Vendidas" />;
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => setIsMounted(true), []);
 
-    const chartConfig = {
-        total: {
-        label: "Quantidade",
-        color: "hsl(var(--chart-3))",
-        },
-    };
+  if (!isMounted) return <div className="h-64 bg-muted animate-pulse rounded-lg" />;
+  if (!data || data.length === 0) return <NoDataCard title="Categorias mais Vendidas" />;
+
+  const chartConfig = {
+      total: {
+      label: "Quantidade",
+      color: "hsl(var(--chart-3))",
+      },
+  };
 
   return (
     <Card>
@@ -183,6 +200,10 @@ export function SalesByCategoryChart({ data }: { data: { name: string; total: nu
 
 // --- Sales over Time Chart ---
 export function SalesOverTimeChart({ data }: { data: { date: string; total: number }[] }) {
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => setIsMounted(true), []);
+
+  if (!isMounted) return <div className="h-64 bg-muted animate-pulse rounded-lg" />;
   if (!data || data.length === 0) return <NoDataCard title="Faturamento por Dia" />;
 
   return (
