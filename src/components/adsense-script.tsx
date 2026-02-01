@@ -3,15 +3,18 @@
 /**
  * @fileOverview Componente para injeção condicional do Google AdSense.
  * 
- * Exibe anúncios apenas para usuários que NÃO possuem um plano pago ativo.
+ * Exibe anúncios apenas para usuários que NÃO possuem um plano pago ativo
+ * e que NÃO estão na tela de autenticação.
  */
 
 import Script from 'next/script';
 import { useAuth } from '@/components/auth-provider';
 import { useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
 
 export function AdSenseScript() {
-  const { accessStatus, storeStatus } = useAuth();
+  const pathname = usePathname();
+  const { accessStatus } = useAuth();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -20,14 +23,17 @@ export function AdSenseScript() {
 
   if (!mounted) return null;
 
-  // Lista de planos que removem anúncios
+  // 1. Bloqueio por Rota (Não exibir no login ou signup)
+  const isAuthPage = pathname === '/login' || pathname === '/signup' || pathname?.startsWith('/auth');
+  if (isAuthPage) {
+    return null;
+  }
+
+  // 2. Bloqueio por Plano (Não exibir para pagadores)
   const paidPlans = ['semanal', 'mensal', 'anual', 'vitalicio', 'weekly', 'monthly', 'yearly'];
-  
-  // Verifica se o usuário é um pagador ativo
   const isPaidUser = accessStatus?.acesso_liberado && 
                      paidPlans.includes(accessStatus?.plano_tipo?.toLowerCase() || '');
 
-  // Se for usuário pago, não renderiza nada (remove o script)
   if (isPaidUser) {
     return null;
   }
