@@ -22,7 +22,7 @@ export default function StoreAiContent({ isAiConfigured }: { isAiConfigured: boo
   const dataSnapshot = useMemo(() => {
     if (!isAiConfigured || !hasData) return null;
 
-    const limitedProducts = products.slice(0, 50).map(p => ({
+    const limitedProducts = (products || []).slice(0, 50).map(p => ({
       nome: p.name,
       categoria: p.category,
       preco: (p.price_cents || 0) / 100,
@@ -30,7 +30,7 @@ export default function StoreAiContent({ isAiConfigured }: { isAiConfigured: boo
       qtd: p.stock_qty
     }));
 
-    const limitedSales = sales.slice(0, 20).map(s => ({
+    const limitedSales = (sales || []).slice(0, 20).map(s => ({
       data: s.created_at,
       total: (s.total_cents || 0) / 100,
       metodo: s.payment_method
@@ -63,10 +63,10 @@ export default function StoreAiContent({ isAiConfigured }: { isAiConfigured: boo
             <Database className="h-8 w-8 text-muted-foreground/40" />
           </div>
           <div className="space-y-2">
-            <h3 className="text-lg font-black uppercase tracking-tight">Análise Indisponível</h3>
+            <h3 className="text-lg font-black uppercase tracking-tight">Dados Insuficientes</h3>
             <p className="text-sm text-muted-foreground max-w-sm mx-auto font-medium">
               Ainda não há dados suficientes para gerar uma análise inteligente. <br/>
-              Comece a cadastrar produtos e realizar vendas para liberar o assistente.
+              Registre vendas e produtos para liberar seu consultor estratégico.
             </p>
           </div>
         </CardContent>

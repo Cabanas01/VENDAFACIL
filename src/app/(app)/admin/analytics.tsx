@@ -48,6 +48,7 @@ export default function AdminAnalytics() {
         const fromDate = startOfDay(dateRange?.from || addDays(startOfToday(), -6)).toISOString();
         const toDate = endOfDay(dateRange?.to || dateRange?.from || new Date()).toISOString();
 
+        // Chamada da RPC com parâmetros alinhados ao backend
         const { data, error } = await supabase.rpc('get_analytics_summary', {
           p_store_id: storeIdFilter || null,
           p_start: fromDate,
@@ -94,7 +95,7 @@ export default function AdminAnalytics() {
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
                 {[1, 2, 3, 4].map(i => <Card key={i}><CardContent className="p-6"><Skeleton className="h-12 w-full" /></CardContent></Card>)}
             </div>
-        ) : !summary || summary.total_events === 0 ? (
+        ) : !summary || (summary.total_events || 0) === 0 ? (
             <Card className="border-dashed py-24 text-center text-muted-foreground bg-muted/5">
                 <TrendingUp className="h-12 w-12 mx-auto mb-4 opacity-10" />
                 <p className="font-black uppercase text-[10px] tracking-[0.2em]">Nenhum tráfego registrado no período</p>
@@ -110,15 +111,15 @@ export default function AdminAnalytics() {
         
         <div className="grid gap-6 md:grid-cols-3">
             <Card className="md:col-span-1 border-none shadow-sm">
-                <CardHeader className="bg-muted/10 border-b"><CardTitle className="text-xs font-black uppercase tracking-widest">Top Ações</CardTitle></CardHeader>
+                <CardHeader className="bg-muted/10 border-b"><CardTitle className="text-[10px] font-black uppercase tracking-widest">Top Ações</CardTitle></CardHeader>
                 <CardContent className="pt-4">
                      {loading ? <Skeleton className="h-40 w-full" /> : (
                         <Table>
                             <TableBody>
                                 {summary?.top_event_names?.map((event, i) => (
-                                    <TableRow key={i} className="hover:bg-transparent">
-                                        <TableCell className="font-bold text-[10px] uppercase text-muted-foreground">{event.event_name.replace(/_/g, ' ')}</TableCell>
-                                        <TableCell className="text-right font-black text-primary">{event.count || 0}</TableCell>
+                                    <TableRow key={i} className="hover:bg-transparent border-none">
+                                        <TableCell className="font-bold text-[9px] uppercase text-muted-foreground py-2">{event.event_name.replace(/_/g, ' ')}</TableCell>
+                                        <TableCell className="text-right font-black text-primary py-2">{event.count || 0}</TableCell>
                                     </TableRow>
                                 ))}
                             </TableBody>
@@ -127,7 +128,7 @@ export default function AdminAnalytics() {
                 </CardContent>
             </Card>
             <Card className="md:col-span-2 border-none shadow-sm">
-                <CardHeader className="bg-muted/10 border-b"><CardTitle className="text-xs font-black uppercase tracking-widest">Tráfego Diário</CardTitle></CardHeader>
+                <CardHeader className="bg-muted/10 border-b"><CardTitle className="text-[10px] font-black uppercase tracking-widest text-primary">Curva de Engajamento</CardTitle></CardHeader>
                 <CardContent className="pt-6">
                      {loading ? <Skeleton className="h-[300px] w-full" /> : <SalesOverTimeChart data={chartData} />}
                 </CardContent>

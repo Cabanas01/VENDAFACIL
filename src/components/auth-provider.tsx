@@ -30,6 +30,7 @@ type AuthContextType = {
   sales: Sale[];
   customers: Customer[];
   cashRegisters: CashRegister[];
+  storeStatus: 'loading_auth' | 'loading_status' | 'ready' | 'no_store' | 'error';
   
   refreshStatus: () => Promise<void>;
   createStore: (storeData: any) => Promise<void>;
@@ -55,6 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [store, setStore] = useState<Store | null>(null);
   const [accessStatus, setAccessStatus] = useState<StoreAccessStatus | null>(null);
+  const [storeStatus, setStoreStatus] = useState<'loading_auth' | 'loading_status' | 'ready' | 'no_store' | 'error'>('loading_auth');
   
   const [products, setProducts] = useState<Product[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
@@ -87,9 +89,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSales(salesRes.data || []);
         setCashRegistersState(cashRes.data || []);
         setCustomers(custRes.data || []);
+        setStoreStatus('ready');
+      } else {
+        setStoreStatus('no_store');
       }
     } catch (err) {
       console.error('[CLIENT_SYNC_ERROR]', err);
+      setStoreStatus('error');
     }
   }, []);
 
@@ -98,6 +104,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (sessionUser) {
         setUser({ id: sessionUser.id, email: sessionUser.email || '' });
         fetchAppData(sessionUser.id);
+      } else {
+        setStoreStatus('no_store');
       }
     });
 
@@ -108,6 +116,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         setUser(null);
         setStore(null);
+        setStoreStatus('no_store');
       }
     });
 
@@ -120,6 +129,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!isBillingRoute || !user) return;
 
     const interval = setInterval(() => {
+      console.log('[POLLING] Atualizando status de faturamento...');
       fetchAppData(user.id);
     }, 30000);
 
@@ -139,13 +149,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { user: authUser } } = await supabase.auth.getUser();
     if (!authUser) throw new Error('Sessão expirada.');
 
-    await supabase.from('users').upsert({ id: authUser.id, email: authUser.email }, { onConflict: 'id' });
+    // Upsert preventivo do usuário na tabela pública
+    await supabase.from('users').upsert({ 
+      id: authUser.id, 
+      email: authUser.email,
+      name: authUser.user_metadata?.name || null
+    }, { onConflict: 'id' });
 
     const { error: rpcError } = await supabase.rpc('create_new_store', {
       p_name: storeData.name,
       p_legal_name: storeData.legal_name,
       p_cnpj: storeData.cnpj,
-      p_address: storeData,
+      p_address: {
+        cep: storeData.cep,
+        street: storeData.street,
+        number: storeData.number,
+        neighborhood: storeData.neighborhood,
+        city: storeData.city,
+        state: storeData.state,
+      },
       p_phone: storeData.phone,
       p_timezone: storeData.timezone || 'America/Sao_Paulo',
     });
@@ -176,7 +198,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider value={{ 
-      user, store, accessStatus, products, sales, customers, cashRegisters,
+      user, store, accessStatus, products, sales, customers, cashRegisters, storeStatus,
       refreshStatus, createStore, updateStore, updateUser, removeStoreMember,
       addProduct, addCustomer, updateProduct, updateProductStock, removeProduct,
       findProductByBarcode, addSale, setCashRegisters, deleteAccount, logout 

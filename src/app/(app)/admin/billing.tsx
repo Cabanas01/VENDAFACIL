@@ -14,8 +14,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { DollarSign, ArrowUp, ArrowDown, Activity } from 'lucide-react';
 import { DateRangePicker } from '@/components/date-range-picker';
 import type { DateRange } from 'react-day-picker';
-import { addDays, startOfToday, startOfDay, endOfDay, format } from 'date-fns';
+import { addDays, startOfToday, startOfDay, endOfDay } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
+import { format } from 'date-fns';
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', {
@@ -39,6 +40,7 @@ export default function AdminBilling() {
       const from = startOfDay(dateRange.from).toISOString();
       const to = endOfDay(dateRange.to || dateRange.from).toISOString();
 
+      // Busca dados brutos para agregação no frontend
       const { data, error } = await supabase
         .from('billing_events')
         .select('*')
@@ -102,46 +104,46 @@ export default function AdminBilling() {
         </div>
 
         <div className="grid gap-6 md:grid-cols-2">
-            <Card>
-                <CardHeader><CardTitle className="text-xs font-black uppercase tracking-widest">Receita por Provedor</CardTitle></CardHeader>
-                <CardContent>
+            <Card className="border-none shadow-sm">
+                <CardHeader className="border-b bg-muted/10"><CardTitle className="text-xs font-black uppercase tracking-widest">Receita por Provedor</CardTitle></CardHeader>
+                <CardContent className="pt-4">
                     <Table>
                         <TableBody>
                             {revenueByProvider.map(p => (
-                                <TableRow key={p.provider}>
-                                    <TableCell className="font-bold uppercase text-[10px]">{p.provider}</TableCell>
-                                    <TableCell className="text-right font-black">{formatCurrency(p.total)}</TableCell>
+                                <TableRow key={p.provider} className="hover:bg-transparent">
+                                    <TableCell className="font-bold uppercase text-[10px] text-muted-foreground">{p.provider}</TableCell>
+                                    <TableCell className="text-right font-black text-primary">{formatCurrency(p.total)}</TableCell>
                                 </TableRow>
                             ))}
                             {revenueByProvider.length === 0 && (
-                              <TableRow><TableCell className="text-center py-10 text-muted-foreground text-xs">Sem transações no período.</TableCell></TableRow>
+                              <TableRow><TableCell className="text-center py-10 text-muted-foreground text-xs uppercase font-black tracking-widest">Sem transações no período.</TableCell></TableRow>
                             )}
                         </TableBody>
                     </Table>
                 </CardContent>
             </Card>
 
-            <Card>
-                <CardHeader><CardTitle className="text-xs font-black uppercase tracking-widest flex items-center gap-2"><Activity className="h-4 w-4" /> Log de Faturamento</CardTitle></CardHeader>
-                <CardContent>
+            <Card className="border-none shadow-sm">
+                <CardHeader className="border-b bg-muted/10"><CardTitle className="text-xs font-black uppercase tracking-widest flex items-center gap-2"><Activity className="h-4 w-4 text-primary" /> Log Recente</CardTitle></CardHeader>
+                <CardContent className="p-0">
                      <Table>
-                        <TableHeader>
+                        <TableHeader className="bg-muted/30">
                             <TableRow>
-                                <TableHead className="text-[10px] uppercase font-black">Evento</TableHead>
-                                <TableHead className="text-[10px] uppercase font-black">Data</TableHead>
-                                <TableHead className="text-right text-[10px] uppercase font-black">Valor</TableHead>
+                                <TableHead className="text-[9px] uppercase font-black px-6">Evento</TableHead>
+                                <TableHead className="text-[9px] uppercase font-black px-6">Data</TableHead>
+                                <TableHead className="text-right text-[9px] uppercase font-black px-6">Valor</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {events.slice(0, 10).map(e => (
-                                <TableRow key={e.id}>
-                                    <TableCell><Badge variant="outline" className="text-[9px] font-black uppercase">{e.event_type.replace(/_/g, ' ')}</Badge></TableCell>
-                                    <TableCell className="text-[10px] font-bold">{format(new Date(e.created_at), 'dd/MM HH:mm')}</TableCell>
-                                    <TableCell className="text-right font-black text-xs">{formatCurrency(e.amount || 0)}</TableCell>
+                                <TableRow key={e.id} className="hover:bg-primary/5 transition-colors">
+                                    <TableCell className="px-6"><Badge variant="outline" className="text-[8px] font-black uppercase border-primary/20 bg-background">{e.event_type.replace(/_/g, ' ')}</Badge></TableCell>
+                                    <TableCell className="text-[10px] font-bold text-muted-foreground px-6">{format(new Date(e.created_at), 'dd/MM HH:mm')}</TableCell>
+                                    <TableCell className="text-right font-black text-xs px-6">{formatCurrency(e.amount || 0)}</TableCell>
                                 </TableRow>
                             ))}
                             {events.length === 0 && (
-                              <TableRow><TableCell colSpan={3} className="text-center py-10 text-muted-foreground text-xs uppercase font-black tracking-widest">Nenhum evento registrado.</TableCell></TableRow>
+                              <TableRow><TableCell colSpan={3} className="text-center py-20 text-muted-foreground text-xs uppercase font-black tracking-[0.2em]">Nenhum evento registrado.</TableCell></TableRow>
                             )}
                         </TableBody>
                     </Table>
@@ -154,9 +156,9 @@ export default function AdminBilling() {
 
 function MetricCard({ title, value, icon, color }: { title: string, value: any, icon: any, color: string }) {
   return (
-    <Card className="border-primary/5">
+    <Card className="border-primary/5 shadow-sm">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{title}</CardTitle>
+        <CardTitle className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">{title}</CardTitle>
         <div className={color}>{icon}</div>
       </CardHeader>
       <CardContent>
