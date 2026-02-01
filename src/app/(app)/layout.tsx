@@ -10,67 +10,50 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 /**
- * @fileOverview AppLayout (SERVER-SIDE GATEKEEPER)
- * 
- * Este layout é o único responsável pela inteligência de fluxo.
- * Ele decide síncronamente no servidor se o usuário vai para Dashboard ou Onboarding.
+ * AppLayout (Server Gatekeeper)
+ * Decisões de rota síncronas antes do render.
  */
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const supabase = createSupabaseServerClient();
-  const headerList = headers();
+  const supabase = await createSupabaseServerClient();
+  const headerList = await headers();
   const pathname = headerList.get('x-pathname') || '/dashboard';
 
-  // 1. Validar Sessão (Nível HTTP)
+  // 1. Validar Identidade
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) {
     redirect('/login');
   }
 
-  // 2. Buscar Status de Bootstrap (RPC Atômica)
+  // 2. Validar Status de Bootstrap (RPC Segura)
   const { data: status, error: rpcError } = await supabase.rpc('get_user_bootstrap_status');
   
   if (rpcError || !status) {
-    console.error('[BOOTSTRAP_ERROR]', rpcError);
+    console.error('[GATEKEEPER_RPC_FAILED]', rpcError);
     redirect('/login');
   }
 
-  // Status: { has_store, is_member, is_admin }
   const { has_store, is_member, is_admin } = status as any;
 
-  // 🚨 REGRA DE OURO: Novo usuário é quem não tem NADA.
+  // 3. Regras de Fluxo (Determinísticas)
   const isNewUser = !has_store && !is_member && !is_admin;
 
-  // 3. REDIRECTS SÍNCRONOS (Nível de Rede - 307 Temporary Redirect)
-  
-  // Caso A: Usuário novo tentando escapar do funil de onboarding
+  // Se for novo e não estiver no onboarding -> FORÇAR ONBOARDING
   if (isNewUser && !pathname.startsWith('/onboarding')) {
     redirect('/onboarding');
   }
 
-  // Caso B: Usuário existente (com loja ou cargo) tentando acessar o onboarding indevidamente
+  // Se NÃO for novo mas estiver no onboarding -> EXPULSAR PARA DASHBOARD
   if (!isNewUser && pathname.startsWith('/onboarding')) {
-    // Admins vão para o painel SaaS, outros para o Dashboard da loja
     redirect(is_admin ? '/admin' : '/dashboard');
   }
 
-  // Caso C: Proteção de área administrativa (somente admin_saas = true)
+  // Proteção de área Admin
   if (pathname.startsWith('/admin') && !is_admin) {
     redirect('/dashboard');
   }
 
-  // 4. PREPARAÇÃO DA INTERFACE
   const isAdminPath = pathname.startsWith('/admin');
   
-  let storeName = 'VendaFácil';
-  if (has_store || is_member) {
-    const { data: storeData } = await supabase
-      .from('stores')
-      .select('name')
-      .limit(1)
-      .maybeSingle();
-    if (storeData) storeName = storeData.name;
-  }
-
   return (
     <Providers>
       <SidebarProvider>
@@ -81,11 +64,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <div className="flex items-center gap-4">
                 <div className="flex flex-col">
                   <h3 className="text-[11px] font-black tracking-tighter uppercase text-primary mb-0.5">
-                    {isAdminPath ? 'Painel SaaS' : storeName}
+                    {isAdminPath ? 'Portal SaaS Admin' : 'VendaFácil'}
                   </h3>
                   <div className="flex items-center gap-1.5">
-                    <Badge variant="outline" className="text-[8px] h-3.5 px-1.5 font-black uppercase tracking-widest bg-muted/30 border-primary/10 text-primary">
-                      {is_admin ? 'SaaS Admin' : 'Portal Logado'}
+                    <Badge variant="outline" className="text-[8px] h-3.5 px-1.5 font-black uppercase bg-muted/30 border-primary/10 text-primary">
+                      {is_admin ? 'Super Admin' : 'Ambiente Logado'}
                     </Badge>
                   </div>
                 </div>
@@ -93,10 +76,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
               <div className="flex items-center gap-3">
                 <div className="hidden md:block text-right">
-                  <p className="text-[10px] font-bold leading-none text-muted-foreground">{user.email}</p>
+                  <p className="text-[10px] font-bold text-muted-foreground">{user.email}</p>
                 </div>
                 <Avatar className="h-8 w-8 ring-2 ring-primary/10">
-                  <AvatarImage src={user.user_metadata?.avatar_url} />
                   <AvatarFallback><UserIcon className="h-4 w-4 text-primary" /></AvatarFallback>
                 </Avatar>
               </div>

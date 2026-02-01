@@ -3,15 +3,12 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import type { ReactNode } from 'react';
 
 /**
- * @fileOverview AuthLayout (SERVER-SIDE PUBLIC GATEKEEPER)
- * 
- * Este layout impede que usuários LOGADOS acessem as páginas de login/signup.
- * Se houver sessão, redireciona síncronamente para o portal privado.
+ * AuthLayout (Public Gatekeeper)
+ * Se já estiver logado, não permite ver login/signup.
  */
 export default async function AuthLayout({ children }: { children: ReactNode }) {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
 
-  // Se já houver sessão, pula o login e manda para o portal privado (AppLayout cuidará do resto)
   const { data: { session } } = await supabase.auth.getSession();
 
   if (session) {

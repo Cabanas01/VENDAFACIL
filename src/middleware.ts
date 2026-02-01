@@ -2,62 +2,47 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 /**
- * Middleware de Autenticação e Contexto de Rota.
- * 1. Mantém a sessão ativa e sincronizada com os cookies.
- * 2. Injeta o pathname atual nos headers para os Server Layouts.
+ * Middleware de Autenticação e Contexto.
+ * 1. Mantém a sessão ativa.
+ * 2. Injeta o pathname nos headers para os Server Layouts.
  */
 export async function middleware(request: NextRequest) {
-  const url = new URL(request.url);
-  
-  let response = NextResponse.next({
-    request: {
-      headers: request.headers,
-    },
+  let supabaseResponse = NextResponse.next({
+    request,
   });
-
-  // Injeta o pathname atual nos headers para os Server Layouts (App Router)
-  // Essencial para o AppLayout saber onde o usuário está sem depender do client.
-  response.headers.set('x-pathname', url.pathname);
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name: string) {
-          return request.cookies.get(name)?.value;
+        getAll() {
+          return request.cookies.getAll();
         },
-        set(name: string, value: string, options: CookieOptions) {
-          request.cookies.set({ name, value, ...options });
-          response = NextResponse.next({ request: { headers: request.headers } });
-          response.cookies.set({ name, value, ...options });
-          response.headers.set('x-pathname', url.pathname);
-        },
-        remove(name: string, options: CookieOptions) {
-          request.cookies.set({ name, value: '', ...options });
-          response = NextResponse.next({ request: { headers: request.headers } });
-          response.cookies.set({ name, value: '', ...options });
-          response.headers.set('x-pathname', url.pathname);
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+          supabaseResponse = NextResponse.next({
+            request,
+          });
+          cookiesToSet.forEach(({ name, value, options }) =>
+            supabaseResponse.cookies.set(name, value, options)
+          );
         },
       },
     }
   );
 
-  // Garante que a sessão esteja atualizada para que o auth.uid() funcione nas RPCs
+  // Injetar o pathname para que os Server Layouts saibam onde o usuário está
+  supabaseResponse.headers.set('x-pathname', request.nextUrl.pathname);
+
+  // Refresh session
   await supabase.auth.getUser();
 
-  return response;
+  return supabaseResponse;
 }
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - api/webhooks (webhook routes)
-     */
     '/((?!_next/static|_next/image|favicon.ico|api/webhooks/.*).*)',
   ],
 };

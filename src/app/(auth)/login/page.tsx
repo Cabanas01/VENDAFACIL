@@ -1,18 +1,11 @@
 'use client';
 
-/**
- * @fileOverview LoginPage (Dumb Form)
- * 
- * Focada apenas na autenticação via Supabase Client.
- * Após o sucesso, força o recarregamento total para o servidor decidir o fluxo.
- */
-
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Loader2, LogIn, Eye, EyeOff } from 'lucide-react';
-import { supabase } from '@/lib/supabase/client';
+import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -28,6 +21,7 @@ const loginSchema = z.object({
 type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
+  const supabase = getSupabaseBrowserClient();
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -52,9 +46,9 @@ export default function LoginPage() {
         setLoading(false);
       } else {
         /**
-         * 🚨 SUCESSO: Redirecionamento Síncrono via Browser
-         * Ao usar window.location.href, garantimos que a próxima requisição
-         * passe pelo Middleware e pelo Server Layout com os novos cookies de sessão.
+         * REDIRECIONAMENTO LIMPO (IMPORTANTE)
+         * Usar window.location força uma nova request HTTP ao servidor.
+         * Isso garante que os cookies de sessão sejam enviados para o AppLayout (Server Component).
          */
         window.location.href = '/dashboard';
       }
@@ -75,7 +69,7 @@ export default function LoginPage() {
         </div>
         <div className="space-y-1">
           <CardTitle className="text-3xl font-headline font-bold">VendaFácil</CardTitle>
-          <CardDescription>Gerencie suas vendas com inteligência.</CardDescription>
+          <CardDescription>Acesse seu ponto de venda inteligente.</CardDescription>
         </div>
       </CardHeader>
       <CardContent>
