@@ -96,12 +96,12 @@ export default function ComandasPage() {
     if (!numero) return;
 
     try {
+      // Corrigido: Removido mesa_cliente da inserção pois a coluna não existe na tabela base 'comandas'
       const { data, error } = await supabase
         .from('comandas')
         .insert({
           store_id: store.id,
           numero_comanda: numero,
-          mesa_cliente: numero,
           status: 'aberta'
         })
         .select()
@@ -110,7 +110,7 @@ export default function ComandasPage() {
       if (error) throw error;
       router.push(`/comandas/${data.id}`);
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Erro ao criar', description: err.message });
+      toast({ variant: 'destructive', title: 'Erro ao criar comanda', description: err.message });
     }
   };
 
@@ -183,9 +183,11 @@ export default function ComandasPage() {
                 <div className="flex justify-between items-start">
                   <div>
                     <CardTitle className="text-3xl font-black font-headline tracking-tighter">#{comanda.numero_comanda}</CardTitle>
-                    <CardDescription className="text-[10px] uppercase font-black tracking-widest mt-1">
-                      {comanda.mesa_cliente || 'Sem Identificação'}
-                    </CardDescription>
+                    {comanda.mesa_cliente && (
+                      <CardDescription className="text-[10px] uppercase font-black tracking-widest mt-1">
+                        Ref: {comanda.mesa_cliente}
+                      </CardDescription>
+                    )}
                   </div>
                   <Badge className="bg-green-500/10 text-green-600 border-green-500/20 text-[9px] font-black uppercase">Aberta</Badge>
                 </div>

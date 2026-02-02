@@ -126,7 +126,7 @@ export type Comanda = {
   id: string;
   store_id: string;
   numero_comanda: string;
-  mesa_cliente?: string;
+  mesa_cliente?: string | null;
   status: 'aberta' | 'fechada' | 'cancelada';
   created_at: string;
   closed_at?: string;
@@ -147,7 +147,7 @@ export type ComandaItem = {
 export type ComandaTotalView = {
   id: string;
   numero_comanda: string;
-  mesa_cliente: string;
+  mesa_cliente?: string | null;
   status: string;
   total_cents: number;
   itens_count: number;
@@ -156,7 +156,7 @@ export type ComandaTotalView = {
 export type PainelProducaoView = {
   id: string; // comanda_item_id
   numero_comanda: string;
-  mesa_cliente: string;
+  mesa_cliente?: string | null;
   nome_produto: string;
   quantidade: number;
   status_item: string;

@@ -24,7 +24,9 @@ import {
   CheckCircle2, 
   Clock,
   ShoppingCart,
-  Wallet
+  Wallet,
+  ClipboardList,
+  Search
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -123,7 +125,7 @@ export default function ComandaDetailsPage() {
   const handleCloseComanda = async (method: 'cash' | 'pix' | 'card') => {
     setIsClosing(true);
     try {
-      const { data, error } = await supabase.rpc('fechar_comanda', {
+      const { error } = await supabase.rpc('fechar_comanda', {
         p_comanda_id: id,
         p_payment_method: method
       });
@@ -158,7 +160,9 @@ export default function ComandaDetailsPage() {
             <h1 className="text-4xl font-black font-headline tracking-tighter uppercase leading-none">Comanda #{comanda.numero_comanda}</h1>
             <Badge className="bg-green-500 font-black uppercase text-[9px]">Aberta</Badge>
           </div>
-          <p className="text-sm text-muted-foreground font-bold uppercase tracking-widest mt-1">Identificação: {comanda.mesa_cliente || '-'}</p>
+          {comanda.mesa_cliente && (
+            <p className="text-sm text-muted-foreground font-bold uppercase tracking-widest mt-1">Identificação: {comanda.mesa_cliente}</p>
+          )}
         </div>
         <div className="text-right">
           <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Valor Acumulado</p>
@@ -202,7 +206,7 @@ export default function ComandaDetailsPage() {
                           </div>
                         </TableCell>
                         <TableCell className="px-6 text-center">
-                          <Badge className={cn("text-[8px] font-black uppercase border-none", config.color)}>
+                          <Badge className={cn("text-[8px] font-black uppercase border-none text-white", config.color)}>
                             {config.icon} {config.label}
                           </Badge>
                         </TableCell>

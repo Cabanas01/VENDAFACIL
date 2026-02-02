@@ -112,7 +112,7 @@ export default function CozinhaPage() {
               <div className="flex justify-between items-start">
                 <div className="space-y-1">
                   <p className="text-3xl font-black leading-tight uppercase tracking-tight">{p.nome_produto}</p>
-                  <p className="text-xs font-bold text-muted-foreground">Mesa/Ref: {p.mesa_cliente || '-'}</p>
+                  {p.mesa_cliente && <p className="text-xs font-bold text-muted-foreground">Mesa/Ref: {p.mesa_cliente}</p>}
                 </div>
                 <div className="h-16 w-16 rounded-2xl bg-muted flex items-center justify-center">
                   <span className="text-4xl font-black">{p.quantidade}</span>
@@ -122,14 +122,14 @@ export default function CozinhaPage() {
               <div className="pt-4 flex gap-3">
                 {p.status_item === 'pendente' ? (
                   <Button 
-                    className="flex-1 h-16 text-xs font-black uppercase tracking-widest bg-orange-500 hover:bg-orange-600"
+                    className="flex-1 h-16 text-xs font-black uppercase tracking-widest bg-orange-500 hover:bg-orange-600 text-white"
                     onClick={() => handleStatusChange(p.id, 'em_preparo')}
                   >
                     <Play className="h-4 w-4 mr-2" /> Iniciar Preparo
                   </Button>
                 ) : (
                   <Button 
-                    className="flex-1 h-16 text-xs font-black uppercase tracking-widest bg-green-500 hover:bg-green-600"
+                    className="flex-1 h-16 text-xs font-black uppercase tracking-widest bg-green-500 hover:bg-green-600 text-white"
                     onClick={() => handleStatusChange(p.id, 'pronto')}
                   >
                     <CheckCircle2 className="h-4 w-4 mr-2" /> Marcar como Pronto
