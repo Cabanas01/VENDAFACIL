@@ -103,6 +103,7 @@ export type CartItem = {
   unit_price_cents: number;
   subtotal_cents: number;
   stock_qty: number;
+  notes?: string;
 };
 
 export type CashRegister = {
@@ -159,6 +160,13 @@ export type PainelProducaoView = {
   created_at: string;
   prep_time_minutes: number;
   store_id: string;
+};
+
+export type TableInfo = {
+  table_id: string;
+  store_id: string;
+  table_number: number;
+  table_status: string;
 };
 
 export type StoreStatus = 
