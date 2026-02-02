@@ -24,14 +24,17 @@ export default function BarPage() {
     if (!store?.id) return;
     setLoading(true);
     try {
-      // Regra de Ouro: Confia 100% na View.
       const { data, error } = await supabase
         .from('v_painel_bar')
         .select('*')
+        .eq('store_id', store.id)
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      setPedidos(data || []);
+
+      // Filtragem defensiva no frontend
+      const pendentes = (data || []).filter((p: any) => p.status !== 'pronto');
+      setPedidos(pendentes);
     } catch (err: any) {
       console.error('[BDS_FETCH_ERROR]', err);
       toast({ variant: 'destructive', title: 'Erro ao carregar bar', description: err.message });
@@ -54,7 +57,8 @@ export default function BarPage() {
       .on('postgres_changes', { 
         event: 'UPDATE', 
         schema: 'public', 
-        table: 'comandas'
+        table: 'comandas',
+        filter: `store_id=eq.${store?.id}`
       }, () => fetchPedidos())
       .subscribe();
 
@@ -62,10 +66,10 @@ export default function BarPage() {
       supabase.removeChannel(channel);
       clearInterval(clockInterval);
     };
-  }, [fetchPedidos]);
+  }, [fetchPedidos, store?.id]);
 
   const handleMarkReady = async (itemId: string) => {
-    const originalPedidos = [...pedidos];
+    // Atualização otimista imediata
     setPedidos(prev => prev.filter(p => p.item_id !== itemId));
 
     try {
@@ -77,10 +81,13 @@ export default function BarPage() {
         })
         .eq('id', itemId);
 
-      if (error) throw error;
+      if (error) {
+        fetchPedidos(); // Reverte em caso de erro
+        throw error;
+      }
+      
       toast({ title: 'Bar: Drink Servido!', description: 'Pedido concluído.' });
     } catch (err: any) {
-      setPedidos(originalPedidos);
       toast({ variant: 'destructive', title: 'Erro', description: err.message });
     }
   };

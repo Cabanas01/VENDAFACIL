@@ -24,16 +24,17 @@ export default function CozinhaPage() {
     if (!store?.id) return;
     setLoading(true);
     try {
-      // Regra de Ouro: Confia 100% na View. 
-      // Não filtramos por status ou store_id aqui para evitar erros se a view não tiver as colunas.
-      // O banco já cuida da segurança via RLS ou lógica da View.
       const { data, error } = await supabase
         .from('v_painel_cozinha')
         .select('*')
+        .eq('store_id', store.id)
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      setPedidos(data || []);
+
+      // Filtragem defensiva: Remove qualquer item que o banco retorne mas já esteja pronto
+      const pendentes = (data || []).filter((p: any) => p.status !== 'pronto');
+      setPedidos(pendentes);
     } catch (err: any) {
       console.error('[KDS_FETCH_ERROR]', err);
       toast({ variant: 'destructive', title: 'Erro ao carregar cozinha', description: err.message });
@@ -46,7 +47,6 @@ export default function CozinhaPage() {
     fetchPedidos();
     const clockInterval = setInterval(() => setNow(new Date()), 30000);
 
-    // Escuta mudanças em comanda_itens para atualizar o painel instantaneamente
     const channel = supabase
       .channel('kds_realtime')
       .on('postgres_changes', { 
@@ -57,7 +57,8 @@ export default function CozinhaPage() {
       .on('postgres_changes', { 
         event: 'UPDATE', 
         schema: 'public', 
-        table: 'comandas'
+        table: 'comandas',
+        filter: `store_id=eq.${store?.id}`
       }, () => fetchPedidos())
       .subscribe();
 
@@ -65,11 +66,10 @@ export default function CozinhaPage() {
       supabase.removeChannel(channel);
       clearInterval(clockInterval);
     };
-  }, [fetchPedidos]);
+  }, [fetchPedidos, store?.id]);
 
   const handleMarkReady = async (itemId: string) => {
-    // Atualização otimista
-    const originalPedidos = [...pedidos];
+    // Atualização otimista imediata
     setPedidos(prev => prev.filter(p => p.item_id !== itemId));
 
     try {
@@ -81,11 +81,15 @@ export default function CozinhaPage() {
         })
         .eq('id', itemId);
 
-      if (error) throw error;
+      if (error) {
+        // Se der erro no banco, volta o item para a lista
+        fetchPedidos();
+        throw error;
+      }
+      
       toast({ title: 'Item Pronto!', description: 'Pedido enviado para o balcão.' });
     } catch (err: any) {
-      setPedidos(originalPedidos);
-      toast({ variant: 'destructive', title: 'Erro', description: err.message });
+      toast({ variant: 'destructive', title: 'Erro ao concluir', description: err.message });
     }
   };
 

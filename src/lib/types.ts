@@ -124,39 +124,6 @@ export type Customer = {
     created_at: string;
 };
 
-export type Comanda = {
-  id: string;
-  store_id: string;
-  numero: number;
-  mesa?: string | null;
-  customer_id?: string | null;
-  status: 'aberta' | 'fechada' | 'cancelada';
-  created_at: string;
-  closed_at?: string | null;
-};
-
-export type ComandaItem = {
-  id: string;
-  comanda_id: string;
-  product_id: string;
-  product_name: string;
-  quantidade: number;
-  preco_unitario: number;
-  destino_preparo: 'cozinha' | 'bar' | 'nenhum';
-  status: 'pendente' | 'em_preparo' | 'pronto' | 'cancelado';
-  created_at: string;
-};
-
-export type ComandaTotalView = {
-  comanda_id: string;
-  store_id: string;
-  numero: number;
-  mesa?: string | null;
-  cliente_nome?: string | null;
-  status: string;
-  total: number;
-};
-
 export type PainelProducaoView = {
   item_id: string;
   comanda_id: string;
@@ -164,8 +131,10 @@ export type PainelProducaoView = {
   mesa: string | null;
   produto: string;
   quantidade: number;
+  status: string;
   created_at: string;
-  prep_time_minutes?: number; // Opcional caso a view não retorne
+  prep_time_minutes: number;
+  store_id: string;
 };
 
 export type StoreStatus = 
