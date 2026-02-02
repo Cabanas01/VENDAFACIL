@@ -8,7 +8,6 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { GlassWater, Clock, History, Loader2, MapPin, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { parseISO, differenceInMinutes } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 import type { PainelProducaoView } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -23,15 +22,17 @@ export default function BarPage() {
   const fetchPedidos = useCallback(async () => {
     if (!store?.id) return;
     try {
+      // Regra de Ouro: Consultar a View mas aplicar filtro de store_id para segurança SaaS
       const { data, error } = await supabase
         .from('v_painel_bar')
         .select('*')
+        .eq('store_id', store.id)
         .order('created_at', { ascending: true });
 
       if (error) throw error;
 
-      // Filtro preventivo no frontend
-      const pendentes = (data || []).filter((p: any) => p.status !== 'pronto');
+      // Filtro preventivo no frontend: apenas o que não está pronto
+      const pendentes = (data || []).filter((p: any) => p.status !== 'pronto' && p.status !== 'cancelado');
       setPedidos(pendentes);
     } catch (err: any) {
       console.error('[BDS_FETCH_ERROR]', err);
@@ -45,10 +46,20 @@ export default function BarPage() {
 
     const interval = setInterval(() => setNow(new Date()), 30000);
 
+    // Escuta mudanças na tabela base para atualizar a View
     const channel = supabase
       .channel('bds_sync_global')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'comandas', filter: `store_id=eq.${store?.id}` }, () => fetchPedidos())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'comanda_itens' }, () => fetchPedidos())
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'comanda_itens' 
+      }, () => fetchPedidos())
+      .on('postgres_changes', { 
+        event: 'UPDATE', 
+        schema: 'public', 
+        table: 'comandas', 
+        filter: `store_id=eq.${store?.id}` 
+      }, () => fetchPedidos())
       .subscribe();
 
     return () => { 
@@ -58,7 +69,7 @@ export default function BarPage() {
   }, [store?.id, fetchPedidos]);
 
   const handleMarkReady = async (itemId: string) => {
-    // 🚀 ATUALIZAÇÃO OTIMISTA: Remove o item do estado imediatamente
+    // 🚀 ATUALIZAÇÃO OTIMISTA: Remove do estado local para feedback instantâneo
     setPedidos(prev => prev.filter(p => p.item_id !== itemId));
 
     try {
@@ -69,22 +80,27 @@ export default function BarPage() {
 
       if (error) throw error;
       
-      toast({ title: 'Bebida Pronta!', description: 'O item foi marcado como servido.' });
+      toast({ title: 'Bebida Pronta!', description: 'O item foi retirado da fila de preparo do bar.' });
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Erro', description: err.message });
-      // Rollback em caso de erro
+      toast({ variant: 'destructive', title: 'Erro ao concluir', description: err.message });
+      // Rollback apenas em caso de falha real na API
       fetchPedidos();
     }
   };
 
-  if (loading) return <div className="h-[60vh] flex flex-col items-center justify-center gap-4"><Loader2 className="animate-spin text-primary" /><p className="font-black uppercase text-[10px] tracking-widest text-muted-foreground">Sincronizando Bar...</p></div>;
+  if (loading) return (
+    <div className="h-[60vh] flex flex-col items-center justify-center gap-4">
+      <Loader2 className="animate-spin text-primary" />
+      <p className="font-black uppercase text-[10px] tracking-widest text-muted-foreground">Sincronizando Bar...</p>
+    </div>
+  );
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-10 animate-in fade-in duration-500">
       <div className="flex items-center justify-between">
         <PageHeader title="Bar (BDS)" subtitle="Monitor de bebidas e coquetéis." />
-        <Badge variant="outline" className="h-10 px-4 gap-2 font-black uppercase text-xs border-cyan-200 bg-cyan-50">
-          <GlassWater className="h-4 w-4 text-cyan-600" /> {pedidos.length} Drinks
+        <Badge variant="outline" className="h-10 px-4 gap-2 font-black uppercase text-xs border-cyan-200 bg-cyan-50 text-cyan-600">
+          <GlassWater className="h-4 w-4" /> {pedidos.length} Drinks Pendentes
         </Badge>
       </div>
 
@@ -95,23 +111,21 @@ export default function BarPage() {
           const isLate = elapsed > targetTime;
 
           return (
-            <Card key={p.item_id} className={`border-none shadow-xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300 transition-colors ${isLate ? 'bg-red-50 ring-2 ring-red-500 ring-offset-2 animate-pulse' : 'bg-background'}`}>
+            <Card key={p.item_id} className={`border-none shadow-xl overflow-hidden transition-all duration-300 ${isLate ? 'bg-red-50 ring-2 ring-red-500 ring-offset-2 animate-pulse' : 'bg-background'}`}>
               <div className={`px-6 py-4 flex justify-between items-center border-b ${isLate ? 'bg-red-500/10 border-red-500/20' : 'bg-cyan-500/5 border-cyan-500/10'}`}>
                 <div className="flex flex-col">
                   <span className={`text-2xl font-black font-headline tracking-tighter uppercase leading-none ${isLate ? 'text-red-700' : 'text-foreground'}`}>
                     Comanda #{p.comanda_numero}
                   </span>
-                  <div className="flex items-center gap-3 mt-1.5">
-                    <div className={`flex items-center gap-1 text-[10px] font-black uppercase ${isLate ? 'text-red-600' : 'text-cyan-600'}`}>
-                      <MapPin className="h-3 w-3" /> {p.mesa || 'Sem mesa'}
-                    </div>
+                  <div className="flex items-center gap-1.5 mt-1.5 text-[10px] font-black uppercase text-cyan-600">
+                    <MapPin className="h-3 w-3" /> {p.mesa || 'Balcão'}
                   </div>
                 </div>
                 <div className={`flex flex-col items-end gap-1 font-black uppercase text-[10px] ${isLate ? 'text-red-600' : 'text-muted-foreground'}`}>
                   <div className="flex items-center gap-1.5">
                     <Clock className="h-3 w-3" /> {elapsed} min
                   </div>
-                  {isLate && <Badge className="bg-red-600 text-[8px] h-4 px-1 gap-1 animate-bounce"><AlertTriangle className="h-2 w-2" /> ATRASADO</Badge>}
+                  {isLate && <Badge className="bg-red-600 text-[8px] h-4 px-1 gap-1"><AlertTriangle className="h-2 w-2" /> ATRASADO</Badge>}
                 </div>
               </div>
               
@@ -119,7 +133,7 @@ export default function BarPage() {
                 <div className="flex justify-between items-start">
                   <div className="space-y-1">
                     <p className={`text-3xl font-black leading-tight uppercase tracking-tight ${isLate ? 'text-red-900' : 'text-cyan-700'}`}>{p.produto}</p>
-                    <p className="text-[10px] font-bold text-muted-foreground uppercase">Tempo Alvo: {targetTime} min</p>
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase">Meta: {targetTime} min</p>
                   </div>
                   <div className={`h-16 w-16 rounded-2xl flex items-center justify-center border transition-colors ${isLate ? 'bg-red-600 text-white border-red-700 shadow-lg' : 'bg-cyan-50 text-cyan-600 border-cyan-100'}`}>
                     <span className="text-4xl font-black">{p.quantidade}</span>

@@ -164,9 +164,10 @@ export type PainelProducaoView = {
   cliente_nome?: string | null;
   produto: string;
   quantidade: number;
-  status: string;
+  status: 'pendente' | 'em_preparo' | 'pronto' | 'cancelado';
   created_at: string;
   prep_time_minutes: number;
+  store_id: string;
 };
 
 export type StoreStatus = 
