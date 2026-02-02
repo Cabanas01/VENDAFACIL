@@ -1,3 +1,4 @@
+
 export type User = {
   id: string;
   email: string;
@@ -161,13 +162,10 @@ export type PainelProducaoView = {
   comanda_id: string;
   comanda_numero: number;
   mesa: string | null;
-  cliente_nome?: string | null;
   produto: string;
   quantidade: number;
-  status: 'pendente' | 'em_preparo' | 'pronto' | 'cancelado';
   created_at: string;
-  prep_time_minutes: number;
-  store_id: string;
+  prep_time_minutes?: number; // Opcional caso a view não retorne
 };
 
 export type StoreStatus = 

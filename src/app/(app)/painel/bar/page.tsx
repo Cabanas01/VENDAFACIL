@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
@@ -6,7 +7,7 @@ import { supabase } from '@/lib/supabase/client';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { GlassWater, Clock, History, Loader2, MapPin, CheckCircle2 } from 'lucide-react';
+import { GlassWater, Clock, History, Loader2, MapPin, CheckCircle2, RefreshCw } from 'lucide-react';
 import { parseISO, differenceInMinutes } from 'date-fns';
 import type { PainelProducaoView } from '@/lib/types';
 import { Button } from '@/components/ui/button';
@@ -21,30 +22,30 @@ export default function BarPage() {
 
   const fetchPedidos = useCallback(async () => {
     if (!store?.id) return;
+    setLoading(true);
     try {
+      // Regra de Ouro: Confia 100% na View.
       const { data, error } = await supabase
         .from('v_painel_bar')
         .select('*')
-        .eq('store_id', store.id)
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      
-      const pendentes = (data || []).filter((p: any) => p.status !== 'pronto');
-      setPedidos(pendentes);
+      setPedidos(data || []);
     } catch (err: any) {
       console.error('[BDS_FETCH_ERROR]', err);
+      toast({ variant: 'destructive', title: 'Erro ao carregar bar', description: err.message });
     } finally {
       setLoading(false);
     }
-  }, [store?.id]);
+  }, [store?.id, toast]);
 
   useEffect(() => {
     fetchPedidos();
     const clockInterval = setInterval(() => setNow(new Date()), 30000);
 
     const channel = supabase
-      .channel('bds_realtime_sync')
+      .channel('bds_realtime')
       .on('postgres_changes', { 
         event: '*', 
         schema: 'public', 
@@ -53,8 +54,7 @@ export default function BarPage() {
       .on('postgres_changes', { 
         event: 'UPDATE', 
         schema: 'public', 
-        table: 'comandas', 
-        filter: `store_id=eq.${store?.id}` 
+        table: 'comandas'
       }, () => fetchPedidos())
       .subscribe();
 
@@ -62,9 +62,10 @@ export default function BarPage() {
       supabase.removeChannel(channel);
       clearInterval(clockInterval);
     };
-  }, [store?.id, fetchPedidos]);
+  }, [fetchPedidos]);
 
   const handleMarkReady = async (itemId: string) => {
+    const originalPedidos = [...pedidos];
     setPedidos(prev => prev.filter(p => p.item_id !== itemId));
 
     try {
@@ -77,14 +78,14 @@ export default function BarPage() {
         .eq('id', itemId);
 
       if (error) throw error;
-      toast({ title: 'Bar: Bebida Servida!', description: 'Item retirado da fila.' });
+      toast({ title: 'Bar: Drink Servido!', description: 'Pedido concluído.' });
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Erro ao concluir bebida', description: err.message });
-      fetchPedidos();
+      setPedidos(originalPedidos);
+      toast({ variant: 'destructive', title: 'Erro', description: err.message });
     }
   };
 
-  if (loading) return (
+  if (loading && pedidos.length === 0) return (
     <div className="h-[60vh] flex flex-col items-center justify-center gap-4">
       <Loader2 className="animate-spin text-primary" />
       <p className="font-black uppercase text-[10px] tracking-widest text-muted-foreground">Sincronizando Bar...</p>
@@ -94,10 +95,11 @@ export default function BarPage() {
   return (
     <div className="space-y-10 animate-in fade-in duration-500">
       <div className="flex items-center justify-between">
-        <PageHeader title="Bar (BDS)" subtitle="Monitor de bebidas, chopp e coquetéis." />
+        <PageHeader title="Bar (BDS)" subtitle="Monitor de bebidas e coquetéis." />
         <div className="flex gap-2">
-          <Button variant="ghost" size="sm" onClick={fetchPedidos} className="h-10 px-4 font-black uppercase text-[10px] tracking-widest">
-            Atualizar <History className="ml-2 h-3 w-3" />
+          <Button variant="outline" size="sm" onClick={fetchPedidos} disabled={loading} className="h-10 px-4 font-black uppercase text-[10px] tracking-widest">
+            {loading ? <RefreshCw className="h-3 w-3 animate-spin mr-2" /> : <History className="h-3 w-3 mr-2" />}
+            Atualizar
           </Button>
           <Badge variant="outline" className="h-10 px-4 gap-2 font-black uppercase text-xs border-cyan-200 bg-cyan-50 text-cyan-600">
             <GlassWater className="h-4 w-4" /> {pedidos.length} Drinks
@@ -134,7 +136,7 @@ export default function BarPage() {
                 <div className="flex justify-between items-start">
                   <div className="space-y-1">
                     <p className={`text-3xl font-black leading-tight uppercase tracking-tight ${isLate ? 'text-red-900' : 'text-cyan-700'}`}>{p.produto}</p>
-                    <p className="text-[10px] font-bold text-muted-foreground uppercase">Meta: {targetTime} min</p>
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase">Tempo Alvo: {targetTime} min</p>
                   </div>
                   <div className={`h-16 w-16 rounded-2xl flex items-center justify-center border transition-colors ${isLate ? 'bg-red-600 text-white border-red-700 shadow-lg' : 'bg-cyan-50 text-cyan-600 border-cyan-100'}`}>
                     <span className="text-4xl font-black">{p.quantidade}</span>

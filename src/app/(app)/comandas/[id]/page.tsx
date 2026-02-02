@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
@@ -22,14 +23,13 @@ import {
   Search,
   Coins,
   Printer,
-  FileText,
   PiggyBank
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import type { ComandaItem, Product, ComandaTotalView, Customer } from '@/lib/types';
-import { generateReceiptHTML } from '@/components/receipt/receipt-template';
+import { printReceipt } from '@/lib/print-receipt';
 
 const formatCurrency = (val: number) => 
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((val || 0) / 100);
@@ -84,6 +84,7 @@ export default function ComandaDetailsPage() {
     fetchData();
     const channel = supabase.channel(`sync_comanda_${id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'comanda_itens', filter: `comanda_id=eq.${id}` }, () => fetchData())
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'comandas', filter: `id=eq.${id}` }, () => fetchData())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [id, fetchData]);
@@ -124,6 +125,31 @@ export default function ComandaDetailsPage() {
     }
   };
 
+  const handlePrint = () => {
+    if (comanda && store) {
+      // Mapeia itens para o formato da venda para o cupom
+      const saleMock = {
+        total_cents: comanda.total * 100,
+        payment_method: 'dinheiro',
+        created_at: new Date().toISOString(),
+        items: items.map(i => ({
+          product_name_snapshot: i.product_name,
+          quantity: i.quantidade,
+          unit_price_cents: i.preco_unitario,
+          subtotal_cents: i.quantidade * i.preco_unitario
+        }))
+      } as any;
+
+      const info = {
+        numero: comanda.numero,
+        mesa: comanda.mesa || 'Balcão',
+        cliente: customer?.name || comanda.cliente_nome || 'Consumidor'
+      };
+
+      printReceipt(saleMock, store);
+    }
+  };
+
   const handleCloseComanda = async (method: 'dinheiro' | 'pix' | 'cartao') => {
     if (!comanda?.total || comanda.total <= 0 || isSubmitting || !store) return;
     setIsSubmitting(true);
@@ -140,6 +166,10 @@ export default function ComandaDetailsPage() {
       if (!res.success) throw new Error(res.message);
 
       toast({ title: 'Venda registrada!', description: 'Comanda encerrada com sucesso.' });
+      
+      // Impressão automática no fechamento
+      handlePrint();
+
       await refreshStatus(); 
       router.push('/comandas');
     } catch (err: any) {
@@ -171,9 +201,14 @@ export default function ComandaDetailsPage() {
           </div>
         </div>
 
-        <div className="bg-background p-5 rounded-2xl border border-primary/10 shadow-sm flex flex-col items-end ring-4 ring-primary/5">
-          <p className="text-[9px] font-black uppercase text-muted-foreground tracking-widest mb-1 opacity-60">Consumo Acumulado</p>
-          <p className="text-4xl font-black text-primary tracking-tighter">{formatCurrency(comanda?.total || 0)}</p>
+        <div className="flex items-center gap-4">
+          <Button variant="outline" size="icon" onClick={handlePrint} className="h-12 w-12 rounded-xl">
+            <Printer className="h-5 w-5" />
+          </Button>
+          <div className="bg-background p-5 rounded-2xl border border-primary/10 shadow-sm flex flex-col items-end ring-4 ring-primary/5">
+            <p className="text-[9px] font-black uppercase text-muted-foreground tracking-widest mb-1 opacity-60">Consumo Acumulado</p>
+            <p className="text-4xl font-black text-primary tracking-tighter">{formatCurrency(comanda?.total || 0)}</p>
+          </div>
         </div>
       </div>
 
