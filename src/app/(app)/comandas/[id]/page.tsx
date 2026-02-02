@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/components/auth-provider';
 import { supabase } from '@/lib/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -19,17 +19,16 @@ import {
   MapPin,
   CreditCard,
   Send,
-  Clock,
   Search,
   Coins,
   Printer,
-  FileText
+  FileText,
+  PiggyBank
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import type { ComandaItem, Product, ComandaTotalView, Customer } from '@/lib/types';
-import { printReceipt } from '@/lib/print-receipt';
 import { generateReceiptHTML } from '@/components/receipt/receipt-template';
 
 const formatCurrency = (val: number) => 
@@ -85,9 +84,12 @@ export default function ComandaDetailsPage() {
     fetchData();
     const channel = supabase.channel(`sync_comanda_${id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'comanda_itens', filter: `comanda_id=eq.${id}` }, () => fetchData())
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'comandas', filter: `id=eq.${id}` }, (payload: any) => {
+        if (payload.new.status === 'fechada') router.replace('/comandas');
+      })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [id, fetchData]);
+  }, [id, fetchData, router]);
 
   const addTempItem = (product: Product) => {
     setTempItems(prev => {
@@ -124,33 +126,26 @@ export default function ComandaDetailsPage() {
     }
   };
 
+  const handlePrintCupom = () => {
+    const content = document.getElementById('cupom-preview-frame')?.getAttribute('srcdoc');
+    if (!content) return;
+    
+    const win = window.open('', '_blank', 'width=400,height=600');
+    if (win) {
+      win.document.write(content);
+      win.document.close();
+      win.focus();
+      setTimeout(() => {
+        win.print();
+        win.close();
+      }, 500);
+    }
+  };
+
   const handleCloseComanda = async (method: 'dinheiro' | 'pix' | 'cartao') => {
     if (!comanda?.total || comanda.total <= 0 || isSubmitting || !store) return;
     setIsSubmitting(true);
     
-    // Captura o estado atual dos itens para a impressão ANTES de fechar e limpar a view
-    const itemsToPrint = items.map(i => ({
-      product_name_snapshot: i.product_name,
-      quantity: i.quantidade,
-      unit_price_cents: i.preco_unitario,
-      subtotal_cents: i.quantidade * i.preco_unitario
-    }));
-
-    const saleToPrint = {
-      id: 'final_print',
-      store_id: store.id,
-      created_at: new Date().toISOString(),
-      total_cents: Math.round(comanda.total * 100),
-      payment_method: method as any,
-      items: itemsToPrint
-    };
-
-    const comandaMetadata = {
-      numero: comanda.numero,
-      mesa: comanda.mesa || 'Balcão',
-      cliente: customer?.name || comanda.cliente_nome || 'Consumidor'
-    };
-
     try {
       const { data, error } = await supabase.rpc('fechar_comanda', {
         p_comanda_id: id as string,
@@ -162,10 +157,7 @@ export default function ComandaDetailsPage() {
       const res = typeof data === 'string' ? JSON.parse(data) : data;
       if (!res.success) throw new Error(res.message);
 
-      // Dispara a impressão do cupom com todos os detalhes
-      printReceipt(saleToPrint as any, store, comandaMetadata);
-
-      toast({ title: 'Venda registrada!', description: 'Comanda encerrada e cupom gerado.' });
+      toast({ title: 'Venda registrada!', description: 'Comanda encerrada com sucesso.' });
       await refreshStatus(); 
       router.push('/comandas');
     } catch (err: any) {
@@ -196,7 +188,7 @@ export default function ComandaDetailsPage() {
     });
   }, [comanda, store, items, customer]);
 
-  if (loading) return <div className="h-[60vh] flex flex-col items-center justify-center gap-4"><Loader2 className="animate-spin text-primary" /><p className="font-black uppercase text-[10px] tracking-widest text-muted-foreground">Carregando...</p></div>;
+  if (loading) return <div className="h-[60vh] flex flex-col items-center justify-center gap-4"><Loader2 className="animate-spin text-primary" /><p className="font-black uppercase text-[10px] tracking-widest text-muted-foreground">Sincronizando...</p></div>;
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 pb-32 animate-in fade-in duration-500">
@@ -215,7 +207,7 @@ export default function ComandaDetailsPage() {
         </div>
 
         <div className="bg-background p-5 rounded-2xl border border-primary/10 shadow-sm flex flex-col items-end ring-4 ring-primary/5">
-          <p className="text-[9px] font-black uppercase text-muted-foreground tracking-widest mb-1 opacity-60">Faturamento Acumulado</p>
+          <p className="text-[9px] font-black uppercase text-muted-foreground tracking-widest mb-1 opacity-60">Consumo Acumulado</p>
           <p className="text-4xl font-black text-primary tracking-tighter">{formatCurrency(comanda?.total || 0)}</p>
         </div>
       </div>
@@ -227,7 +219,7 @@ export default function ComandaDetailsPage() {
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary shadow-inner"><User className="h-5 w-5" /></div>
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cliente</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cliente Atendido</p>
                   <p className="font-black text-sm uppercase tracking-tight">{customer?.name || comanda?.cliente_nome || 'Consumidor Final'}</p>
                 </div>
               </div>
@@ -236,7 +228,7 @@ export default function ComandaDetailsPage() {
 
           {tempItems.length > 0 && (
             <Card className="border-primary bg-primary/5 shadow-2xl animate-in slide-in-from-top-2 duration-500 ring-2 ring-primary/20">
-              <CardHeader className="py-3 border-b border-primary/10"><CardTitle className="text-[10px] font-black uppercase text-primary flex items-center gap-2"><Plus className="h-3 w-3" /> Itens a Enviar</CardTitle></CardHeader>
+              <CardHeader className="py-3 border-b border-primary/10"><CardTitle className="text-[10px] font-black uppercase text-primary flex items-center gap-2"><Plus className="h-3 w-3" /> Rascunho de Pedido</CardTitle></CardHeader>
               <CardContent className="p-4 space-y-4">
                 <div className="space-y-2">
                   {tempItems.map(i => (
@@ -247,7 +239,7 @@ export default function ComandaDetailsPage() {
                   ))}
                 </div>
                 <Button className="w-full h-14 font-black uppercase tracking-widest shadow-xl shadow-primary/20" onClick={confirmOrder} disabled={isSubmitting}>
-                  {isSubmitting ? <Loader2 className="animate-spin mr-2 h-5 w-5" /> : <Send className="mr-2 h-4 w-4" />} Confirmar Pedido
+                  {isSubmitting ? <Loader2 className="animate-spin mr-2 h-5 w-5" /> : <Send className="mr-2 h-4 w-4" />} Enviar para Produção
                 </Button>
               </CardContent>
             </Card>
@@ -255,37 +247,42 @@ export default function ComandaDetailsPage() {
 
           <Card className="border-none shadow-sm overflow-hidden">
             <CardHeader className="flex flex-row justify-between items-center bg-muted/10 border-b py-4 px-6">
-              <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Itens Lançados</CardTitle>
-              <Button size="sm" onClick={() => setIsAdding(true)} className="h-9 px-4 font-black uppercase text-[10px] tracking-widest shadow-lg shadow-primary/10"><Plus className="h-3 w-3 mr-1.5" /> Adicionar</Button>
+              <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Consumo Registrado</CardTitle>
+              <Button size="sm" onClick={() => setIsAdding(true)} className="h-9 px-4 font-black uppercase text-[10px] tracking-widest shadow-lg shadow-primary/10"><Plus className="h-3 w-3 mr-1.5" /> Lançar Item</Button>
             </CardHeader>
-            <Table>
-              <TableBody>
-                {items.map(item => (
-                  <TableRow key={item.id} className="hover:bg-muted/5 transition-colors border-b border-muted/10">
-                    <TableCell className="font-bold py-4 px-6 uppercase text-xs">
-                      {item.product_name}
-                      <div className="flex gap-2 mt-1">
-                        <Badge variant="outline" className="text-[8px] font-black uppercase h-4 px-1.5 border-primary/10">{item.destino_preparo}</Badge>
-                        <Badge className="text-[8px] h-4 px-1.5 uppercase font-black" variant={item.status === 'pronto' ? 'default' : 'secondary'}>{item.status}</Badge>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-center font-black text-xs px-6">x{item.quantidade}</TableCell>
-                    <TableCell className="text-right font-black text-primary px-6">{formatCurrency(item.quantidade * item.preco_unitario)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <div className="p-0">
+              <Table>
+                <TableBody>
+                  {items.map(item => (
+                    <TableRow key={item.id} className="hover:bg-muted/5 transition-colors border-b border-muted/10">
+                      <TableCell className="font-bold py-4 px-6 uppercase text-xs">
+                        {item.product_name}
+                        <div className="flex gap-2 mt-1">
+                          <Badge variant="outline" className="text-[8px] font-black uppercase h-4 px-1.5 border-primary/10">{item.destino_preparo}</Badge>
+                          <Badge className="text-[8px] h-4 px-1.5 uppercase font-black" variant={item.status === 'pronto' ? 'default' : 'secondary'}>{item.status}</Badge>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center font-black text-xs px-6">x{item.quantidade}</TableCell>
+                      <TableCell className="text-right font-black text-primary px-6">{formatCurrency(item.quantidade * item.preco_unitario)}</TableCell>
+                    </TableRow>
+                  ))}
+                  {items.length === 0 && (
+                    <TableRow><TableCell colSpan={3} className="text-center py-10 text-muted-foreground text-xs uppercase font-black">Nenhum consumo no momento.</TableCell></TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </Card>
         </div>
 
         <div className="space-y-6">
           <Card className="border-primary/20 bg-primary/5 shadow-2xl overflow-hidden sticky top-24 ring-1 ring-primary/10">
             <CardHeader className="bg-primary/10 text-center py-6 border-b border-primary/5">
-              <CardTitle className="text-xs font-black uppercase tracking-widest text-primary">Conclusão no Caixa</CardTitle>
+              <CardTitle className="text-xs font-black uppercase tracking-widest text-primary">Conclusão de Venda</CardTitle>
             </CardHeader>
             <CardContent className="p-8 space-y-6">
               <div className="text-center space-y-1 py-6 bg-background rounded-2xl border border-primary/5 shadow-inner">
-                <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest mb-1">Total a Pagar</p>
+                <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest mb-1">Total da Conta</p>
                 <p className="text-5xl font-black text-foreground tracking-tighter">{formatCurrency(comanda?.total || 0)}</p>
               </div>
               <Button className="w-full h-20 text-lg font-black uppercase tracking-widest shadow-2xl shadow-primary/30 transition-all hover:scale-[1.03] active:scale-95 group" onClick={() => setIsClosing(true)} disabled={!comanda?.total || comanda.total <= 0 || tempItems.length > 0}>
@@ -296,29 +293,33 @@ export default function ComandaDetailsPage() {
         </div>
       </div>
 
-      {/* Modal Pagamento e Cupom */}
       <Dialog open={isClosing} onOpenChange={setIsClosing}>
         <DialogContent className="sm:max-w-2xl border-none shadow-2xl p-0 overflow-hidden">
           <div className="grid md:grid-cols-2">
             <div className="p-8 bg-muted/30 border-r border-muted/20">
-              <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground mb-6">
-                <FileText className="h-4 w-4" /> Pré-visualização do Cupom
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">
+                  <FileText className="h-4 w-4" /> Pré-conferência
+                </div>
+                <Button size="sm" variant="outline" className="h-8 font-black uppercase text-[9px]" onClick={handlePrintCupom}>
+                  <Printer className="h-3 w-3 mr-1.5" /> Imprimir
+                </Button>
               </div>
               <div className="bg-white p-4 shadow-inner rounded border border-muted/20 max-h-[400px] overflow-auto">
-                <iframe srcDoc={receiptPreviewHTML} className="w-full h-[600px] border-none scale-90 origin-top" />
+                <iframe id="cupom-preview-frame" srcDoc={receiptPreviewHTML} className="w-full h-[600px] border-none scale-90 origin-top" />
               </div>
             </div>
             <div className="p-8 bg-background flex flex-col justify-center">
               <DialogHeader className="mb-8">
-                <DialogTitle className="font-black uppercase tracking-tighter text-2xl">Recebimento</DialogTitle>
-                <DialogDescription className="font-bold text-[10px] uppercase tracking-widest">Selecione o método de pagamento</DialogDescription>
+                <DialogTitle className="font-black uppercase tracking-tighter text-2xl">Pagamento</DialogTitle>
+                <DialogDescription className="font-bold text-[10px] uppercase tracking-widest">Escolha o meio para finalizar</DialogDescription>
               </DialogHeader>
               <div className="flex flex-col gap-3">
                 <Button variant="outline" className="h-16 justify-start text-sm font-black uppercase tracking-widest gap-4 border-2 bg-background hover:border-green-500 hover:bg-green-50" onClick={() => handleCloseComanda('dinheiro')}>
                   <div className="h-10 w-10 rounded-xl bg-green-100 flex items-center justify-center"><Coins className="h-6 w-6 text-green-600" /></div> Dinheiro
                 </Button>
                 <Button variant="outline" className="h-16 justify-start text-sm font-black uppercase tracking-widest gap-4 border-2 bg-background hover:border-cyan-500 hover:bg-cyan-50" onClick={() => handleCloseComanda('pix')}>
-                  <div className="h-10 w-10 rounded-xl bg-cyan-100 flex items-center justify-center"><Plus className="h-6 w-6 text-cyan-600" /></div> PIX
+                  <div className="h-10 w-10 rounded-xl bg-cyan-100 flex items-center justify-center"><PiggyBank className="h-6 w-6 text-cyan-600" /></div> PIX
                 </Button>
                 <Button variant="outline" className="h-16 justify-start text-sm font-black uppercase tracking-widest gap-4 border-2 bg-background hover:border-blue-500 hover:bg-blue-50" onClick={() => handleCloseComanda('cartao')}>
                   <div className="h-10 w-10 rounded-xl bg-blue-100 flex items-center justify-center"><CreditCard className="h-6 w-6 text-blue-600" /></div> Cartão
@@ -329,7 +330,7 @@ export default function ComandaDetailsPage() {
           {isSubmitting && (
             <div className="absolute inset-0 bg-background/90 backdrop-blur-sm flex flex-col items-center justify-center z-50 animate-in fade-in">
               <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-foreground">Processando Venda...</p>
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-foreground">Finalizando Venda...</p>
             </div>
           )}
         </DialogContent>
@@ -340,7 +341,7 @@ export default function ComandaDetailsPage() {
           <div className="p-6 space-y-6">
             <div className="relative">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Filtrar por nome..." value={search} onChange={e => setSearch(e.target.value)} className="h-14 pl-11 text-lg font-bold" autoFocus />
+              <Input placeholder="Pesquisar produto..." value={search} onChange={e => setSearch(e.target.value)} className="h-14 pl-11 text-lg font-bold" autoFocus />
             </div>
             <ScrollArea className="h-[50vh] pr-4">
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -356,7 +357,7 @@ export default function ComandaDetailsPage() {
             </ScrollArea>
           </div>
           <DialogFooter className="p-6 bg-muted/30 border-t">
-            <Button className="w-full h-12 font-black uppercase text-xs tracking-widest" onClick={() => setIsAdding(false)}>Voltar</Button>
+            <Button className="w-full h-12 font-black uppercase text-xs tracking-widest" onClick={() => setIsAdding(false)}>Voltar para Comanda</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

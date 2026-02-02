@@ -22,7 +22,6 @@ export default function BarPage() {
   const fetchPedidos = useCallback(async () => {
     if (!store?.id) return;
     try {
-      // Regra de Ouro: Consultar a View mas aplicar filtro de store_id para segurança SaaS
       const { data, error } = await supabase
         .from('v_painel_bar')
         .select('*')
@@ -30,10 +29,7 @@ export default function BarPage() {
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-
-      // Filtro preventivo no frontend: apenas o que não está pronto
-      const pendentes = (data || []).filter((p: any) => p.status !== 'pronto' && p.status !== 'cancelado');
-      setPedidos(pendentes);
+      setPedidos(data || []);
     } catch (err: any) {
       console.error('[BDS_FETCH_ERROR]', err);
     } finally {
@@ -43,12 +39,10 @@ export default function BarPage() {
 
   useEffect(() => {
     fetchPedidos();
+    const clockInterval = setInterval(() => setNow(new Date()), 30000);
 
-    const interval = setInterval(() => setNow(new Date()), 30000);
-
-    // Escuta mudanças na tabela base para atualizar a View
     const channel = supabase
-      .channel('bds_sync_global')
+      .channel('bds_realtime_sync')
       .on('postgres_changes', { 
         event: '*', 
         schema: 'public', 
@@ -64,26 +58,26 @@ export default function BarPage() {
 
     return () => { 
       supabase.removeChannel(channel);
-      clearInterval(interval);
+      clearInterval(clockInterval);
     };
   }, [store?.id, fetchPedidos]);
 
   const handleMarkReady = async (itemId: string) => {
-    // 🚀 ATUALIZAÇÃO OTIMISTA: Remove do estado local para feedback instantâneo
     setPedidos(prev => prev.filter(p => p.item_id !== itemId));
 
     try {
       const { error } = await supabase
         .from('comanda_itens')
-        .update({ status: 'pronto' })
+        .update({ 
+          status: 'pronto',
+          finished_at: new Date().toISOString()
+        })
         .eq('id', itemId);
 
       if (error) throw error;
-      
-      toast({ title: 'Bebida Pronta!', description: 'O item foi retirado da fila de preparo do bar.' });
+      toast({ title: 'Bar: Bebida Servida!', description: 'Item retirado da fila.' });
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Erro ao concluir', description: err.message });
-      // Rollback apenas em caso de falha real na API
+      toast({ variant: 'destructive', title: 'Erro ao concluir bebida', description: err.message });
       fetchPedidos();
     }
   };
@@ -98,9 +92,9 @@ export default function BarPage() {
   return (
     <div className="space-y-10 animate-in fade-in duration-500">
       <div className="flex items-center justify-between">
-        <PageHeader title="Bar (BDS)" subtitle="Monitor de bebidas e coquetéis." />
+        <PageHeader title="Bar (BDS)" subtitle="Monitor de bebidas, chopp e coquetéis." />
         <Badge variant="outline" className="h-10 px-4 gap-2 font-black uppercase text-xs border-cyan-200 bg-cyan-50 text-cyan-600">
-          <GlassWater className="h-4 w-4" /> {pedidos.length} Drinks Pendentes
+          <GlassWater className="h-4 w-4" /> {pedidos.length} Drinks
         </Badge>
       </div>
 
@@ -108,10 +102,10 @@ export default function BarPage() {
         {pedidos.map(p => {
           const elapsed = differenceInMinutes(now, parseISO(p.created_at));
           const targetTime = p.prep_time_minutes || 5;
-          const isLate = elapsed > targetTime;
+          const isLate = elapsed >= targetTime;
 
           return (
-            <Card key={p.item_id} className={`border-none shadow-xl overflow-hidden transition-all duration-300 ${isLate ? 'bg-red-50 ring-2 ring-red-500 ring-offset-2 animate-pulse' : 'bg-background'}`}>
+            <Card key={p.item_id} className={`border-none shadow-xl overflow-hidden transition-all duration-300 ${isLate ? 'atrasado ring-2 ring-red-500 ring-offset-2' : 'bg-background border-muted'}`}>
               <div className={`px-6 py-4 flex justify-between items-center border-b ${isLate ? 'bg-red-500/10 border-red-500/20' : 'bg-cyan-500/5 border-cyan-500/10'}`}>
                 <div className="flex flex-col">
                   <span className={`text-2xl font-black font-headline tracking-tighter uppercase leading-none ${isLate ? 'text-red-700' : 'text-foreground'}`}>
@@ -125,7 +119,7 @@ export default function BarPage() {
                   <div className="flex items-center gap-1.5">
                     <Clock className="h-3 w-3" /> {elapsed} min
                   </div>
-                  {isLate && <Badge className="bg-red-600 text-[8px] h-4 px-1 gap-1"><AlertTriangle className="h-2 w-2" /> ATRASADO</Badge>}
+                  {isLate && <Badge className="bg-red-600 text-[8px] h-4 px-1 gap-1 border-none shadow-lg shadow-red-200">ATRASADO</Badge>}
                 </div>
               </div>
               
@@ -141,10 +135,10 @@ export default function BarPage() {
                 </div>
 
                 <Button 
-                  className={`w-full h-14 font-black uppercase tracking-widest text-xs transition-all ${isLate ? 'bg-red-600 hover:bg-red-700 shadow-xl shadow-red-200' : 'bg-cyan-600 hover:bg-cyan-700 shadow-lg shadow-cyan-100'}`} 
+                  className={`w-full h-14 font-black uppercase tracking-widest text-xs transition-all ${isLate ? 'bg-red-600 hover:bg-red-700 shadow-xl shadow-red-300' : 'bg-cyan-600 hover:bg-cyan-700 shadow-lg shadow-cyan-100'}`} 
                   onClick={() => handleMarkReady(p.item_id)}
                 >
-                  <CheckCircle2 className="h-4 w-4 mr-2" /> Marcar como Servido
+                  <CheckCircle2 className="h-4 w-4 mr-2" /> Servir Agora
                 </Button>
               </CardContent>
             </Card>
