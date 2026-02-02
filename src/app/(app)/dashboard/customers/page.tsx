@@ -1,7 +1,9 @@
+
 'use client';
 
 /**
  * @fileOverview Gestão de Clientes do Dashboard com Histórico de Compras.
+ * Refinado para corresponder exatamente à imagem solicitada.
  */
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
@@ -24,10 +26,10 @@ import {
   Users, 
   ShoppingBag, 
   History, 
-  Receipt,
   CalendarDays,
   CreditCard,
-  ChevronRight
+  ChevronRight,
+  X
 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -88,8 +90,6 @@ export default function CustomersDashboardPage() {
     setCustomerSales([]);
 
     try {
-      // Buscamos as vendas vinculadas a este cliente através do customer_id ou join com comandas
-      // Assumindo a estrutura padrão de histórico onde a venda guarda o customer_id
       const { data, error } = await supabase
         .from('sales')
         .select('*, items:sale_items(*)')
@@ -100,7 +100,11 @@ export default function CustomersDashboardPage() {
       setCustomerSales(data || []);
     } catch (err: any) {
       console.error('[HISTORY_FETCH_ERROR]', err);
-      toast({ variant: 'destructive', title: 'Erro ao buscar histórico', description: 'Não foi possível carregar as compras deste cliente.' });
+      toast({ 
+        variant: 'destructive', 
+        title: 'Erro ao buscar histórico', 
+        description: 'Não foi possível carregar as compras deste cliente.' 
+      });
     } finally {
       setHistoryLoading(false);
     }
@@ -238,14 +242,14 @@ export default function CustomersDashboardPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-56 p-2">
-                            <DropdownMenuItem onClick={() => loadCustomerHistory(c)} className="py-2.5 font-bold text-xs gap-3">
+                            <DropdownMenuItem onClick={() => loadCustomerHistory(c)} className="py-2.5 font-bold text-xs gap-3 cursor-pointer">
                               <History className="h-4 w-4 text-primary" /> Histórico de Compras
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => { setEditingCustomer(c); setIsModalOpen(true); }} className="py-2.5 font-bold text-xs gap-3">
+                            <DropdownMenuItem onClick={() => { setEditingCustomer(c); setIsModalOpen(true); }} className="py-2.5 font-bold text-xs gap-3 cursor-pointer">
                               <Edit className="h-4 w-4" /> Editar Perfil
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleDelete(c.id)} className="py-2.5 font-black text-xs text-destructive gap-3 hover:bg-destructive/10">
+                            <DropdownMenuItem onClick={() => handleDelete(c.id)} className="py-2.5 font-black text-xs text-destructive gap-3 hover:bg-destructive/10 cursor-pointer">
                               <Trash2 className="h-4 w-4" /> Excluir Cliente
                             </DropdownMenuItem>
                           </DropdownMenuContent>
@@ -268,80 +272,95 @@ export default function CustomersDashboardPage() {
         </CardContent>
       </Card>
 
-      {/* MODAL: HISTÓRICO DE COMPRAS */}
+      {/* MODAL: HISTÓRICO DE CONSUMO (REFINADO CONFORME IMAGEM) */}
       <Dialog open={isHistoryOpen} onOpenChange={setIsHistoryOpen}>
-        <DialogContent className="sm:max-w-2xl p-0 overflow-hidden border-none shadow-2xl">
-          <div className="bg-primary/5 pt-10 pb-6 px-8 border-b border-primary/10">
-            <div className="flex items-center justify-between mb-4">
-              <div className="h-12 w-12 rounded-2xl bg-white flex items-center justify-center shadow-sm border border-primary/10">
-                <History className="h-6 w-6 text-primary" />
+        <DialogContent className="sm:max-w-3xl p-0 overflow-hidden border-none shadow-2xl">
+          {/* Close button handled by Dialog, but we can style the top part */}
+          <div className="bg-background pt-12 pb-8 px-10 relative">
+            <div className="flex items-start justify-between">
+              <div className="flex items-start gap-4">
+                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                  <History className="h-6 w-6 text-primary" />
+                </div>
+                <div className="space-y-1">
+                  <DialogHeader className="text-left">
+                    <DialogTitle className="text-3xl font-black font-headline uppercase tracking-tighter leading-none">Histórico de Consumo</DialogTitle>
+                    <DialogDescription className="font-bold text-muted-foreground uppercase text-[10px] tracking-widest pt-1">
+                      Cliente: <span className="text-foreground">{selectedCustomer?.name}</span>
+                    </DialogDescription>
+                  </DialogHeader>
+                </div>
               </div>
-              <Badge variant="outline" className="font-black text-[10px] uppercase tracking-widest bg-white border-primary/20 text-primary">
+              <Badge variant="outline" className="font-black text-[9px] uppercase tracking-widest border-primary/20 text-primary py-1 px-3">
                 {customerSales.length} Compras Realizadas
               </Badge>
             </div>
-            <DialogHeader>
-              <DialogTitle className="text-3xl font-black font-headline uppercase tracking-tighter leading-none">Histórico de Consumo</DialogTitle>
-              <DialogDescription className="font-bold text-muted-foreground uppercase text-[10px] tracking-widest pt-1">
-                Cliente: <span className="text-foreground">{selectedCustomer?.name}</span>
-              </DialogDescription>
-            </DialogHeader>
           </div>
 
-          <ScrollArea className="max-h-[60vh] bg-background">
-            <div className="p-8">
+          <ScrollArea className="max-h-[55vh] bg-[#F8FAFC]">
+            <div className="p-10">
               {historyLoading ? (
                 <div className="py-20 text-center space-y-4">
-                  <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary/20" />
-                  <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Recuperando transações...</p>
+                  <Loader2 className="h-10 w-10 animate-spin mx-auto text-primary/20" />
+                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Recuperando transações...</p>
                 </div>
               ) : customerSales.length > 0 ? (
                 <div className="space-y-6">
                   {customerSales.map((sale) => (
-                    <Card key={sale.id} className="border-primary/5 shadow-sm hover:border-primary/20 transition-all overflow-hidden">
-                      <CardHeader className="bg-muted/30 py-3 px-4 flex flex-row items-center justify-between space-y-0">
+                    <Card key={sale.id} className="border-none shadow-sm hover:shadow-md transition-all overflow-hidden bg-background">
+                      <CardHeader className="bg-muted/20 py-4 px-6 flex flex-row items-center justify-between space-y-0">
                         <div className="flex items-center gap-3">
-                          <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                          <CalendarDays className="h-4 w-4 text-muted-foreground opacity-60" />
                           <span className="text-xs font-black uppercase tracking-tight">
                             {format(parseISO(sale.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
                           </span>
                         </div>
-                        <Badge className="font-black text-[9px] uppercase h-5 gap-1 bg-background border-primary/10 text-primary" variant="outline">
+                        <Badge className="font-black text-[9px] uppercase h-6 gap-1.5 bg-background border-primary/10 text-primary" variant="outline">
                           <CreditCard className="h-3 w-3" /> {sale.payment_method}
                         </Badge>
                       </CardHeader>
-                      <CardContent className="p-4 space-y-4">
-                        <div className="space-y-2">
+                      <CardContent className="p-6 space-y-4">
+                        <div className="space-y-3">
                           {sale.items?.map((item, idx) => (
                             <div key={idx} className="flex justify-between items-center text-xs font-bold">
-                              <div className="flex items-center gap-2">
-                                <span className="text-primary opacity-60">x{item.quantity}</span>
-                                <span className="uppercase tracking-tight truncate max-w-[200px]">{item.product_name_snapshot}</span>
+                              <div className="flex items-center gap-3">
+                                <Badge variant="secondary" className="text-[9px] font-black h-5 px-1.5 min-w-[24px] justify-center">x{item.quantity}</Badge>
+                                <span className="uppercase tracking-tight truncate max-w-[250px]">{item.product_name_snapshot}</span>
                               </div>
-                              <span className="text-muted-foreground">{formatCurrency(item.subtotal_cents)}</span>
+                              <span className="text-muted-foreground font-black">{formatCurrency(item.subtotal_cents)}</span>
                             </div>
                           ))}
                         </div>
-                        <Separator className="opacity-50" />
+                        <Separator className="opacity-30" />
                         <div className="flex justify-between items-center pt-1">
-                          <span className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Total da Venda</span>
-                          <span className="text-xl font-black tracking-tighter text-primary">{formatCurrency(sale.total_cents)}</span>
+                          <span className="text-[10px] font-black uppercase text-muted-foreground tracking-widest opacity-60">Valor Total da Venda</span>
+                          <span className="text-2xl font-black tracking-tighter text-primary">{formatCurrency(sale.total_cents)}</span>
                         </div>
                       </CardContent>
                     </Card>
                   ))}
                 </div>
               ) : (
-                <div className="py-20 text-center space-y-4 opacity-30">
-                  <ShoppingBag className="h-12 w-12 mx-auto" />
-                  <p className="text-xs font-black uppercase tracking-widest">Nenhuma compra registrada para este cliente.</p>
+                <div className="py-24 text-center space-y-6 opacity-40">
+                  <div className="h-20 w-20 rounded-2xl border-4 border-dashed border-muted-foreground/30 flex items-center justify-center mx-auto">
+                    <ShoppingBag className="h-10 w-10 text-muted-foreground" />
+                  </div>
+                  <p className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground max-w-[200px] mx-auto leading-relaxed">
+                    Nenhuma compra registrada para este cliente.
+                  </p>
                 </div>
               )}
             </div>
           </ScrollArea>
 
-          <div className="p-6 bg-muted/20 border-t flex justify-end">
-            <Button variant="ghost" onClick={() => setIsHistoryOpen(false)} className="font-black uppercase text-[10px] tracking-widest">Fechar Histórico</Button>
+          <div className="p-8 bg-background border-t flex justify-end">
+            <Button 
+              variant="ghost" 
+              onClick={() => setIsHistoryOpen(false)} 
+              className="font-black uppercase text-[10px] tracking-[0.15em] hover:bg-muted"
+            >
+              Fechar Histórico
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

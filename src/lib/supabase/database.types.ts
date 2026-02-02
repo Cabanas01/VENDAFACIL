@@ -180,6 +180,7 @@ export interface Database {
         Row: {
           id: string
           store_id: string
+          customer_id: string | null
           created_at: string
           total_cents: number
           payment_method: "cash" | "pix" | "card"
@@ -187,6 +188,7 @@ export interface Database {
         Insert: {
           id?: string
           store_id: string
+          customer_id?: string | null
           created_at?: string
           total_cents: number
           payment_method: "cash" | "pix" | "card"
@@ -194,6 +196,7 @@ export interface Database {
         Update: {
           id?: string
           store_id?: string
+          customer_id?: string | null
           created_at?: string
           total_cents?: number
           payment_method?: "cash" | "pix" | "card"
@@ -203,6 +206,12 @@ export interface Database {
             foreignKeyName: "sales_store_id_fkey"
             columns: ["store_id"]
             referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_customer_id_fkey"
+            columns: ["customer_id"]
+            referencedRelation: "customers"
             referencedColumns: ["id"]
           }
         ]
