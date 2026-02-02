@@ -70,7 +70,7 @@ export type Product = {
   active: boolean;
   barcode?: string;
   created_at: string;
-  destino_preparo: 'cozinha' | 'bar' | 'nenhum';
+  production_target: 'cozinha' | 'bar' | 'nenhum';
 };
 
 export type Sale = {
@@ -160,6 +160,7 @@ export type PainelProducaoView = {
   comanda_id: string;
   comanda_numero: number;
   mesa: string | null;
+  cliente_nome?: string | null;
   produto: string;
   quantidade: number;
   created_at: string;

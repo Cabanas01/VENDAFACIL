@@ -4,7 +4,7 @@ import { useState, useMemo, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Search, PlusCircle, ChevronsLeft, ChevronsRight, MoreHorizontal, AlertCircle, Edit, Trash2, Barcode, ChefHat, GlassWater } from 'lucide-react';
+import { Search, PlusCircle, ChevronsLeft, ChevronsRight, MoreHorizontal, AlertCircle, Edit, Trash2, Barcode, ChefHat, GlassWater, PackageCheck } from 'lucide-react';
 
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -60,7 +60,9 @@ const productSchema = z.object({
   active: z.boolean().default(true),
   price_cents: z.coerce.number().int().min(0, 'Preço deve ser positivo'),
   cost_cents: z.coerce.number().int().optional(),
-  destino_preparo: z.enum(['cozinha', 'bar', 'nenhum']).default('nenhum'),
+  production_target: z.enum(['cozinha', 'bar', 'nenhum'], {
+    required_error: 'Selecione o destino de preparo',
+  }),
 });
 
 type ProductFormValues = z.infer<typeof productSchema>;
@@ -76,7 +78,7 @@ const parseCurrency = (value: string) => {
 };
 
 export default function ProductsPage() {
-  const { products, addProduct, updateProduct, removeProduct, updateProductStock, findProductByBarcode } = useAuth();
+  const { products, addProduct, updateProduct, removeProduct, updateProductStock, findProductByBarcode, refreshStatus } = useAuth();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
@@ -93,6 +95,10 @@ export default function ProductsPage() {
 
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema),
+    defaultValues: {
+      active: true,
+      production_target: 'nenhum',
+    }
   });
 
   const { watch, setValue } = form;
@@ -130,10 +136,10 @@ export default function ProductsPage() {
         active: product.active,
         price_cents: product.price_cents,
         cost_cents: product.cost_cents,
-        destino_preparo: product.destino_preparo || 'nenhum',
+        production_target: product.production_target || 'nenhum',
       });
     } else {
-      form.reset({ active: true, stock_qty: 0, price_cents: 0, cost_cents: 0, category: '', min_stock_qty: 0, barcode: '', destino_preparo: 'nenhum' });
+      form.reset({ active: true, stock_qty: 0, price_cents: 0, cost_cents: 0, category: '', min_stock_qty: 0, barcode: '', production_target: 'nenhum' });
     }
     setIsModalOpen(true);
   };
@@ -160,6 +166,7 @@ export default function ProductsPage() {
         toast({ title: "Produto criado com sucesso!" });
       }
       setIsModalOpen(false);
+      await refreshStatus();
     } catch (error: any) {
         toast({ variant: 'destructive', title: "Erro ao salvar produto", description: error.message });
     }
@@ -170,6 +177,7 @@ export default function ProductsPage() {
     try {
         await removeProduct(productToDelete.id);
         toast({ title: "Produto excluído com sucesso!" });
+        await refreshStatus();
     } catch (error: any) {
         toast({ variant: 'destructive', title: "Erro ao excluir produto", description: error.message });
     } finally {
@@ -191,6 +199,7 @@ export default function ProductsPage() {
       }
       try {
           await updateProductStock(productId, newStock);
+          await refreshStatus();
       } catch (error: any) {
           toast({ variant: 'destructive', title: 'Erro ao ajustar estoque', description: error.message });
       }
@@ -276,7 +285,7 @@ export default function ProductsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Nome</TableHead>
-                  <TableHead>Preparação</TableHead>
+                  <TableHead>Destino</TableHead>
                   <TableHead>Preço</TableHead>
                   <TableHead>Custo</TableHead>
                   <TableHead>% Lucro</TableHead>
@@ -291,9 +300,9 @@ export default function ProductsPage() {
                   <TableRow key={p.id}>
                     <TableCell className="font-medium">{p.name}</TableCell>
                     <TableCell>
-                      {p.destino_preparo === 'cozinha' && <Badge variant="outline" className="gap-1 text-orange-600 border-orange-200"><ChefHat className="h-3 w-3" /> Cozinha</Badge>}
-                      {p.destino_preparo === 'bar' && <Badge variant="outline" className="gap-1 text-cyan-600 border-cyan-200"><GlassWater className="h-3 w-3" /> Bar</Badge>}
-                      {(!p.destino_preparo || p.destino_preparo === 'nenhum') && <span className="text-muted-foreground text-xs">Balcão</span>}
+                      {p.production_target === 'cozinha' && <Badge variant="outline" className="gap-1 text-orange-600 border-orange-200"><ChefHat className="h-3 w-3" /> Cozinha</Badge>}
+                      {p.production_target === 'bar' && <Badge variant="outline" className="gap-1 text-cyan-600 border-cyan-200"><GlassWater className="h-3 w-3" /> Bar</Badge>}
+                      {(!p.production_target || p.production_target === 'nenhum') && <Badge variant="outline" className="gap-1 text-muted-foreground border-muted-foreground/20"><PackageCheck className="h-3 w-3" /> Balcão</Badge>}
                     </TableCell>
                     <TableCell>{formatCurrency(p.price_cents)}</TableCell>
                     <TableCell>{formatCurrency(p.cost_cents)}</TableCell>
@@ -334,16 +343,16 @@ export default function ProductsPage() {
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>{editingProduct ? 'Editar Produto' : 'Novo Produto'}</DialogTitle>
-            <DialogDescription>Preencha as informações do produto.</DialogDescription>
+            <DialogDescription>Preencha as informações estratégicas e de produção do item.</DialogDescription>
           </DialogHeader>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <FormField name="name" control={form.control} render={({ field }) => (
-                  <FormItem><FormLabel>Nome</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                  <FormItem><FormLabel>Nome do Produto</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                 )} />
                 <FormField name="category" control={form.control} render={({ field }) => (
-                  <FormItem><FormLabel>Categoria (opcional)</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                  <FormItem><FormLabel>Categoria</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                 )} />
               </div>
               
@@ -362,19 +371,19 @@ export default function ProductsPage() {
                     <FormMessage />
                   </FormItem>
                 )} />
-                <FormField name="destino_preparo" control={form.control} render={({ field }) => (
+                <FormField name="production_target" control={form.control} render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Destino de Preparo</FormLabel>
+                    <FormLabel className="text-primary font-black">Destino de Produção (Obrigatório)</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione o destino" />
+                        <SelectTrigger className="border-primary/30 font-bold">
+                          <SelectValue placeholder="Onde este item é preparado?" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="nenhum">Pronta Entrega (Balcão)</SelectItem>
-                        <SelectItem value="cozinha">Cozinha (Alimentos)</SelectItem>
-                        <SelectItem value="bar">Bar (Bebidas)</SelectItem>
+                        <SelectItem value="nenhum" className="font-bold">Pronta Entrega (Direto no Balcão)</SelectItem>
+                        <SelectItem value="cozinha" className="text-orange-600 font-bold">Cozinha (Alimentos/Pratos Quentes)</SelectItem>
+                        <SelectItem value="bar" className="text-cyan-600 font-bold">Bar (Bebidas/Drinks/Chopp)</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -387,22 +396,22 @@ export default function ProductsPage() {
                   <FormItem><FormLabel>Estoque Inicial</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
                 )} />
                 <FormField name="min_stock_qty" control={form.control} render={({ field }) => (
-                  <FormItem><FormLabel>Estoque Mínimo (opcional)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                  <FormItem><FormLabel>Estoque Mínimo</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
                 )} />
               </div>
 
-               <Card className="p-4 bg-muted/50">
+               <Card className="p-4 bg-muted/50 border-primary/10">
                 <div className="grid grid-cols-3 gap-4">
                     <FormField name="cost_cents" control={form.control} render={({ field }) => (
                     <FormItem>
-                        <FormLabel>Custo (R$)</FormLabel>
+                        <FormLabel>Custo Unitário (R$)</FormLabel>
                         <FormControl><Input placeholder="R$ 0,00" value={field.value != null ? new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2 }).format(field.value / 100) : ''} onChange={e => field.onChange(parseCurrency(e.target.value))} /></FormControl>
                         <FormMessage />
                     </FormItem>
                     )} />
                      <FormItem>
                         <FormLabel>% Lucro Desejada</FormLabel>
-                        <Input type="number" placeholder="30" value={profitMargin > 0 ? profitMargin.toFixed(0) : ''} onChange={e => {
+                        <Input type="number" placeholder="Ex: 30" value={profitMargin > 0 ? profitMargin.toFixed(0) : ''} onChange={e => {
                             const percent = Number(e.target.value);
                             if (cost != null) {
                                 setValue('price_cents', Math.round(cost * (1 + percent / 100)));
@@ -417,20 +426,23 @@ export default function ProductsPage() {
                     </FormItem>
                     )} />
                 </div>
-                <div className="text-sm text-muted-foreground mt-2 font-bold">
-                    Lucro bruto por unidade: {formatCurrency(price != null && cost != null ? price - cost : 0)}
+                <div className="text-sm text-muted-foreground mt-2 font-black uppercase tracking-tight">
+                    Lucro bruto estimado: <span className="text-primary">{formatCurrency(price != null && cost != null ? price - cost : 0)}</span> por unidade
                 </div>
                </Card>
               
               <FormField name="active" control={form.control} render={({ field }) => (
                 <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm bg-background">
-                  <div className="space-y-0.5"><FormLabel className="text-xs font-bold uppercase tracking-widest">Produto Ativo para Venda</FormLabel></div>
+                  <div className="space-y-0.5">
+                    <FormLabel className="text-xs font-black uppercase tracking-widest">Produto Ativo</FormLabel>
+                    <p className="text-[10px] text-muted-foreground">Itens inativos não aparecem no PDV.</p>
+                  </div>
                   <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
                 </FormItem>
               )} />
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
-                <Button type="submit">Salvar Produto</Button>
+                <Button type="submit" className="font-black uppercase text-xs tracking-widest shadow-lg shadow-primary/20">Salvar Produto</Button>
               </DialogFooter>
             </form>
           </Form>
@@ -441,14 +453,14 @@ export default function ProductsPage() {
       <AlertDialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar exclusão?</AlertDialogTitle>
+            <AlertDialogTitle>Excluir produto permanentemente?</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta ação não pode ser desfeita. O produto "{productToDelete?.name}" será permanentemente excluído.
+              Esta ação removerá o produto "{productToDelete?.name}" do seu catálogo. Históricos de vendas passadas não serão afetados.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteProduct} className="bg-destructive hover:bg-destructive/90">
+            <AlertDialogCancel>Voltar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteProduct} className="bg-destructive hover:bg-destructive/90 font-bold uppercase text-xs">
               Confirmar Exclusão
             </AlertDialogAction>
           </AlertDialogFooter>
