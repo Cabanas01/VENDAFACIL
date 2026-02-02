@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * @fileOverview Gestão Detalhada da Comanda - Fluxo de Pedido Confirmado
+ * @fileOverview Gestão Detalhada da Comanda - Fluxo de Pedido Confirmado e Fechamento via RPC
  */
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
@@ -37,7 +37,7 @@ import { cn } from '@/lib/utils';
 const formatCurrency = (val: number) => 
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((val || 0) / 100);
 
-const statusConfig: Record<string, { label: string, color: string, icon: React.ReactNode }> = {
+const itemStatusConfig: Record<string, { label: string, color: string, icon: React.ReactNode }> = {
   pendente: { label: 'Aguardando', color: 'bg-slate-500', icon: <Clock className="h-3 w-3 mr-1" /> },
   em_preparo: { label: 'Em Preparo', color: 'bg-orange-500', icon: <Loader2 className="h-3 w-3 mr-1 animate-spin" /> },
   pronto: { label: 'Pronto', color: 'bg-green-500', icon: <CheckCircle2 className="h-3 w-3 mr-1" /> },
@@ -51,7 +51,7 @@ type TempItem = {
 
 export default function ComandaDetailsPage() {
   const { id } = useParams();
-  const { store, products } = useAuth();
+  const { store, products, refreshStatus } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -65,7 +65,7 @@ export default function ComandaDetailsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchData = useCallback(async () => {
-    if (!id || !store?.id) return;
+    if (!id) return;
     try {
       const [comandaRes, itemsRes] = await Promise.all([
         supabase.from('v_comandas_totais').select('*').eq('comanda_id', id).single(),
@@ -80,17 +80,17 @@ export default function ComandaDetailsPage() {
     } finally {
       setLoading(false);
     }
-  }, [id, store?.id]);
+  }, [id]);
 
   useEffect(() => {
     fetchData();
     const channel = supabase
-      .channel(`comanda_${id}`)
+      .channel(`comanda_detail_${id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'comanda_itens', filter: `comanda_id=eq.${id}` }, () => fetchData())
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [id, store?.id, fetchData]);
+  }, [id, fetchData]);
 
   const filteredProducts = useMemo(() => 
     products.filter(p => p.active && (p.name.toLowerCase().includes(search.toLowerCase()) || (p.barcode || '').includes(search))),
@@ -104,7 +104,6 @@ export default function ComandaDetailsPage() {
       }
       return [...prev, { product, quantity: 1 }];
     });
-    toast({ title: 'Item no rascunho', description: `${product.name} adicionado.` });
   };
 
   const removeTempItem = (productId: string) => {
@@ -127,7 +126,7 @@ export default function ComandaDetailsPage() {
       const { error } = await supabase.from('comanda_itens').insert(itemsToInsert);
       if (error) throw error;
 
-      toast({ title: 'Pedido Enviado!', description: 'Itens enviados para produção.' });
+      toast({ title: 'Pedido Confirmado!', description: 'Itens enviados para produção.' });
       setTempItems([]);
       setIsAdding(false);
       fetchData();
@@ -138,57 +137,30 @@ export default function ComandaDetailsPage() {
     }
   };
 
-  const removeItemFromDb = async (itemId: string) => {
-    if (!confirm('Deseja cancelar este item já enviado?')) return;
-    try {
-      const { error } = await supabase.from('comanda_itens').delete().eq('id', itemId);
-      if (error) throw error;
-      toast({ title: 'Item removido' });
-      fetchData();
-    } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Erro ao remover', description: err.message });
-    }
-  };
-
   const handleCloseComanda = async (method: 'cash' | 'pix' | 'card') => {
     if (!comanda || !comanda.total || comanda.total <= 0) {
-      toast({ variant: 'destructive', title: 'Operação Bloqueada', description: 'Não há consumo registrado nesta comanda para fechar.' });
-      return;
-    }
-
-    if (tempItems.length > 0) {
-      toast({ variant: 'destructive', title: 'Pedido pendente', description: 'Confirme ou remova os itens em rascunho antes de fechar.' });
+      toast({ variant: 'destructive', title: 'Erro', description: 'Comanda sem consumo.' });
       return;
     }
 
     setIsSubmitting(true);
     try {
-      /**
-       * Chamada RPC Segura:
-       * O cálculo de total_cents ocorre integralmente no PostgreSQL,
-       * resolvendo a violação de constraint NOT NULL em 'sales'.
-       */
+      // Regra de Ouro: Confiança total na RPC de fechamento
       const { data, error } = await supabase.rpc('fechar_comanda', {
         p_comanda_id: id as string,
         p_payment_method: method
       });
 
       if (error) throw error;
-
-      // Se a RPC retornar JSON com success: false (validação interna da função)
-      if (data && typeof data === 'object' && 'success' in data && !data.success) {
-        throw new Error(data.message || 'Falha no processamento interno.');
-      }
       
+      // Sucesso
       toast({ title: 'Comanda Encerrada!', description: `Venda de ${formatCurrency(comanda.total)} registrada.` });
+      
+      // Recarregar dados globais para atualizar caixa/dashboard
+      await refreshStatus();
       router.push('/comandas');
     } catch (err: any) {
-      console.error('[CLOSE_ERROR]', err);
-      toast({ 
-        variant: 'destructive', 
-        title: 'Erro no fechamento', 
-        description: err.message || 'Verifique se o caixa está aberto e se há conexão com o banco.' 
-      });
+      toast({ variant: 'destructive', title: 'Falha no fechamento', description: err.message });
     } finally {
       setIsSubmitting(false);
     }
@@ -201,7 +173,7 @@ export default function ComandaDetailsPage() {
     </div>
   );
 
-  if (!comanda) return <div className="py-20 text-center text-muted-foreground">Comanda não localizada.</div>;
+  if (!comanda) return <div className="py-20 text-center text-muted-foreground uppercase font-black text-xs">Comanda não localizada.</div>;
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 pb-32">
@@ -215,7 +187,7 @@ export default function ComandaDetailsPage() {
             <Badge className="bg-green-500 font-black uppercase text-[9px] border-none text-white">Aberta</Badge>
           </div>
           {comanda.mesa && (
-            <p className="text-sm text-muted-foreground font-bold uppercase mt-1">Local: {comanda.mesa}</p>
+            <p className="text-sm text-muted-foreground font-bold uppercase mt-1">Identificação: {comanda.mesa}</p>
           )}
         </div>
         <div className="text-right">
@@ -228,10 +200,10 @@ export default function ComandaDetailsPage() {
         <div className="lg:col-span-2 space-y-6">
           {/* Rascunho de Novos Itens */}
           {tempItems.length > 0 && (
-            <Card className="border-primary border-2 shadow-xl bg-primary/5 animate-in slide-in-from-top-4 duration-300">
-              <CardHeader className="bg-primary/10 pb-4 border-b border-primary/10">
+            <Card className="border-primary border-2 shadow-xl bg-primary/5 animate-in slide-in-from-top-4">
+              <CardHeader className="bg-primary/10 border-b border-primary/10">
                 <CardTitle className="text-xs font-black uppercase tracking-widest flex items-center gap-2 text-primary">
-                  <ShoppingCart className="h-4 w-4" /> Itens a Enviar para Preparo
+                  <ShoppingCart className="h-4 w-4" /> Itens a Confirmar
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0">
@@ -250,25 +222,25 @@ export default function ComandaDetailsPage() {
                     ))}
                   </TableBody>
                 </Table>
-                <div className="p-4 bg-primary/10 border-t border-primary/10">
+                <div className="p-4">
                   <Button className="w-full h-12 font-black uppercase tracking-widest gap-2 shadow-lg" onClick={confirmOrder} disabled={isSubmitting}>
                     {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                    Confirmar e Enviar para Produção
+                    Confirmar Pedido
                   </Button>
                 </div>
               </CardContent>
             </Card>
           )}
 
-          {/* Itens já lançados e em produção */}
+          {/* Consumo Efetivado */}
           <Card className="border-none shadow-sm overflow-hidden">
             <CardHeader className="bg-muted/10 border-b pb-4">
               <div className="flex justify-between items-center">
                 <CardTitle className="text-xs font-black uppercase tracking-widest flex items-center gap-2">
-                  <ClipboardList className="h-4 w-4 text-primary" /> Consumo Lançado
+                  <ClipboardList className="h-4 w-4 text-primary" /> Histórico de Consumo
                 </CardTitle>
                 <Button size="sm" onClick={() => setIsAdding(true)} className="h-8 font-black uppercase text-[10px]">
-                  <Plus className="h-3 w-3 mr-1" /> Novo Item
+                  <Plus className="h-3 w-3 mr-1" /> Lançar Produto
                 </Button>
               </div>
             </CardHeader>
@@ -279,13 +251,11 @@ export default function ComandaDetailsPage() {
                     <TableHead className="font-black text-[10px] uppercase px-6">Produto</TableHead>
                     <TableHead className="font-black text-[10px] uppercase px-6 text-center">Status</TableHead>
                     <TableHead className="font-black text-[10px] uppercase px-6 text-right">Subtotal</TableHead>
-                    <TableHead className="text-right px-6"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {items.map(item => {
-                    const config = statusConfig[item.status] || statusConfig.pendente;
-                    const subtotal = item.quantidade * item.preco_unitario;
+                    const config = itemStatusConfig[item.status] || itemStatusConfig.pendente;
                     return (
                       <TableRow key={item.id} className="hover:bg-muted/5 transition-colors border-b border-muted/10">
                         <TableCell className="px-6 py-4">
@@ -300,22 +270,15 @@ export default function ComandaDetailsPage() {
                           </Badge>
                         </TableCell>
                         <TableCell className="px-6 text-right font-black text-sm text-foreground">
-                          {formatCurrency(subtotal)}
-                        </TableCell>
-                        <TableCell className="px-6 text-right">
-                          {item.status === 'pendente' && (
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={() => removeItemFromDb(item.id)}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          )}
+                          {formatCurrency(item.quantidade * item.preco_unitario)}
                         </TableCell>
                       </TableRow>
                     );
                   })}
                   {items.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={4} className="text-center py-20 text-muted-foreground text-xs font-black uppercase tracking-widest opacity-30">
-                        Nenhum item lançado ainda
+                      <TableCell colSpan={3} className="text-center py-20 text-muted-foreground text-xs font-black uppercase tracking-widest opacity-30">
+                        Nenhum item consumido
                       </TableCell>
                     </TableRow>
                   )}
@@ -329,7 +292,7 @@ export default function ComandaDetailsPage() {
           <Card className="border-primary/10 shadow-2xl bg-primary/5 sticky top-6">
             <CardContent className="p-8 space-y-6">
               <div className="space-y-1 text-center">
-                <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Saldo a Pagar</p>
+                <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Valor do Checkout</p>
                 <p className="text-5xl font-black text-primary tracking-tighter">{formatCurrency(comanda.total)}</p>
               </div>
               <Separator className="bg-primary/10" />
@@ -338,58 +301,57 @@ export default function ComandaDetailsPage() {
                 onClick={() => setIsClosing(true)}
                 disabled={!comanda.total || comanda.total <= 0 || tempItems.length > 0 || isSubmitting}
               >
-                <Wallet className="h-4 w-4" /> Fechar Conta
+                <Wallet className="h-4 w-4" /> Finalizar Pagamento
               </Button>
-              {tempItems.length > 0 && (
-                <p className="text-[9px] text-center text-red-500 font-black uppercase animate-pulse">
-                  Confirme os novos itens antes de fechar
-                </p>
-              )}
             </CardContent>
           </Card>
         </div>
       </div>
 
+      {/* Modal de Seleção de Produtos */}
       <Dialog open={isAdding} onOpenChange={setIsAdding}>
         <DialogContent className="sm:max-w-2xl p-0 overflow-hidden">
           <div className="p-6 bg-muted/30 border-b">
-            <DialogTitle className="font-black uppercase tracking-widest text-xs">Lançar Itens na Comanda</DialogTitle>
+            <DialogTitle className="font-black uppercase tracking-widest text-xs">Adicionar ao Pedido</DialogTitle>
             <div className="relative mt-4">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Buscar produto..." className="pl-10 h-12 text-sm font-bold" value={search} onChange={(e) => setSearch(e.target.value)} autoFocus />
+              <Input placeholder="Localizar produto..." className="pl-10 h-12 text-sm font-bold" value={search} onChange={(e) => setSearch(e.target.value)} autoFocus />
             </div>
           </div>
-          <ScrollArea className="h-[50vh] p-4 bg-background">
+          <ScrollArea className="h-[50vh] p-4">
             <div className="grid grid-cols-2 gap-3">
               {filteredProducts.map(p => (
-                <Card key={p.id} className="cursor-pointer hover:border-primary hover:bg-primary/5 transition-all shadow-sm" onClick={() => addTempItem(p)}>
+                <Card key={p.id} className="cursor-pointer hover:border-primary transition-all active:scale-95" onClick={() => addTempItem(p)}>
                   <CardContent className="p-4 flex justify-between items-center">
                     <div>
-                      <p className="font-black uppercase text-[10px] truncate text-foreground">{p.name}</p>
+                      <p className="font-black uppercase text-[10px] truncate max-w-[120px]">{p.name}</p>
                       <p className="text-sm font-black text-primary mt-1">{formatCurrency(p.price_cents)}</p>
                     </div>
-                    <Plus className="h-4 w-4 text-muted-foreground opacity-20" />
+                    <div className="h-8 w-8 rounded-full bg-primary/5 flex items-center justify-center">
+                      <Plus className="h-4 w-4 text-primary" />
+                    </div>
                   </CardContent>
                 </Card>
               ))}
             </div>
           </ScrollArea>
-          <DialogFooter className="p-4 bg-muted/30 border-t">
-            <Button variant="ghost" onClick={() => setIsAdding(false)} className="font-black uppercase text-[10px]">Fechar Menu</Button>
+          <DialogFooter className="p-4 bg-muted/10 border-t">
+            <Button variant="ghost" onClick={() => setIsAdding(false)} className="font-black uppercase text-[10px]">Cancelar</Button>
             {tempItems.length > 0 && (
-              <Button onClick={() => { setIsAdding(false); confirmOrder(); }} className="font-black uppercase text-[10px]">
-                Enviar {tempItems.length} Itens
+              <Button onClick={() => setIsAdding(false)} className="font-black uppercase text-[10px]">
+                Revisar {tempItems.length} Itens
               </Button>
             )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      {/* Modal de Pagamento */}
       <Dialog open={isClosing} onOpenChange={setIsClosing}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden">
           <div className="p-6 bg-primary/5 text-center border-b">
-            <DialogTitle className="font-black uppercase text-lg tracking-tighter">Escolha o Recebimento</DialogTitle>
-            <p className="text-muted-foreground text-xs font-bold mt-1 uppercase">Valor Final: {formatCurrency(comanda.total)}</p>
+            <DialogTitle className="font-black uppercase text-lg tracking-tighter">Escolha o Meio de Recebimento</DialogTitle>
+            <p className="text-muted-foreground text-xs font-bold mt-1 uppercase">Total a Receber: {formatCurrency(comanda.total)}</p>
           </div>
           <div className="grid grid-cols-1 gap-3 p-6">
             <Button variant="outline" className="h-16 justify-start font-black gap-4 border-2 hover:border-primary" onClick={() => handleCloseComanda('cash')} disabled={isSubmitting}>
@@ -408,7 +370,7 @@ export default function ComandaDetailsPage() {
           {isSubmitting && (
             <div className="absolute inset-0 bg-background/80 flex flex-col items-center justify-center z-50 animate-in fade-in">
               <Loader2 className="h-10 w-10 animate-spin text-primary mb-2" />
-              <p className="text-xs font-black uppercase tracking-widest">Sincronizando Banco...</p>
+              <p className="text-xs font-black uppercase tracking-widest">Processando Fluxo Financeiro...</p>
             </div>
           )}
         </DialogContent>
