@@ -71,6 +71,7 @@ export type Product = {
   barcode?: string;
   created_at: string;
   production_target: 'cozinha' | 'bar' | 'nenhum';
+  prep_time_minutes: number;
 };
 
 export type Sale = {
@@ -78,7 +79,7 @@ export type Sale = {
   store_id: string;
   created_at: string;
   total_cents: number;
-  payment_method: 'cash' | 'pix' | 'card';
+  payment_method: 'dinheiro' | 'pix' | 'cartao';
   items: SaleItem[];
 };
 
@@ -163,7 +164,9 @@ export type PainelProducaoView = {
   cliente_nome?: string | null;
   produto: string;
   quantidade: number;
+  status: string;
   created_at: string;
+  prep_time_minutes: number;
 };
 
 export type StoreStatus = 

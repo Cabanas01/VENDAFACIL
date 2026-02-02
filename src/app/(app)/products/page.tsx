@@ -4,7 +4,7 @@ import { useState, useMemo, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Search, PlusCircle, ChevronsLeft, ChevronsRight, MoreHorizontal, AlertCircle, Edit, Trash2, Barcode, ChefHat, GlassWater, PackageCheck } from 'lucide-react';
+import { Search, PlusCircle, ChevronsLeft, ChevronsRight, MoreHorizontal, AlertCircle, Edit, Trash2, Barcode, ChefHat, GlassWater, PackageCheck, Clock } from 'lucide-react';
 
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -63,6 +63,7 @@ const productSchema = z.object({
   production_target: z.enum(['cozinha', 'bar', 'nenhum'], {
     required_error: 'Selecione o destino de preparo',
   }),
+  prep_time_minutes: z.coerce.number().int().min(1, 'Tempo de preparo deve ser de pelo menos 1 minuto'),
 });
 
 type ProductFormValues = z.infer<typeof productSchema>;
@@ -98,6 +99,7 @@ export default function ProductsPage() {
     defaultValues: {
       active: true,
       production_target: 'nenhum',
+      prep_time_minutes: 5,
     }
   });
 
@@ -137,9 +139,10 @@ export default function ProductsPage() {
         price_cents: product.price_cents,
         cost_cents: product.cost_cents,
         production_target: product.production_target || 'nenhum',
+        prep_time_minutes: product.prep_time_minutes || 5,
       });
     } else {
-      form.reset({ active: true, stock_qty: 0, price_cents: 0, cost_cents: 0, category: '', min_stock_qty: 0, barcode: '', production_target: 'nenhum' });
+      form.reset({ active: true, stock_qty: 0, price_cents: 0, cost_cents: 0, category: '', min_stock_qty: 0, barcode: '', production_target: 'nenhum', prep_time_minutes: 5 });
     }
     setIsModalOpen(true);
   };
@@ -288,10 +291,9 @@ export default function ProductsPage() {
                   <TableHead>Destino</TableHead>
                   <TableHead>Preço</TableHead>
                   <TableHead>Custo</TableHead>
-                  <TableHead>% Lucro</TableHead>
                   <TableHead>Estoque</TableHead>
+                  <TableHead>Tempo Preparo</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Ações de Estoque</TableHead>
                   <TableHead className="text-right">Opções</TableHead>
                 </TableRow>
               </TableHeader>
@@ -306,18 +308,16 @@ export default function ProductsPage() {
                     </TableCell>
                     <TableCell>{formatCurrency(p.price_cents)}</TableCell>
                     <TableCell>{formatCurrency(p.cost_cents)}</TableCell>
-                    <TableCell>{p.cost_cents && p.price_cents > p.cost_cents ? `${(((p.price_cents - p.cost_cents) / p.cost_cents) * 100).toFixed(0)}%` : '-'}</TableCell>
                     <TableCell>
                       <Badge variant={p.stock_qty === 0 ? 'destructive' : p.min_stock_qty && p.stock_qty <= p.min_stock_qty ? 'default' : 'outline'} className={p.min_stock_qty && p.stock_qty <= p.min_stock_qty ? 'bg-yellow-500 text-white' : ''}>{p.stock_qty}</Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={p.active ? 'default' : 'secondary'} className={p.active ? 'bg-green-500' : ''}>{p.active ? 'Ativo' : 'Inativo'}</Badge>
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
+                        <Clock className="h-3 w-3" /> {p.prep_time_minutes || 0} min
+                      </div>
                     </TableCell>
                     <TableCell>
-                        <div className="flex items-center gap-1">
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => adjustStock(p.id, p.stock_qty, -1)}><ChevronsLeft className="h-4 w-4" /></Button>
-                             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => adjustStock(p.id, p.stock_qty, 1)}><ChevronsRight className="h-4 w-4" /></Button>
-                        </div>
+                      <Badge variant={p.active ? 'default' : 'secondary'} className={p.active ? 'bg-green-500' : ''}>{p.active ? 'Ativo' : 'Inativo'}</Badge>
                     </TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
@@ -357,20 +357,6 @@ export default function ProductsPage() {
               </div>
               
               <div className="grid grid-cols-2 gap-4">
-                <FormField name="barcode" control={form.control} render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Código de Barras</FormLabel>
-                    <div className="flex items-center gap-2">
-                      <FormControl>
-                        <Input {...field} ref={barcodeInputRef} placeholder="Digitar ou ler" />
-                      </FormControl>
-                      <Button type="button" variant="outline" onClick={() => barcodeInputRef.current?.focus()}>
-                        <Barcode className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <FormMessage />
-                  </FormItem>
-                )} />
                 <FormField name="production_target" control={form.control} render={({ field }) => (
                   <FormItem>
                     <FormLabel className="text-primary font-black">Destino de Produção (Obrigatório)</FormLabel>
@@ -386,6 +372,13 @@ export default function ProductsPage() {
                         <SelectItem value="bar" className="text-cyan-600 font-bold">Bar (Bebidas/Drinks/Chopp)</SelectItem>
                       </SelectContent>
                     </Select>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField name="prep_time_minutes" control={form.control} render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="flex items-center gap-2 font-bold"><Clock className="h-3 w-3" /> Tempo de Preparo (minutos) *</FormLabel>
+                    <FormControl><Input type="number" {...field} className="font-black" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -426,16 +419,12 @@ export default function ProductsPage() {
                     </FormItem>
                     )} />
                 </div>
-                <div className="text-sm text-muted-foreground mt-2 font-black uppercase tracking-tight">
-                    Lucro bruto estimado: <span className="text-primary">{formatCurrency(price != null && cost != null ? price - cost : 0)}</span> por unidade
-                </div>
                </Card>
               
               <FormField name="active" control={form.control} render={({ field }) => (
                 <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm bg-background">
                   <div className="space-y-0.5">
                     <FormLabel className="text-xs font-black uppercase tracking-widest">Produto Ativo</FormLabel>
-                    <p className="text-[10px] text-muted-foreground">Itens inativos não aparecem no PDV.</p>
                   </div>
                   <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
                 </FormItem>
@@ -449,13 +438,12 @@ export default function ProductsPage() {
         </DialogContent>
       </Dialog>
       
-      {/* Delete Confirmation Dialog */}
       <AlertDialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir produto permanentemente?</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta ação removerá o produto "{productToDelete?.name}" do seu catálogo. Históricos de vendas passadas não serão afetados.
+              Esta ação removerá o produto "{productToDelete?.name}" do seu catálogo.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -1,24 +1,24 @@
 'use client';
 
-/**
- * @fileOverview KDS - Painel de Cozinha Reativo (Visão Mesa/Cliente)
- */
-
 import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/components/auth-provider';
 import { supabase } from '@/lib/supabase/client';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ChefHat, Clock, History, Loader2, MapPin, Users } from 'lucide-react';
-import { formatDistanceToNow, parseISO } from 'date-fns';
+import { ChefHat, Clock, History, Loader2, MapPin, Users, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { formatDistanceToNow, parseISO, differenceInMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { PainelProducaoView } from '@/lib/types';
+import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
 
 export default function CozinhaPage() {
   const { store } = useAuth();
+  const { toast } = useToast();
   const [pedidos, setPedidos] = useState<PainelProducaoView[]>([]);
   const [loading, setLoading] = useState(true);
+  const [now, setNow] = useState(new Date());
 
   const fetchPedidos = useCallback(async () => {
     if (!store?.id) return;
@@ -40,74 +40,99 @@ export default function CozinhaPage() {
   useEffect(() => {
     fetchPedidos();
 
+    const interval = setInterval(() => setNow(new Date()), 30000);
+
     const channel = supabase
       .channel('kds_sync_global')
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'comandas',
-        filter: `store_id=eq.${store?.id}`
-      }, () => fetchPedidos())
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'comanda_itens' 
-      }, () => fetchPedidos())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'comandas', filter: `store_id=eq.${store?.id}` }, () => fetchPedidos())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'comanda_itens' }, () => fetchPedidos())
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => { 
+      supabase.removeChannel(channel);
+      clearInterval(interval);
+    };
   }, [store?.id, fetchPedidos]);
+
+  const handleMarkReady = async (itemId: string) => {
+    try {
+      const { error } = await supabase
+        .from('comanda_itens')
+        .update({ status: 'pronto' })
+        .eq('id', itemId);
+
+      if (error) throw error;
+      
+      toast({ title: 'Item Pronto!', description: 'O pedido foi marcado como concluído.' });
+      fetchPedidos();
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Erro', description: err.message });
+    }
+  };
 
   if (loading) return <div className="h-[60vh] flex flex-col items-center justify-center gap-4"><Loader2 className="animate-spin text-primary" /><p className="font-black uppercase text-[10px] tracking-widest text-muted-foreground">Sincronizando Cozinha...</p></div>;
 
   return (
     <div className="space-y-10">
       <div className="flex items-center justify-between">
-        <PageHeader title="Cozinha" subtitle="Pedidos para preparo quente." />
+        <PageHeader title="Cozinha (KDS)" subtitle="Monitor de produção quente." />
         <Badge variant="outline" className="h-10 px-4 gap-2 font-black uppercase text-xs border-primary/20 bg-primary/5">
           <ChefHat className="h-4 w-4 text-primary" /> {pedidos.length} Pedidos
         </Badge>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-        {pedidos.map(p => (
-          <Card key={p.item_id} className="border-none shadow-xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
-            <div className="px-6 py-4 flex justify-between items-center border-b bg-muted/30">
-              <div className="flex flex-col">
-                <span className="text-2xl font-black font-headline tracking-tighter uppercase leading-none">Comanda #{p.comanda_numero}</span>
-                <div className="flex items-center gap-3 mt-1.5">
-                  <div className="flex items-center gap-1 text-[10px] font-black uppercase text-primary">
-                    <MapPin className="h-3 w-3" /> {p.mesa || 'Sem mesa'}
-                  </div>
-                  {p.cliente_nome && (
-                    <div className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground uppercase tracking-tight">
-                      <Users className="h-3 w-3" /> {p.cliente_nome}
+        {pedidos.map(p => {
+          const elapsed = differenceInMinutes(now, parseISO(p.created_at));
+          const isLate = elapsed > (p.prep_time_minutes || 15);
+
+          return (
+            <Card key={p.item_id} className={`border-none shadow-xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300 transition-colors ${isLate ? 'bg-red-50 ring-2 ring-red-500 ring-offset-2 animate-pulse' : 'bg-background'}`}>
+              <div className={`px-6 py-4 flex justify-between items-center border-b ${isLate ? 'bg-red-500/10 border-red-500/20' : 'bg-muted/30 border-muted/20'}`}>
+                <div className="flex flex-col">
+                  <span className={`text-2xl font-black font-headline tracking-tighter uppercase leading-none ${isLate ? 'text-red-700' : 'text-foreground'}`}>
+                    Comanda #{p.comanda_numero}
+                  </span>
+                  <div className="flex items-center gap-3 mt-1.5">
+                    <div className={`flex items-center gap-1 text-[10px] font-black uppercase ${isLate ? 'text-red-600' : 'text-primary'}`}>
+                      <MapPin className="h-3 w-3" /> {p.mesa || 'Sem mesa'}
                     </div>
-                  )}
+                  </div>
+                </div>
+                <div className={`flex flex-col items-end gap-1 font-black uppercase text-[10px] ${isLate ? 'text-red-600' : 'text-muted-foreground'}`}>
+                  <div className="flex items-center gap-1.5">
+                    <Clock className="h-3 w-3" /> {elapsed} min
+                  </div>
+                  {isLate && <Badge className="bg-red-600 text-[8px] h-4 px-1 gap-1 animate-bounce"><AlertTriangle className="h-2 w-2" /> ATRASADO</Badge>}
                 </div>
               </div>
-              <div className="flex items-center gap-2 text-[10px] font-black uppercase text-muted-foreground">
-                <Clock className="h-3 w-3" /> {formatDistanceToNow(parseISO(p.created_at), { locale: ptBR })}
-              </div>
-            </div>
-            
-            <CardContent className="p-8 space-y-6">
-              <div className="flex justify-between items-start">
-                <div className="space-y-1">
-                  <p className="text-3xl font-black leading-tight uppercase tracking-tight text-foreground">{p.produto}</p>
+              
+              <CardContent className="p-8 space-y-8">
+                <div className="flex justify-between items-start">
+                  <div className="space-y-1">
+                    <p className={`text-3xl font-black leading-tight uppercase tracking-tight ${isLate ? 'text-red-900' : 'text-foreground'}`}>{p.produto}</p>
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase">Tempo Alvo: {p.prep_time_minutes} min</p>
+                  </div>
+                  <div className={`h-16 w-16 rounded-2xl flex items-center justify-center border transition-colors ${isLate ? 'bg-red-600 text-white border-red-700 shadow-lg' : 'bg-primary/10 text-primary border-primary/10'}`}>
+                    <span className="text-4xl font-black">{p.quantidade}</span>
+                  </div>
                 </div>
-                <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center border border-primary/10">
-                  <span className="text-4xl font-black text-primary">{p.quantidade}</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+
+                <Button 
+                  className={`w-full h-14 font-black uppercase tracking-widest text-xs transition-all ${isLate ? 'bg-red-600 hover:bg-red-700 shadow-xl shadow-red-200' : 'shadow-lg shadow-primary/10'}`} 
+                  onClick={() => handleMarkReady(p.item_id)}
+                >
+                  <CheckCircle2 className="h-4 w-4 mr-2" /> Marcar como Pronto
+                </Button>
+              </CardContent>
+            </Card>
+          );
+        })}
 
         {pedidos.length === 0 && (
           <div className="col-span-full py-40 text-center opacity-20 border-4 border-dashed rounded-[40px]">
             <History className="h-20 w-20 mx-auto" />
-            <p className="text-xl font-black uppercase mt-4">Cozinha em Ordem</p>
+            <p className="text-xl font-black uppercase mt-4 text-foreground">Cozinha em Ordem</p>
           </div>
         )}
       </div>
