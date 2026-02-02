@@ -1,5 +1,9 @@
-
 'use client';
+
+/**
+ * @fileOverview Painel de Cozinha (KDS) - Versão Sincronizada por Item.
+ * Consome exclusivamente a view v_painel_cozinha.
+ */
 
 import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/components/auth-provider';
@@ -7,7 +11,7 @@ import { supabase } from '@/lib/supabase/client';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ChefHat, Clock, History, Loader2, MapPin, CheckCircle2, RefreshCw } from 'lucide-react';
+import { ChefHat, Clock, History, Loader2, MapPin, CheckCircle2, Play, RefreshCw } from 'lucide-react';
 import { parseISO, differenceInMinutes } from 'date-fns';
 import type { PainelProducaoView } from '@/lib/types';
 import { Button } from '@/components/ui/button';
@@ -22,22 +26,17 @@ export default function CozinhaPage() {
 
   const fetchPedidos = useCallback(async () => {
     if (!store?.id) return;
-    setLoading(true);
     try {
       const { data, error } = await supabase
         .from('v_painel_cozinha')
         .select('*')
-        .eq('store_id', store.id)
-        .order('created_at', { ascending: true });
+        .eq('store_id', store.id);
 
       if (error) throw error;
-
-      // Filtragem defensiva: Remove qualquer item que o banco retorne mas já esteja pronto
-      const pendentes = (data || []).filter((p: any) => p.status !== 'pronto');
-      setPedidos(pendentes);
+      setPedidos(data || []);
     } catch (err: any) {
       console.error('[KDS_FETCH_ERROR]', err);
-      toast({ variant: 'destructive', title: 'Erro ao carregar cozinha', description: err.message });
+      toast({ variant: 'destructive', title: 'Erro KDS', description: err.message });
     } finally {
       setLoading(false);
     }
@@ -47,8 +46,9 @@ export default function CozinhaPage() {
     fetchPedidos();
     const clockInterval = setInterval(() => setNow(new Date()), 30000);
 
+    // Escuta mudanças na tabela base para atualizar a VIEW
     const channel = supabase
-      .channel('kds_realtime')
+      .channel('kds_sync')
       .on('postgres_changes', { 
         event: '*', 
         schema: 'public', 
@@ -57,8 +57,7 @@ export default function CozinhaPage() {
       .on('postgres_changes', { 
         event: 'UPDATE', 
         schema: 'public', 
-        table: 'comandas',
-        filter: `store_id=eq.${store?.id}`
+        table: 'comandas'
       }, () => fetchPedidos())
       .subscribe();
 
@@ -66,30 +65,30 @@ export default function CozinhaPage() {
       supabase.removeChannel(channel);
       clearInterval(clockInterval);
     };
-  }, [fetchPedidos, store?.id]);
+  }, [fetchPedidos]);
 
-  const handleMarkReady = async (itemId: string) => {
-    // Atualização otimista imediata
-    setPedidos(prev => prev.filter(p => p.item_id !== itemId));
-
+  const handleIniciar = async (itemId: string) => {
     try {
-      const { error } = await supabase
-        .from('comanda_itens')
-        .update({ 
-          status: 'pronto',
-          finished_at: new Date().toISOString()
-        })
-        .eq('id', itemId);
-
-      if (error) {
-        // Se der erro no banco, volta o item para a lista
-        fetchPedidos();
-        throw error;
-      }
-      
-      toast({ title: 'Item Pronto!', description: 'Pedido enviado para o balcão.' });
+      const { error } = await supabase.rpc('iniciar_preparo_item', { p_item_id: itemId });
+      if (error) throw error;
+      toast({ title: 'Preparo iniciado!' });
+      await fetchPedidos();
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Erro ao concluir', description: err.message });
+      toast({ variant: 'destructive', title: 'Erro', description: err.message });
+    }
+  };
+
+  const handleConcluir = async (itemId: string) => {
+    try {
+      const { error } = await supabase.rpc('concluir_item', { p_item_id: itemId });
+      if (error) throw error;
+      
+      // Atualização otimista local para remover da fila imediatamente
+      setPedidos(prev => prev.filter(p => p.item_id !== itemId));
+      toast({ title: 'Item concluído!' });
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Erro', description: err.message });
+      fetchPedidos();
     }
   };
 
@@ -105,12 +104,11 @@ export default function CozinhaPage() {
       <div className="flex items-center justify-between">
         <PageHeader title="Cozinha (KDS)" subtitle="Monitor de produção em tempo real." />
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={fetchPedidos} disabled={loading} className="h-10 px-4 font-black uppercase text-[10px] tracking-widest">
-            {loading ? <RefreshCw className="h-3 w-3 animate-spin mr-2" /> : <History className="h-3 w-3 mr-2" />}
-            Atualizar
+          <Button variant="outline" size="sm" onClick={fetchPedidos} className="h-10 px-4 font-black uppercase text-[10px] tracking-widest">
+            <RefreshCw className={`h-3 w-3 mr-2 ${loading ? 'animate-spin' : ''}`} /> Atualizar
           </Button>
           <Badge variant="outline" className="h-10 px-4 gap-2 font-black uppercase text-xs border-primary/20 bg-primary/5 text-primary">
-            <ChefHat className="h-4 w-4" /> {pedidos.length} Pedidos
+            <ChefHat className="h-4 w-4" /> {pedidos.length} Itens
           </Badge>
         </div>
       </div>
@@ -129,7 +127,7 @@ export default function CozinhaPage() {
                     Comanda #{p.comanda_numero}
                   </span>
                   <div className="flex items-center gap-1.5 mt-1.5 text-[10px] font-black uppercase text-primary">
-                    <MapPin className="h-3 w-3" /> {p.mesa || 'Sem mesa'}
+                    <MapPin className="h-3 w-3" /> {p.mesa || 'Balcão'}
                   </div>
                 </div>
                 <div className={`flex flex-col items-end gap-1 font-black uppercase text-[10px] ${isLate ? 'text-red-600' : 'text-muted-foreground'}`}>
@@ -140,23 +138,31 @@ export default function CozinhaPage() {
                 </div>
               </div>
               
-              <CardContent className="p-8 space-y-8">
+              <CardContent className="p-8 space-y-6">
                 <div className="flex justify-between items-start">
                   <div className="space-y-1">
                     <p className={`text-3xl font-black leading-tight uppercase tracking-tight ${isLate ? 'text-red-900' : 'text-foreground'}`}>{p.produto}</p>
-                    <p className="text-[10px] font-bold text-muted-foreground uppercase">Tempo Alvo: {targetTime} min</p>
+                    <Badge variant="secondary" className="text-[10px] font-black uppercase tracking-widest">{p.status?.replace('_', ' ')}</Badge>
                   </div>
                   <div className={`h-16 w-16 rounded-2xl flex items-center justify-center border transition-colors ${isLate ? 'bg-red-600 text-white border-red-700 shadow-lg' : 'bg-primary/10 text-primary border-primary/10'}`}>
                     <span className="text-4xl font-black">{p.quantidade}</span>
                   </div>
                 </div>
 
-                <Button 
-                  className={`w-full h-14 font-black uppercase tracking-widest text-xs transition-all ${isLate ? 'bg-red-600 hover:bg-red-700 shadow-xl shadow-red-300' : 'shadow-lg shadow-primary/10'}`} 
-                  onClick={() => handleMarkReady(p.item_id)}
-                >
-                  <CheckCircle2 className="h-4 w-4 mr-2" /> Marcar como Pronto
-                </Button>
+                <div className="flex gap-3">
+                  {p.status === 'pendente' ? (
+                    <Button className="flex-1 h-14 font-black uppercase tracking-widest text-xs" variant="secondary" onClick={() => handleIniciar(p.item_id)}>
+                      <Play className="h-4 w-4 mr-2" /> Começar
+                    </Button>
+                  ) : (
+                    <Button 
+                      className={`flex-1 h-14 font-black uppercase tracking-widest text-xs ${isLate ? 'bg-red-600 hover:bg-red-700 shadow-xl shadow-red-300' : 'shadow-lg shadow-primary/10'}`} 
+                      onClick={() => handleConcluir(p.item_id)}
+                    >
+                      <CheckCircle2 className="h-4 w-4 mr-2" /> Concluir
+                    </Button>
+                  )}
+                </div>
               </CardContent>
             </Card>
           );

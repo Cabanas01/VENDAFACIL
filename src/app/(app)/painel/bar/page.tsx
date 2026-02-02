@@ -1,5 +1,9 @@
-
 'use client';
+
+/**
+ * @fileOverview Painel de Bar (BDS) - Versão Sincronizada por Item.
+ * Consome exclusivamente a view v_painel_bar.
+ */
 
 import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/components/auth-provider';
@@ -7,7 +11,7 @@ import { supabase } from '@/lib/supabase/client';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { GlassWater, Clock, History, Loader2, MapPin, CheckCircle2, RefreshCw } from 'lucide-react';
+import { GlassWater, Clock, History, Loader2, MapPin, CheckCircle2, Play, RefreshCw } from 'lucide-react';
 import { parseISO, differenceInMinutes } from 'date-fns';
 import type { PainelProducaoView } from '@/lib/types';
 import { Button } from '@/components/ui/button';
@@ -22,22 +26,17 @@ export default function BarPage() {
 
   const fetchPedidos = useCallback(async () => {
     if (!store?.id) return;
-    setLoading(true);
     try {
       const { data, error } = await supabase
         .from('v_painel_bar')
         .select('*')
-        .eq('store_id', store.id)
-        .order('created_at', { ascending: true });
+        .eq('store_id', store.id);
 
       if (error) throw error;
-
-      // Filtragem defensiva no frontend
-      const pendentes = (data || []).filter((p: any) => p.status !== 'pronto');
-      setPedidos(pendentes);
+      setPedidos(data || []);
     } catch (err: any) {
       console.error('[BDS_FETCH_ERROR]', err);
-      toast({ variant: 'destructive', title: 'Erro ao carregar bar', description: err.message });
+      toast({ variant: 'destructive', title: 'Erro BDS', description: err.message });
     } finally {
       setLoading(false);
     }
@@ -48,7 +47,7 @@ export default function BarPage() {
     const clockInterval = setInterval(() => setNow(new Date()), 30000);
 
     const channel = supabase
-      .channel('bds_realtime')
+      .channel('bds_sync')
       .on('postgres_changes', { 
         event: '*', 
         schema: 'public', 
@@ -57,8 +56,7 @@ export default function BarPage() {
       .on('postgres_changes', { 
         event: 'UPDATE', 
         schema: 'public', 
-        table: 'comandas',
-        filter: `store_id=eq.${store?.id}`
+        table: 'comandas'
       }, () => fetchPedidos())
       .subscribe();
 
@@ -66,29 +64,29 @@ export default function BarPage() {
       supabase.removeChannel(channel);
       clearInterval(clockInterval);
     };
-  }, [fetchPedidos, store?.id]);
+  }, [fetchPedidos]);
 
-  const handleMarkReady = async (itemId: string) => {
-    // Atualização otimista imediata
-    setPedidos(prev => prev.filter(p => p.item_id !== itemId));
-
+  const handleIniciar = async (itemId: string) => {
     try {
-      const { error } = await supabase
-        .from('comanda_itens')
-        .update({ 
-          status: 'pronto',
-          finished_at: new Date().toISOString()
-        })
-        .eq('id', itemId);
-
-      if (error) {
-        fetchPedidos(); // Reverte em caso de erro
-        throw error;
-      }
-      
-      toast({ title: 'Bar: Drink Servido!', description: 'Pedido concluído.' });
+      const { error } = await supabase.rpc('iniciar_preparo_item', { p_item_id: itemId });
+      if (error) throw error;
+      toast({ title: 'Iniciado!' });
+      await fetchPedidos();
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Erro', description: err.message });
+    }
+  };
+
+  const handleConcluir = async (itemId: string) => {
+    try {
+      const { error } = await supabase.rpc('concluir_item', { p_item_id: itemId });
+      if (error) throw error;
+      
+      setPedidos(prev => prev.filter(p => p.item_id !== itemId));
+      toast({ title: 'Drink pronto!' });
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Erro', description: err.message });
+      fetchPedidos();
     }
   };
 
@@ -104,12 +102,11 @@ export default function BarPage() {
       <div className="flex items-center justify-between">
         <PageHeader title="Bar (BDS)" subtitle="Monitor de bebidas e coquetéis." />
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={fetchPedidos} disabled={loading} className="h-10 px-4 font-black uppercase text-[10px] tracking-widest">
-            {loading ? <RefreshCw className="h-3 w-3 animate-spin mr-2" /> : <History className="h-3 w-3 mr-2" />}
-            Atualizar
+          <Button variant="outline" size="sm" onClick={fetchPedidos} className="h-10 px-4 font-black uppercase text-[10px] tracking-widest">
+            <RefreshCw className={`h-3 w-3 mr-2 ${loading ? 'animate-spin' : ''}`} /> Atualizar
           </Button>
           <Badge variant="outline" className="h-10 px-4 gap-2 font-black uppercase text-xs border-cyan-200 bg-cyan-50 text-cyan-600">
-            <GlassWater className="h-4 w-4" /> {pedidos.length} Drinks
+            <GlassWater className="h-4 w-4" /> {pedidos.length} Pedidos
           </Badge>
         </div>
       </div>
@@ -143,19 +140,27 @@ export default function BarPage() {
                 <div className="flex justify-between items-start">
                   <div className="space-y-1">
                     <p className={`text-3xl font-black leading-tight uppercase tracking-tight ${isLate ? 'text-red-900' : 'text-cyan-700'}`}>{p.produto}</p>
-                    <p className="text-[10px] font-bold text-muted-foreground uppercase">Tempo Alvo: {targetTime} min</p>
+                    <Badge variant="secondary" className="text-[10px] font-black uppercase tracking-widest">{p.status?.replace('_', ' ')}</Badge>
                   </div>
                   <div className={`h-16 w-16 rounded-2xl flex items-center justify-center border transition-colors ${isLate ? 'bg-red-600 text-white border-red-700 shadow-lg' : 'bg-cyan-50 text-cyan-600 border-cyan-100'}`}>
                     <span className="text-4xl font-black">{p.quantidade}</span>
                   </div>
                 </div>
 
-                <Button 
-                  className={`w-full h-14 font-black uppercase tracking-widest text-xs transition-all ${isLate ? 'bg-red-600 hover:bg-red-700 shadow-xl shadow-red-300' : 'bg-cyan-600 hover:bg-cyan-700 shadow-lg shadow-cyan-100'}`} 
-                  onClick={() => handleMarkReady(p.item_id)}
-                >
-                  <CheckCircle2 className="h-4 w-4 mr-2" /> Servir Agora
-                </Button>
+                <div className="flex gap-3">
+                  {p.status === 'pendente' ? (
+                    <Button className="flex-1 h-14 font-black uppercase tracking-widest text-xs" variant="outline" onClick={() => handleIniciar(p.item_id)}>
+                      <Play className="h-4 w-4 mr-2" /> Iniciar
+                    </Button>
+                  ) : (
+                    <Button 
+                      className={`flex-1 h-14 font-black uppercase tracking-widest text-xs transition-all ${isLate ? 'bg-red-600 hover:bg-red-700 shadow-xl shadow-red-300' : 'bg-cyan-600 hover:bg-cyan-700 shadow-lg shadow-cyan-100'}`} 
+                      onClick={() => handleConcluir(p.item_id)}
+                    >
+                      <CheckCircle2 className="h-4 w-4 mr-2" /> Concluir
+                    </Button>
+                  )}
+                </div>
               </CardContent>
             </Card>
           );

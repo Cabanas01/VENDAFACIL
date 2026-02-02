@@ -1,4 +1,3 @@
-
 export type User = {
   id: string;
   email: string;
@@ -122,6 +121,30 @@ export type Customer = {
     phone: string | null;
     cpf: string | null;
     created_at: string;
+};
+
+export type ComandaItem = {
+  id: string;
+  comanda_id: string;
+  product_id: string;
+  product_name: string;
+  quantidade: number;
+  preco_unitario: number;
+  status: 'pendente' | 'em_preparo' | 'pronto';
+  destino_preparo: string;
+  created_at: string;
+  started_at?: string;
+  finished_at?: string;
+};
+
+export type ComandaTotalView = {
+  comanda_id: string;
+  store_id: string;
+  numero: number;
+  mesa: string | null;
+  status: string;
+  cliente_nome: string | null;
+  total: number;
 };
 
 export type PainelProducaoView = {
