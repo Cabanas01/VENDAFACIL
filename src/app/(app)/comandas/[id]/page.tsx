@@ -84,12 +84,9 @@ export default function ComandaDetailsPage() {
     fetchData();
     const channel = supabase.channel(`sync_comanda_${id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'comanda_itens', filter: `comanda_id=eq.${id}` }, () => fetchData())
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'comandas', filter: `id=eq.${id}` }, (payload: any) => {
-        if (payload.new.status === 'fechada') router.replace('/comandas');
-      })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [id, fetchData, router]);
+  }, [id, fetchData]);
 
   const addTempItem = (product: Product) => {
     setTempItems(prev => {
@@ -109,7 +106,8 @@ export default function ComandaDetailsPage() {
         product_name: i.product.name,
         quantidade: i.quantity,
         preco_unitario: i.product.price_cents,
-        destino_preparo: i.product.production_target || 'nenhum'
+        destino_preparo: i.product.production_target || 'nenhum',
+        status: 'pendente'
       }));
 
       const { error } = await supabase.from('comanda_itens').insert(inserts);
@@ -123,22 +121,6 @@ export default function ComandaDetailsPage() {
       toast({ variant: 'destructive', title: 'Erro', description: err.message });
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  const handlePrintCupom = () => {
-    const content = document.getElementById('cupom-preview-frame')?.getAttribute('srcdoc');
-    if (!content) return;
-    
-    const win = window.open('', '_blank', 'width=400,height=600');
-    if (win) {
-      win.document.write(content);
-      win.document.close();
-      win.focus();
-      setTimeout(() => {
-        win.print();
-        win.close();
-      }, 500);
     }
   };
 
@@ -166,29 +148,12 @@ export default function ComandaDetailsPage() {
     }
   };
 
-  const receiptPreviewHTML = useMemo(() => {
-    if (!comanda || !store) return '';
-    const saleMock = {
-      id: 'preview',
-      store_id: store.id,
-      created_at: new Date().toISOString(),
-      total_cents: Math.round((comanda.total || 0) * 100),
-      payment_method: 'dinheiro' as any,
-      items: items.map(i => ({
-        product_name_snapshot: i.product_name,
-        quantity: i.quantidade,
-        unit_price_cents: i.preco_unitario,
-        subtotal_cents: i.quantidade * i.preco_unitario
-      }))
-    };
-    return generateReceiptHTML(saleMock as any, store, '80mm', {
-      numero: comanda.numero,
-      mesa: comanda.mesa || 'Balcão',
-      cliente: customer?.name || comanda.cliente_nome || 'Consumidor'
-    });
-  }, [comanda, store, items, customer]);
-
-  if (loading) return <div className="h-[60vh] flex flex-col items-center justify-center gap-4"><Loader2 className="animate-spin text-primary" /><p className="font-black uppercase text-[10px] tracking-widest text-muted-foreground">Sincronizando...</p></div>;
+  if (loading) return (
+    <div className="h-[60vh] flex flex-col items-center justify-center gap-4">
+      <Loader2 className="animate-spin text-primary" />
+      <p className="font-black uppercase text-[10px] tracking-widest text-muted-foreground">Sincronizando...</p>
+    </div>
+  );
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 pb-32 animate-in fade-in duration-500">
@@ -294,38 +259,21 @@ export default function ComandaDetailsPage() {
       </div>
 
       <Dialog open={isClosing} onOpenChange={setIsClosing}>
-        <DialogContent className="sm:max-w-2xl border-none shadow-2xl p-0 overflow-hidden">
-          <div className="grid md:grid-cols-2">
-            <div className="p-8 bg-muted/30 border-r border-muted/20">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">
-                  <FileText className="h-4 w-4" /> Pré-conferência
-                </div>
-                <Button size="sm" variant="outline" className="h-8 font-black uppercase text-[9px]" onClick={handlePrintCupom}>
-                  <Printer className="h-3 w-3 mr-1.5" /> Imprimir
-                </Button>
-              </div>
-              <div className="bg-white p-4 shadow-inner rounded border border-muted/20 max-h-[400px] overflow-auto">
-                <iframe id="cupom-preview-frame" srcDoc={receiptPreviewHTML} className="w-full h-[600px] border-none scale-90 origin-top" />
-              </div>
-            </div>
-            <div className="p-8 bg-background flex flex-col justify-center">
-              <DialogHeader className="mb-8">
-                <DialogTitle className="font-black uppercase tracking-tighter text-2xl">Pagamento</DialogTitle>
-                <DialogDescription className="font-bold text-[10px] uppercase tracking-widest">Escolha o meio para finalizar</DialogDescription>
-              </DialogHeader>
-              <div className="flex flex-col gap-3">
-                <Button variant="outline" className="h-16 justify-start text-sm font-black uppercase tracking-widest gap-4 border-2 bg-background hover:border-green-500 hover:bg-green-50" onClick={() => handleCloseComanda('dinheiro')}>
-                  <div className="h-10 w-10 rounded-xl bg-green-100 flex items-center justify-center"><Coins className="h-6 w-6 text-green-600" /></div> Dinheiro
-                </Button>
-                <Button variant="outline" className="h-16 justify-start text-sm font-black uppercase tracking-widest gap-4 border-2 bg-background hover:border-cyan-500 hover:bg-cyan-50" onClick={() => handleCloseComanda('pix')}>
-                  <div className="h-10 w-10 rounded-xl bg-cyan-100 flex items-center justify-center"><PiggyBank className="h-6 w-6 text-cyan-600" /></div> PIX
-                </Button>
-                <Button variant="outline" className="h-16 justify-start text-sm font-black uppercase tracking-widest gap-4 border-2 bg-background hover:border-blue-500 hover:bg-blue-50" onClick={() => handleCloseComanda('cartao')}>
-                  <div className="h-10 w-10 rounded-xl bg-blue-100 flex items-center justify-center"><CreditCard className="h-6 w-6 text-blue-600" /></div> Cartão
-                </Button>
-              </div>
-            </div>
+        <DialogContent className="sm:max-w-md border-none shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="font-black uppercase tracking-tighter text-2xl text-center">Pagamento</DialogTitle>
+            <DialogDescription className="text-center font-bold text-[10px] uppercase tracking-widest">Escolha o meio para finalizar a comanda #{comanda?.numero}</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 py-4">
+            <Button variant="outline" className="h-16 justify-start text-sm font-black uppercase tracking-widest gap-4 border-2 bg-background hover:border-green-500 hover:bg-green-50" onClick={() => handleCloseComanda('dinheiro')}>
+              <div className="h-10 w-10 rounded-xl bg-green-100 flex items-center justify-center"><Coins className="h-6 w-6 text-green-600" /></div> Dinheiro
+            </Button>
+            <Button variant="outline" className="h-16 justify-start text-sm font-black uppercase tracking-widest gap-4 border-2 bg-background hover:border-cyan-500 hover:bg-cyan-50" onClick={() => handleCloseComanda('pix')}>
+              <div className="h-10 w-10 rounded-xl bg-cyan-100 flex items-center justify-center"><PiggyBank className="h-6 w-6 text-cyan-600" /></div> PIX
+            </Button>
+            <Button variant="outline" className="h-16 justify-start text-sm font-black uppercase tracking-widest gap-4 border-2 bg-background hover:border-blue-500 hover:bg-blue-50" onClick={() => handleCloseComanda('cartao')}>
+              <div className="h-10 w-10 rounded-xl bg-blue-100 flex items-center justify-center"><CreditCard className="h-6 w-6 text-blue-600" /></div> Cartão
+            </Button>
           </div>
           {isSubmitting && (
             <div className="absolute inset-0 bg-background/90 backdrop-blur-sm flex flex-col items-center justify-center z-50 animate-in fade-in">

@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase/client';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { GlassWater, Clock, History, Loader2, MapPin, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { GlassWater, Clock, History, Loader2, MapPin, CheckCircle2 } from 'lucide-react';
 import { parseISO, differenceInMinutes } from 'date-fns';
 import type { PainelProducaoView } from '@/lib/types';
 import { Button } from '@/components/ui/button';
@@ -29,7 +29,9 @@ export default function BarPage() {
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      setPedidos(data || []);
+      
+      const pendentes = (data || []).filter((p: any) => p.status !== 'pronto');
+      setPedidos(pendentes);
     } catch (err: any) {
       console.error('[BDS_FETCH_ERROR]', err);
     } finally {
@@ -93,9 +95,14 @@ export default function BarPage() {
     <div className="space-y-10 animate-in fade-in duration-500">
       <div className="flex items-center justify-between">
         <PageHeader title="Bar (BDS)" subtitle="Monitor de bebidas, chopp e coquetéis." />
-        <Badge variant="outline" className="h-10 px-4 gap-2 font-black uppercase text-xs border-cyan-200 bg-cyan-50 text-cyan-600">
-          <GlassWater className="h-4 w-4" /> {pedidos.length} Drinks
-        </Badge>
+        <div className="flex gap-2">
+          <Button variant="ghost" size="sm" onClick={fetchPedidos} className="h-10 px-4 font-black uppercase text-[10px] tracking-widest">
+            Atualizar <History className="ml-2 h-3 w-3" />
+          </Button>
+          <Badge variant="outline" className="h-10 px-4 gap-2 font-black uppercase text-xs border-cyan-200 bg-cyan-50 text-cyan-600">
+            <GlassWater className="h-4 w-4" /> {pedidos.length} Drinks
+          </Badge>
+        </div>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
