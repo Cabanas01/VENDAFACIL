@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -9,10 +10,10 @@ import {
   ShoppingCart, 
   Search, 
   ChevronRight, 
-  CheckCircle2,
   Loader2,
   X,
-  UtensilsCrossed
+  UtensilsCrossed,
+  Clock
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -104,7 +105,7 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
         product_id: i.product_id,
         qty: i.quantity,
         price: i.unit_price_cents,
-        notes: i.notes || ''
+        notes: ''
       }));
 
       const { error } = await supabase.rpc('add_itens_from_table_link', {
@@ -132,9 +133,19 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
     }
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#F8FAFC] gap-4">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <p className="font-black uppercase text-[10px] tracking-[0.2em] text-muted-foreground animate-pulse">
+          Abrindo Cardápio...
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-32">
-      {/* Header Fixo */}
       <header className="bg-white border-b sticky top-0 z-40 px-6 py-4 shadow-sm flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Avatar className="h-10 w-10 rounded-xl border border-primary/10 shadow-inner">
@@ -151,7 +162,6 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
         </Badge>
       </header>
 
-      {/* Busca e Filtros */}
       <div className="p-6 space-y-6">
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -163,7 +173,6 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
           />
         </div>
 
-        {/* Lista de Produtos Agrupada */}
         <div className="space-y-10">
           {categories.map(cat => {
             const catProducts = filteredProducts.filter(p => (p.category || 'Geral') === cat);
@@ -185,7 +194,9 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
                           <div className="flex-1 p-4 flex flex-col justify-between">
                             <div className="space-y-1">
                               <h4 className="font-black text-sm uppercase tracking-tight line-clamp-1 group-hover:text-primary transition-colors">{product.name}</h4>
-                              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{product.prep_time_minutes} min preparo</p>
+                              <div className="flex items-center gap-1.5 text-[9px] font-bold text-muted-foreground uppercase">
+                                <Clock className="h-2.5 w-2.5" /> {product.prep_time_minutes || 5} min preparo
+                              </div>
                             </div>
                             <div className="flex items-center justify-between">
                               <span className="text-primary font-black text-lg tracking-tighter">{formatCurrency(product.price_cents)}</span>
@@ -227,7 +238,6 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
         </div>
       </div>
 
-      {/* Rodapé do Carrinho Flutuante */}
       {cart.length > 0 && !isCartOpen && (
         <div className="fixed bottom-8 inset-x-6 z-50 animate-in slide-in-from-bottom-4 duration-500">
           <Button 
@@ -248,7 +258,6 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
         </div>
       )}
 
-      {/* Modal do Carrinho (Visualização do Pedido) */}
       {isCartOpen && (
         <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-[100] flex flex-col justify-end animate-in fade-in duration-300">
           <div className="bg-white rounded-t-[40px] max-h-[85vh] flex flex-col animate-in slide-in-from-bottom-8 duration-500">
@@ -299,7 +308,7 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
                   </>
                 ) : (
                   <>
-                    Enviar para Cozinha <ChevronRight className="ml-3 h-6 w-6" />
+                    Enviar para Produção <ChevronRight className="ml-3 h-6 w-6" />
                   </>
                 )}
               </Button>
@@ -308,7 +317,6 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
         </div>
       )}
 
-      {/* Estado Vazio */}
       {!loading && products.length === 0 && (
         <div className="py-40 flex flex-col items-center justify-center text-center px-10 space-y-6 opacity-30">
           <UtensilsCrossed className="h-20 w-20" />
