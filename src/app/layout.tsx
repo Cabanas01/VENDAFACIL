@@ -1,3 +1,4 @@
+
 import type { Metadata, Viewport } from "next";
 import { Suspense } from "react";
 import Script from "next/script";
@@ -51,11 +52,6 @@ export const metadata: Metadata = {
   robots: {
     index: true,
     follow: true,
-  },
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: 'black-translucent',
-    title: 'VendaFácil',
   },
 };
 

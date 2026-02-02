@@ -1,6 +1,11 @@
 
 'use client';
 
+/**
+ * @fileOverview Detalhe da Comanda - Fluxo de Fechamento e Pagamento.
+ * Refinado para corresponder ao layout profissional da captura de tela.
+ */
+
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/components/auth-provider';
@@ -23,7 +28,10 @@ import {
   Search,
   Coins,
   Printer,
-  PiggyBank
+  PiggyBank,
+  CircleDollarSign,
+  QrCode,
+  X
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
@@ -127,7 +135,6 @@ export default function ComandaDetailsPage() {
 
   const handlePrint = () => {
     if (comanda && store) {
-      // Mapeia itens para o formato da venda para o cupom
       const saleMock = {
         total_cents: comanda.total * 100,
         payment_method: 'dinheiro',
@@ -139,12 +146,6 @@ export default function ComandaDetailsPage() {
           subtotal_cents: i.quantidade * i.preco_unitario
         }))
       } as any;
-
-      const info = {
-        numero: comanda.numero,
-        mesa: comanda.mesa || 'Balcão',
-        cliente: customer?.name || comanda.cliente_nome || 'Consumidor'
-      };
 
       printReceipt(saleMock, store);
     }
@@ -162,18 +163,25 @@ export default function ComandaDetailsPage() {
 
       if (error) throw error;
       
+      // Validação defensiva da resposta para evitar crash no front
       const res = typeof data === 'string' ? JSON.parse(data) : data;
-      if (!res.success) throw new Error(res.message);
+      
+      if (!res || res.success === false) {
+        throw new Error(res?.message || 'Falha desconhecida no servidor.');
+      }
 
       toast({ title: 'Venda registrada!', description: 'Comanda encerrada com sucesso.' });
       
-      // Impressão automática no fechamento
       handlePrint();
-
       await refreshStatus(); 
       router.push('/comandas');
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Erro ao fechar', description: err.message });
+      console.error('[CLOSE_ERROR]', err);
+      toast({ 
+        variant: 'destructive', 
+        title: 'Erro ao fechar', 
+        description: err.message || 'Verifique sua conexão ou tente novamente.' 
+      });
       setIsSubmitting(false);
     }
   };
@@ -195,8 +203,8 @@ export default function ComandaDetailsPage() {
           <div>
             <h1 className="text-4xl font-black font-headline tracking-tighter uppercase leading-none">Comanda #{comanda?.numero}</h1>
             <div className="flex items-center gap-3 mt-2">
-              <Badge variant="outline" className="bg-primary/5 text-primary border-primary/10 font-black text-[10px] uppercase">Status: Aberta</Badge>
-              <span className="text-[10px] font-black uppercase text-muted-foreground flex items-center gap-1"><MapPin className="h-3 w-3" /> {comanda?.mesa || 'Balcão'}</span>
+              <Badge variant="outline" className="bg-primary/5 text-primary border-primary/10 font-black text-[10px] uppercase">STATUS: ABERTA</Badge>
+              <span className="text-[10px] font-black uppercase text-muted-foreground flex items-center gap-1.5"><MapPin className="h-3 w-3" /> {comanda?.mesa || 'Balcão'}</span>
             </div>
           </div>
         </div>
@@ -294,22 +302,54 @@ export default function ComandaDetailsPage() {
       </div>
 
       <Dialog open={isClosing} onOpenChange={setIsClosing}>
-        <DialogContent className="sm:max-w-md border-none shadow-2xl">
-          <DialogHeader>
-            <DialogTitle className="font-black uppercase tracking-tighter text-2xl text-center">Pagamento</DialogTitle>
-            <DialogDescription className="text-center font-bold text-[10px] uppercase tracking-widest">Escolha o meio para finalizar a comanda #{comanda?.numero}</DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col gap-3 py-4">
-            <Button variant="outline" className="h-16 justify-start text-sm font-black uppercase tracking-widest gap-4 border-2 bg-background hover:border-green-500 hover:bg-green-50" onClick={() => handleCloseComanda('dinheiro')}>
-              <div className="h-10 w-10 rounded-xl bg-green-100 flex items-center justify-center"><Coins className="h-6 w-6 text-green-600" /></div> Dinheiro
+        <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl">
+          <div className="bg-muted/30 px-6 py-8 text-center border-b">
+            <h2 className="text-3xl font-black font-headline uppercase tracking-tighter">PAGAMENTO</h2>
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mt-1">Escolha o meio para finalizar a comanda #{comanda?.numero}</p>
+          </div>
+          
+          <div className="p-6 space-y-3">
+            <Button 
+              variant="outline" 
+              className="w-full h-16 justify-start text-sm font-black uppercase tracking-widest gap-4 border-2 bg-background hover:border-green-500 hover:bg-green-50 transition-all" 
+              onClick={() => handleCloseComanda('dinheiro')}
+              disabled={isSubmitting}
+            >
+              <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center shrink-0">
+                <CircleDollarSign className="h-6 w-6 text-green-600" />
+              </div> 
+              Dinheiro
             </Button>
-            <Button variant="outline" className="h-16 justify-start text-sm font-black uppercase tracking-widest gap-4 border-2 bg-background hover:border-cyan-500 hover:bg-cyan-50" onClick={() => handleCloseComanda('pix')}>
-              <div className="h-10 w-10 rounded-xl bg-cyan-100 flex items-center justify-center"><PiggyBank className="h-6 w-6 text-cyan-600" /></div> PIX
+            <Button 
+              variant="outline" 
+              className="w-full h-16 justify-start text-sm font-black uppercase tracking-widest gap-4 border-2 bg-background hover:border-cyan-500 hover:bg-cyan-50 transition-all" 
+              onClick={() => handleCloseComanda('pix')}
+              disabled={isSubmitting}
+            >
+              <div className="h-10 w-10 rounded-full bg-cyan-100 flex items-center justify-center shrink-0">
+                <QrCode className="h-6 w-6 text-cyan-600" />
+              </div> 
+              PIX
             </Button>
-            <Button variant="outline" className="h-16 justify-start text-sm font-black uppercase tracking-widest gap-4 border-2 bg-background hover:border-blue-500 hover:bg-blue-50" onClick={() => handleCloseComanda('cartao')}>
-              <div className="h-10 w-10 rounded-xl bg-blue-100 flex items-center justify-center"><CreditCard className="h-6 w-6 text-blue-600" /></div> Cartão
+            <Button 
+              variant="outline" 
+              className="w-full h-16 justify-start text-sm font-black uppercase tracking-widest gap-4 border-2 bg-background hover:border-blue-500 hover:bg-blue-50 transition-all" 
+              onClick={() => handleCloseComanda('cartao')}
+              disabled={isSubmitting}
+            >
+              <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
+                <CreditCard className="h-6 w-6 text-blue-600" />
+              </div> 
+              Cartão
             </Button>
           </div>
+
+          <div className="p-4 bg-muted/10 text-center">
+            <Button variant="ghost" onClick={() => setIsClosing(false)} className="text-[10px] font-black uppercase tracking-widest opacity-50 hover:opacity-100">
+              Cancelar
+            </Button>
+          </div>
+
           {isSubmitting && (
             <div className="absolute inset-0 bg-background/90 backdrop-blur-sm flex flex-col items-center justify-center z-50 animate-in fade-in">
               <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
