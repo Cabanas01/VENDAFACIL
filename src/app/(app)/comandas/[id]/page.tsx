@@ -1,4 +1,3 @@
-
 'use client';
 
 /**
@@ -27,9 +26,7 @@ import {
   Wallet,
   ClipboardList,
   Search,
-  Send,
-  ChefHat,
-  GlassWater
+  Send
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -155,7 +152,7 @@ export default function ComandaDetailsPage() {
 
   const handleCloseComanda = async (method: 'cash' | 'pix' | 'card') => {
     if (!comanda || !comanda.total || comanda.total <= 0) {
-      toast({ variant: 'destructive', title: 'Comanda sem consumo', description: 'Não é possível fechar uma comanda vazia.' });
+      toast({ variant: 'destructive', title: 'Operação Bloqueada', description: 'Não há consumo registrado nesta comanda para fechar.' });
       return;
     }
 
@@ -166,19 +163,32 @@ export default function ComandaDetailsPage() {
 
     setIsSubmitting(true);
     try {
-      // Chamada RPC: O total_cents é calculado pelo banco a partir da view
-      const { error } = await supabase.rpc('fechar_comanda', {
+      /**
+       * Chamada RPC Segura:
+       * O cálculo de total_cents ocorre integralmente no PostgreSQL,
+       * resolvendo a violação de constraint NOT NULL em 'sales'.
+       */
+      const { data, error } = await supabase.rpc('fechar_comanda', {
         p_comanda_id: id as string,
         p_payment_method: method
       });
 
       if (error) throw error;
+
+      // Se a RPC retornar JSON com success: false (validação interna da função)
+      if (data && typeof data === 'object' && 'success' in data && !data.success) {
+        throw new Error(data.message || 'Falha no processamento interno.');
+      }
       
       toast({ title: 'Comanda Encerrada!', description: `Venda de ${formatCurrency(comanda.total)} registrada.` });
       router.push('/comandas');
     } catch (err: any) {
       console.error('[CLOSE_ERROR]', err);
-      toast({ variant: 'destructive', title: 'Erro no fechamento', description: err.message || 'Verifique se o caixa está aberto.' });
+      toast({ 
+        variant: 'destructive', 
+        title: 'Erro no fechamento', 
+        description: err.message || 'Verifique se o caixa está aberto e se há conexão com o banco.' 
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -357,10 +367,6 @@ export default function ComandaDetailsPage() {
                     <div>
                       <p className="font-black uppercase text-[10px] truncate text-foreground">{p.name}</p>
                       <p className="text-sm font-black text-primary mt-1">{formatCurrency(p.price_cents)}</p>
-                      <div className="flex gap-1 mt-2">
-                        {p.destino_preparo === 'cozinha' && <Badge variant="outline" className="text-[7px] font-black uppercase text-orange-600 border-orange-200 px-1">Cozinha</Badge>}
-                        {p.destino_preparo === 'bar' && <Badge variant="outline" className="text-[7px] font-black uppercase text-cyan-600 border-cyan-200 px-1">Bar</Badge>}
-                      </div>
                     </div>
                     <Plus className="h-4 w-4 text-muted-foreground opacity-20" />
                   </CardContent>
