@@ -125,9 +125,10 @@ export type Customer = {
 export type Comanda = {
   id: string;
   store_id: string;
-  numero_comanda: string;
-  mesa_cliente?: string | null;
-  status: 'aberta' | 'fechada' | 'cancelada';
+  numero: number;
+  mesa?: string | null;
+  cliente_nome?: string | null;
+  status: string;
   created_at: string;
   closed_at?: string;
 };
@@ -136,31 +137,32 @@ export type ComandaItem = {
   id: string;
   comanda_id: string;
   product_id: string;
-  quantity: number;
-  unit_price_cents: number;
-  subtotal_cents: number;
-  status_preparo: 'pendente' | 'em_preparo' | 'pronto' | 'entregue' | 'cancelado';
+  product_name: string;
+  quantidade: number;
+  preco_unitario: number;
+  destino_preparo: string;
+  status: string;
   created_at: string;
-  product_name?: string; // vindo de join ou view
 };
 
 export type ComandaTotalView = {
-  id: string;
-  numero_comanda: string;
-  mesa_cliente?: string | null;
+  comanda_id: string;
+  store_id: string;
+  numero: number;
+  mesa?: string | null;
   status: string;
-  total_cents: number;
-  itens_count: number;
+  total: number;
 };
 
 export type PainelProducaoView = {
-  id: string; // comanda_item_id
-  numero_comanda: string;
-  mesa_cliente?: string | null;
-  nome_produto: string;
+  item_id: string;
+  comanda_numero: number;
+  product_name: string;
   quantidade: number;
-  status_item: string;
+  status: string;
   created_at: string;
+  store_id?: string;
+  mesa?: string | null;
 };
 
 export type StoreStatus = 

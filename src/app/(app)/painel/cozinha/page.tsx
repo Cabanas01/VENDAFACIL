@@ -1,9 +1,7 @@
 'use client';
 
 /**
- * @fileOverview KDS - Painel de Cozinha
- * 
- * Interface focada em produção, consumindo a view v_painel_cozinha.
+ * @fileOverview KDS - Painel de Cozinha (Sincronizado)
  */
 
 import { useEffect, useState } from 'react';
@@ -53,7 +51,6 @@ export default function CozinhaPage() {
   useEffect(() => {
     fetchPedidos();
     
-    // Realtime: Atualiza quando itens de comanda mudam
     const channel = supabase
       .channel('kds_cozinha')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'comanda_itens' }, () => fetchPedidos())
@@ -62,57 +59,57 @@ export default function CozinhaPage() {
     return () => { supabase.removeChannel(channel); };
   }, [store?.id]);
 
-  const handleStatusChange = async (itemId: string, status: string) => {
+  const handleStatusChange = async (itemId: string, novoStatus: string) => {
     try {
       const { error } = await supabase.rpc('atualizar_status_comanda', {
         p_item_id: itemId,
-        p_novo_status: status
+        p_novo_status: novoStatus
       });
 
       if (error) throw error;
       toast({ title: 'Status Atualizado!' });
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Falha', description: err.message });
+      toast({ variant: 'destructive', title: 'Falha ao atualizar' });
     }
   };
 
   if (loading) return (
     <div className="h-[60vh] flex flex-col items-center justify-center gap-4">
       <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      <p className="font-black uppercase text-[10px] tracking-widest text-muted-foreground">Sincronizando Cozinha...</p>
+      <p className="font-black uppercase text-[10px] tracking-widest">Sincronizando Cozinha...</p>
     </div>
   );
 
   return (
     <div className="space-y-10">
       <div className="flex items-center justify-between">
-        <PageHeader title="Cozinha" subtitle="Fila de pedidos para preparo quente." />
-        <Badge variant="outline" className="h-10 px-4 gap-2 bg-primary/5 border-primary/10 text-primary font-black uppercase text-xs">
-          <ChefHat className="h-4 w-4" /> {pedidos.length} Pendentes
+        <PageHeader title="Cozinha" subtitle="Pedidos para preparo quente." />
+        <Badge variant="outline" className="h-10 px-4 gap-2 font-black uppercase text-xs">
+          <ChefHat className="h-4 w-4 text-primary" /> {pedidos.length} Pendentes
         </Badge>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
         {pedidos.map(p => (
-          <Card key={p.id} className={cn(
-            "border-none shadow-xl overflow-hidden transition-all duration-500",
-            p.status_item === 'em_preparo' ? 'ring-2 ring-orange-500' : 'bg-background'
+          <Card key={p.item_id} className={cn(
+            "border-none shadow-xl overflow-hidden transition-all",
+            p.status === 'em_preparo' ? 'ring-2 ring-orange-500' : ''
           )}>
             <div className={cn(
               "px-6 py-4 flex justify-between items-center border-b",
-              p.status_item === 'em_preparo' ? 'bg-orange-500/10' : 'bg-muted/30'
+              p.status === 'em_preparo' ? 'bg-orange-500/10' : 'bg-muted/30'
             )}>
-              <span className="text-2xl font-black font-headline tracking-tighter">COMANDA #{p.numero_comanda}</span>
+              <span className="text-2xl font-black font-headline tracking-tighter">COMANDA #{p.comanda_numero}</span>
               <div className="flex items-center gap-2 text-[10px] font-black uppercase text-muted-foreground">
-                <Clock className="h-3 w-3" /> {formatDistanceToNow(parseISO(p.created_at), { locale: ptBR, addSuffix: false })}
+                <Clock className="h-3 w-3" /> {formatDistanceToNow(parseISO(p.created_at), { locale: ptBR })}
               </div>
             </div>
             
             <CardContent className="p-8 space-y-6">
               <div className="flex justify-between items-start">
                 <div className="space-y-1">
-                  <p className="text-3xl font-black leading-tight uppercase tracking-tight">{p.nome_produto}</p>
-                  {p.mesa_cliente && <p className="text-xs font-bold text-muted-foreground">Mesa/Ref: {p.mesa_cliente}</p>}
+                  <p className="text-3xl font-black leading-tight uppercase tracking-tight">{p.product_name}</p>
+                  {p.mesa && <p className="text-xs font-bold text-muted-foreground">Mesa: {p.mesa}</p>}
                 </div>
                 <div className="h-16 w-16 rounded-2xl bg-muted flex items-center justify-center">
                   <span className="text-4xl font-black">{p.quantidade}</span>
@@ -120,19 +117,19 @@ export default function CozinhaPage() {
               </div>
 
               <div className="pt-4 flex gap-3">
-                {p.status_item === 'pendente' ? (
+                {p.status === 'pendente' ? (
                   <Button 
-                    className="flex-1 h-16 text-xs font-black uppercase tracking-widest bg-orange-500 hover:bg-orange-600 text-white"
-                    onClick={() => handleStatusChange(p.id, 'em_preparo')}
+                    className="flex-1 h-16 text-xs font-black uppercase tracking-widest bg-orange-500 hover:bg-orange-600"
+                    onClick={() => handleStatusChange(p.item_id, 'em_preparo')}
                   >
-                    <Play className="h-4 w-4 mr-2" /> Iniciar Preparo
+                    <Play className="h-4 w-4 mr-2" /> Iniciar
                   </Button>
                 ) : (
                   <Button 
-                    className="flex-1 h-16 text-xs font-black uppercase tracking-widest bg-green-500 hover:bg-green-600 text-white"
-                    onClick={() => handleStatusChange(p.id, 'pronto')}
+                    className="flex-1 h-16 text-xs font-black uppercase tracking-widest bg-green-500 hover:bg-green-600"
+                    onClick={() => handleStatusChange(p.item_id, 'pronto')}
                   >
-                    <CheckCircle2 className="h-4 w-4 mr-2" /> Marcar como Pronto
+                    <CheckCircle2 className="h-4 w-4 mr-2" /> Pronto
                   </Button>
                 )}
               </div>
@@ -141,12 +138,9 @@ export default function CozinhaPage() {
         ))}
 
         {pedidos.length === 0 && (
-          <div className="col-span-full py-40 text-center space-y-6 opacity-20 border-4 border-dashed rounded-[40px]">
+          <div className="col-span-full py-40 text-center opacity-20 border-4 border-dashed rounded-[40px]">
             <History className="h-20 w-20 mx-auto" />
-            <div className="space-y-1">
-              <p className="text-xl font-black uppercase tracking-tighter">Cozinha Limpa</p>
-              <p className="text-sm font-bold uppercase tracking-widest">Aguardando novos pedidos do salão...</p>
-            </div>
+            <p className="text-xl font-black uppercase mt-4">Cozinha em Ordem</p>
           </div>
         )}
       </div>
