@@ -4,7 +4,7 @@ import { useState, useMemo, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Search, PlusCircle, ChevronsLeft, ChevronsRight, MoreHorizontal, AlertCircle, Edit, Trash2, Barcode } from 'lucide-react';
+import { Search, PlusCircle, ChevronsLeft, ChevronsRight, MoreHorizontal, AlertCircle, Edit, Trash2, Barcode, ChefHat, GlassWater } from 'lucide-react';
 
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -60,6 +60,7 @@ const productSchema = z.object({
   active: z.boolean().default(true),
   price_cents: z.coerce.number().int().min(0, 'Preço deve ser positivo'),
   cost_cents: z.coerce.number().int().optional(),
+  destino_preparo: z.enum(['cozinha', 'bar', 'nenhum']).default('nenhum'),
 });
 
 type ProductFormValues = z.infer<typeof productSchema>;
@@ -129,9 +130,10 @@ export default function ProductsPage() {
         active: product.active,
         price_cents: product.price_cents,
         cost_cents: product.cost_cents,
+        destino_preparo: product.destino_preparo || 'nenhum',
       });
     } else {
-      form.reset({ active: true, stock_qty: 0, price_cents: 0, cost_cents: 0, category: '', min_stock_qty: 0, barcode: '' });
+      form.reset({ active: true, stock_qty: 0, price_cents: 0, cost_cents: 0, category: '', min_stock_qty: 0, barcode: '', destino_preparo: 'nenhum' });
     }
     setIsModalOpen(true);
   };
@@ -274,8 +276,7 @@ export default function ProductsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Nome</TableHead>
-                  <TableHead>Cód. Barras</TableHead>
-                  <TableHead>Categoria</TableHead>
+                  <TableHead>Preparação</TableHead>
                   <TableHead>Preço</TableHead>
                   <TableHead>Custo</TableHead>
                   <TableHead>% Lucro</TableHead>
@@ -289,8 +290,11 @@ export default function ProductsPage() {
                 {filteredProducts.map(p => (
                   <TableRow key={p.id}>
                     <TableCell className="font-medium">{p.name}</TableCell>
-                    <TableCell className="font-mono text-xs">{p.barcode || '-'}</TableCell>
-                    <TableCell>{p.category || '-'}</TableCell>
+                    <TableCell>
+                      {p.destino_preparo === 'cozinha' && <Badge variant="outline" className="gap-1 text-orange-600 border-orange-200"><ChefHat className="h-3 w-3" /> Cozinha</Badge>}
+                      {p.destino_preparo === 'bar' && <Badge variant="outline" className="gap-1 text-cyan-600 border-cyan-200"><GlassWater className="h-3 w-3" /> Bar</Badge>}
+                      {(!p.destino_preparo || p.destino_preparo === 'nenhum') && <span className="text-muted-foreground text-xs">Balcão</span>}
+                    </TableCell>
                     <TableCell>{formatCurrency(p.price_cents)}</TableCell>
                     <TableCell>{formatCurrency(p.cost_cents)}</TableCell>
                     <TableCell>{p.cost_cents && p.price_cents > p.cost_cents ? `${(((p.price_cents - p.cost_cents) / p.cost_cents) * 100).toFixed(0)}%` : '-'}</TableCell>
@@ -343,20 +347,40 @@ export default function ProductsPage() {
                 )} />
               </div>
               
-              <FormField name="barcode" control={form.control} render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Código de Barras</FormLabel>
-                  <div className="flex items-center gap-2">
-                    <FormControl>
-                      <Input {...field} ref={barcodeInputRef} placeholder="Clique em 'Ler' ou digite" />
-                    </FormControl>
-                    <Button type="button" variant="outline" onClick={() => barcodeInputRef.current?.focus()}>
-                      <Barcode className="mr-2 h-4 w-4" /> Ler
-                    </Button>
-                  </div>
-                  <FormMessage />
-                </FormItem>
-              )} />
+              <div className="grid grid-cols-2 gap-4">
+                <FormField name="barcode" control={form.control} render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Código de Barras</FormLabel>
+                    <div className="flex items-center gap-2">
+                      <FormControl>
+                        <Input {...field} ref={barcodeInputRef} placeholder="Digitar ou ler" />
+                      </FormControl>
+                      <Button type="button" variant="outline" onClick={() => barcodeInputRef.current?.focus()}>
+                        <Barcode className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField name="destino_preparo" control={form.control} render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Destino de Preparo</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione o destino" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="nenhum">Pronta Entrega (Balcão)</SelectItem>
+                        <SelectItem value="cozinha">Cozinha (Alimentos)</SelectItem>
+                        <SelectItem value="bar">Bar (Bebidas)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </div>
               
               <div className="grid grid-cols-2 gap-4">
                 <FormField name="stock_qty" control={form.control} render={({ field }) => (
@@ -393,20 +417,20 @@ export default function ProductsPage() {
                     </FormItem>
                     )} />
                 </div>
-                <div className="text-sm text-muted-foreground mt-2">
-                    Lucro estimado por unidade: {formatCurrency(price != null && cost != null ? price - cost : undefined)}
+                <div className="text-sm text-muted-foreground mt-2 font-bold">
+                    Lucro bruto por unidade: {formatCurrency(price != null && cost != null ? price - cost : 0)}
                 </div>
                </Card>
               
               <FormField name="active" control={form.control} render={({ field }) => (
-                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
-                  <div className="space-y-0.5"><FormLabel>Produto Ativo</FormLabel></div>
+                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm bg-background">
+                  <div className="space-y-0.5"><FormLabel className="text-xs font-bold uppercase tracking-widest">Produto Ativo para Venda</FormLabel></div>
                   <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
                 </FormItem>
               )} />
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
-                <Button type="submit">Salvar</Button>
+                <Button type="submit">Salvar Produto</Button>
               </DialogFooter>
             </form>
           </Form>

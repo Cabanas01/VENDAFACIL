@@ -2,9 +2,6 @@
 
 /**
  * @fileOverview Visão Geral do Dashboard (Home)
- * 
- * Centraliza os KPIs de saúde financeira, alertas de estoque e caixa.
- * Implementação defensiva para evitar client-side exceptions.
  */
 
 import { useState, useMemo } from 'react';
@@ -19,7 +16,10 @@ import {
   Users,
   ArrowUpRight,
   AlertCircle,
-  Loader2
+  Loader2,
+  ChefHat,
+  GlassWater,
+  ClipboardList
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -37,7 +37,7 @@ const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((value || 0) / 100);
 
 export default function DashboardOverviewPage() {
-  const { storeStatus, products, sales, cashRegisters, customers } = useAuth();
+  const { store, storeStatus, products, sales, cashRegisters, customers } = useAuth();
   const router = useRouter();
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
@@ -66,7 +66,6 @@ export default function DashboardOverviewPage() {
     const safeProducts = Array.isArray(products) ? products : [];
     const revenue = filteredSales.reduce((sum, s) => sum + (s?.total_cents || 0), 0);
     
-    // Agregação segura de custos
     const cost = filteredSales.flatMap(s => s?.items || []).reduce((acc, item) => {
       if (!item) return acc;
       const prod = safeProducts.find(p => p?.id === item.product_id);
@@ -86,16 +85,55 @@ export default function DashboardOverviewPage() {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] gap-4 text-muted-foreground">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="animate-pulse font-medium text-sm">Sincronizando ambiente comercial...</p>
+        <p className="animate-pulse font-medium text-sm text-[10px] uppercase tracking-widest">Sincronizando ambiente comercial...</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 animate-in fade-in duration-500">
       <PageHeader title="Visão Geral">
         <DateRangePicker date={dateRange} onDateChange={setDateRange} />
       </PageHeader>
+
+      {/* Atalhos de Produção (Se Ativo) */}
+      {store?.use_comanda && (
+        <div className="grid gap-4 md:grid-cols-3">
+          <Card className="border-primary/10 bg-background hover:border-primary transition-all cursor-pointer shadow-sm group" onClick={() => router.push('/comandas')}>
+            <CardContent className="flex items-center gap-4 py-4">
+              <div className="h-10 w-10 rounded-full bg-primary/5 flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-colors">
+                <ClipboardList className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-xs font-black uppercase tracking-widest text-foreground">Gerir Comandas</p>
+                <p className="text-[10px] text-muted-foreground font-bold">Atendimento de mesas</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="border-orange-500/10 bg-background hover:border-orange-500 transition-all cursor-pointer shadow-sm group" onClick={() => router.push('/painel/cozinha')}>
+            <CardContent className="flex items-center gap-4 py-4">
+              <div className="h-10 w-10 rounded-full bg-orange-500/5 flex items-center justify-center group-hover:bg-orange-500 group-hover:text-white transition-colors text-orange-600">
+                <ChefHat className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-xs font-black uppercase tracking-widest text-foreground">Painel Cozinha</p>
+                <p className="text-[10px] text-muted-foreground font-bold">Monitor de preparo</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="border-cyan-500/10 bg-background hover:border-cyan-500 transition-all cursor-pointer shadow-sm group" onClick={() => router.push('/painel/bar')}>
+            <CardContent className="flex items-center gap-4 py-4">
+              <div className="h-10 w-10 rounded-full bg-cyan-500/5 flex items-center justify-center group-hover:bg-cyan-500 group-hover:text-white transition-colors text-cyan-600">
+                <GlassWater className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-xs font-black uppercase tracking-widest text-foreground">Painel Bar</p>
+                <p className="text-[10px] text-muted-foreground font-bold">Monitor de bebidas</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Alertas Críticos */}
       <div className="grid gap-4 md:grid-cols-2">
@@ -107,7 +145,7 @@ export default function DashboardOverviewPage() {
                 <p className="text-sm font-bold text-yellow-900">{lowStockCount} produtos com estoque crítico</p>
                 <p className="text-xs text-yellow-700">Evite rupturas no seu faturamento.</p>
               </div>
-              <Button variant="outline" size="sm" onClick={() => router.push('/dashboard/products')}>Ver Lista</Button>
+              <Button variant="outline" size="sm" onClick={() => router.push('/dashboard/products')} className="h-8 font-black uppercase text-[10px]">Ver Lista</Button>
             </CardContent>
           </Card>
         )}
@@ -119,7 +157,7 @@ export default function DashboardOverviewPage() {
                 <p className="text-sm font-bold text-red-900">Seu caixa está fechado</p>
                 <p className="text-xs text-red-700">Abra o turno para iniciar as vendas físicas.</p>
               </div>
-              <Button variant="destructive" size="sm" onClick={() => router.push('/cash')}>Abrir Caixa</Button>
+              <Button variant="destructive" size="sm" onClick={() => router.push('/cash')} className="h-8 font-black uppercase text-[10px]">Abrir Caixa</Button>
             </CardContent>
           </Card>
         )}
