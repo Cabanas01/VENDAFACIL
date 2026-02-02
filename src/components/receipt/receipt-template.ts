@@ -6,6 +6,8 @@ const paymentMethodLabels = {
   dinheiro: 'DINHEIRO',
   pix: 'PIX QR CODE',
   cartao: 'CARTÃO DÉBITO/CRÉDITO',
+  cash: 'DINHEIRO',
+  card: 'CARTÃO',
 };
 
 const formatCurrency = (value: number) => {
@@ -21,7 +23,10 @@ export function generateReceiptHTML(
   width: '80mm' | '58mm' = '80mm',
   comandaInfo?: { numero: number; mesa: string; cliente: string }
 ): string {
-  const receiptItems = sale.items
+  // Garantia de que items existe para evitar erro de compilação/execução
+  const items = sale.items || [];
+  
+  const receiptItems = items
     .map(
       (item) => `
     <div class="item">
@@ -72,7 +77,7 @@ export function generateReceiptHTML(
 
   <div class="line"></div>
   <div class="center bold">CUPOM NÃO FISCAL</div>
-  <div class="center">${new Date(sale.created_at).toLocaleString('pt-BR')}</div>
+  <div class="center">${new Date(sale.created_at || new Date()).toLocaleString('pt-BR')}</div>
   <div class="line"></div>
 
   ${comandaInfo ? `
@@ -83,7 +88,7 @@ export function generateReceiptHTML(
   ` : ''}
 
   <div class="bold">DESCRIÇÃO DOS ITENS</div>
-  ${receiptItems}
+  ${receiptItems || '<div class="center">Nenhum item registrado</div>'}
 
   <div class="line"></div>
   <div class="total-row bold">
@@ -92,7 +97,7 @@ export function generateReceiptHTML(
   </div>
   <div class="line"></div>
 
-  <div class="bold">PAGAMENTO: ${paymentMethodLabels[sale.payment_method as keyof typeof paymentMethodLabels] || sale.payment_method.toUpperCase()}</div>
+  <div class="bold">PAGAMENTO: ${paymentMethodLabels[sale.payment_method as keyof typeof paymentMethodLabels] || (sale.payment_method || 'NÃO INFORMADO').toUpperCase()}</div>
 
   <div class="center footer">
     <div>VendaFácil Brasil - Automação Comercial</div>

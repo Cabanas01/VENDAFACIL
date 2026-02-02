@@ -3,7 +3,7 @@
 /**
  * @fileOverview Server Action definitiva para Processamento de Vendas (PDV).
  * 
- * Corrigido para usar o helper createSupabaseServerClient() com await.
+ * Retorna o objeto completo da venda para permitir impressão imediata no frontend.
  */
 
 import { createSupabaseServerClient } from '@/lib/supabase/server';
@@ -77,7 +77,12 @@ export async function processSaleAction(storeId: string, cart: CartItem[], payme
       });
     }
 
-    return { success: true, saleId: sale.id };
+    // Retorna o objeto completo para o frontend para impressão sem race conditions
+    return { 
+      success: true, 
+      saleId: sale.id,
+      sale: { ...sale, items: itemsToInsert }
+    };
 
   } catch (err: any) {
     console.error('[SERVER_ACTION] Erro na transação de itens:', err);

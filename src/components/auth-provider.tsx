@@ -43,7 +43,7 @@ type AuthContextType = {
   updateProductStock: (id: string, qty: number) => Promise<void>;
   removeProduct: (id: string) => Promise<void>;
   findProductByBarcode: (barcode: string) => Promise<Product | null>;
-  addSale: (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => Promise<any>;
+  addSale: (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card' | 'dinheiro' | 'cartao') => Promise<any>;
   setCashRegisters: (action: any) => Promise<void>;
   deleteAccount: () => Promise<{ error: any }>;
   logout: () => Promise<void>;
@@ -105,13 +105,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshStatus = useCallback(async () => {
     if (user?.id) {
-      console.log('[AUTH_PROVIDER] Revalidando status do plano...');
       await fetchAppData(user.id);
     }
   }, [user?.id, fetchAppData]);
 
   useEffect(() => {
-    // Carregamento inicial do usuário
     supabase.auth.getUser().then(({ data: { user: sessionUser } }) => {
       if (sessionUser) {
         setUser({ id: sessionUser.id, email: sessionUser.email || '' });
@@ -121,7 +119,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
-    // Listener de mudanças de estado de autenticação
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session?.user) {
         setUser({ id: session.user.id, email: session.user.email || '' });
@@ -136,21 +133,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, [fetchAppData]);
 
-  // Polling automático somente em páginas críticas de faturamento
   useEffect(() => {
     if (typeof window === 'undefined') return;
     
     const isBillingPath = pathname?.includes('/billing') || pathname?.includes('/admin/billing');
-    const isRestrictedPath = pathname?.includes('/login') || pathname?.includes('/signup') || pathname?.includes('/ai');
     
-    if (isBillingPath && !isRestrictedPath && user?.id && storeStatus === 'ready') {
+    if (isBillingPath && user?.id && storeStatus === 'ready') {
       if (!pollingRef.current) {
-        console.log('[AUTH_PROVIDER] Polling de faturamento ativado.');
         pollingRef.current = setInterval(refreshStatus, 30000);
       }
     } else {
       if (pollingRef.current) {
-        console.log('[AUTH_PROVIDER] Polling de faturamento desativado.');
         clearInterval(pollingRef.current);
         pollingRef.current = null;
       }
@@ -173,7 +166,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { user: authUser } } = await supabase.auth.getUser();
     if (!authUser) throw new Error('Sessão expirada.');
 
-    // Upsert preventivo do perfil público do usuário
     await supabase.from('users').upsert({ id: authUser.id, email: authUser.email }, { onConflict: 'id' });
 
     const { error: rpcError } = await supabase.rpc('create_new_store', {
@@ -198,10 +190,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const addSale = useCallback(async (cart: CartItem[], method: any) => {
     if (!store?.id) throw new Error('Loja não identificada.');
-    const result = await processSaleAction(store.id, cart, method);
+    
+    // Normalização de métodos legados para o padrão do PDV
+    const normalizedMethod = method === 'dinheiro' ? 'cash' : (method === 'cartao' ? 'card' : method);
+    
+    const result = await processSaleAction(store.id, cart, normalizedMethod);
     if (!result.success) throw new Error(result.error);
     await refreshStatus();
-    return result;
+    return result; // Retorna o objeto da venda completo para impressão imediata
   }, [store, refreshStatus]);
 
   const updateStore = async (data: any) => { if (store) { await supabase.from('stores').update(data).eq('id', store.id); await refreshStatus(); } };

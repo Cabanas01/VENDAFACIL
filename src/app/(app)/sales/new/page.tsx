@@ -117,6 +117,7 @@ export default function NewSalePage() {
 
     setIsSubmitting(true);
     try {
+      // O addSale agora retorna o objeto de venda completo com itens
       const result = await addSale(cart, method);
       
       trackEvent('sale_completed', {
@@ -128,10 +129,9 @@ export default function NewSalePage() {
 
       toast({ title: 'Venda Concluída!', description: `Total de ${formatCurrency(cartTotal)} registrado.` });
       
-      // Impressão automática se houver venda
-      if (result && result.saleId) {
-        const fullSale = sales.find(s => s.id === result.saleId);
-        if (fullSale) printReceipt(fullSale, store);
+      // Impressão imediata usando o objeto retornado pelo servidor
+      if (result?.sale) {
+        printReceipt(result.sale, store);
       }
 
       setCart([]);
@@ -266,7 +266,7 @@ export default function NewSalePage() {
                         <div>
                           <p className="text-[10px] font-black uppercase tracking-tight">{format(new Date(sale.created_at), 'HH:mm:ss')}</p>
                           <Badge variant="outline" className="text-[8px] h-4 font-black uppercase bg-background mt-1 gap-1">
-                            {paymentMethodIcons[sale.payment_method]} {sale.payment_method}
+                            {paymentMethodIcons[sale.payment_method as keyof typeof paymentMethodIcons]} {sale.payment_method}
                           </Badge>
                         </div>
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-primary opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleReprint(sale)}>

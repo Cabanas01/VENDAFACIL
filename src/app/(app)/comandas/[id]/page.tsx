@@ -125,8 +125,32 @@ export default function ComandaDetailsPage() {
   };
 
   const handleCloseComanda = async (method: 'dinheiro' | 'pix' | 'cartao') => {
-    if (!comanda?.total || comanda.total <= 0 || isSubmitting) return;
+    if (!comanda?.total || comanda.total <= 0 || isSubmitting || !store) return;
     setIsSubmitting(true);
+    
+    // Captura o estado atual dos itens para a impressão ANTES de fechar e limpar a view
+    const itemsToPrint = items.map(i => ({
+      product_name_snapshot: i.product_name,
+      quantity: i.quantidade,
+      unit_price_cents: i.preco_unitario,
+      subtotal_cents: i.quantidade * i.preco_unitario
+    }));
+
+    const saleToPrint = {
+      id: 'final_print',
+      store_id: store.id,
+      created_at: new Date().toISOString(),
+      total_cents: Math.round(comanda.total * 100),
+      payment_method: method as any,
+      items: itemsToPrint
+    };
+
+    const comandaMetadata = {
+      numero: comanda.numero,
+      mesa: comanda.mesa || 'Balcão',
+      cliente: customer?.name || comanda.cliente_nome || 'Consumidor'
+    };
+
     try {
       const { data, error } = await supabase.rpc('fechar_comanda', {
         p_comanda_id: id as string,
@@ -138,7 +162,10 @@ export default function ComandaDetailsPage() {
       const res = typeof data === 'string' ? JSON.parse(data) : data;
       if (!res.success) throw new Error(res.message);
 
-      toast({ title: 'Venda registrada!', description: 'Comanda encerrada com sucesso.' });
+      // Dispara a impressão do cupom com todos os detalhes
+      printReceipt(saleToPrint as any, store, comandaMetadata);
+
+      toast({ title: 'Venda registrada!', description: 'Comanda encerrada e cupom gerado.' });
       await refreshStatus(); 
       router.push('/comandas');
     } catch (err: any) {
@@ -147,13 +174,13 @@ export default function ComandaDetailsPage() {
     }
   };
 
-  const receiptPreview = useMemo(() => {
+  const receiptPreviewHTML = useMemo(() => {
     if (!comanda || !store) return '';
     const saleMock = {
       id: 'preview',
       store_id: store.id,
       created_at: new Date().toISOString(),
-      total_cents: (comanda.total || 0) * 100,
+      total_cents: Math.round((comanda.total || 0) * 100),
       payment_method: 'dinheiro' as any,
       items: items.map(i => ({
         product_name_snapshot: i.product_name,
@@ -278,7 +305,7 @@ export default function ComandaDetailsPage() {
                 <FileText className="h-4 w-4" /> Pré-visualização do Cupom
               </div>
               <div className="bg-white p-4 shadow-inner rounded border border-muted/20 max-h-[400px] overflow-auto">
-                <iframe srcDoc={receiptPreview} className="w-full h-[600px] border-none scale-90 origin-top" />
+                <iframe srcDoc={receiptPreviewHTML} className="w-full h-[600px] border-none scale-90 origin-top" />
               </div>
             </div>
             <div className="p-8 bg-background flex flex-col justify-center">
