@@ -6,8 +6,8 @@ import { supabase } from '@/lib/supabase/client';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { GlassWater, Clock, History, Loader2, MapPin, Users, CheckCircle2, AlertTriangle } from 'lucide-react';
-import { formatDistanceToNow, parseISO, differenceInMinutes } from 'date-fns';
+import { GlassWater, Clock, History, Loader2, MapPin, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { parseISO, differenceInMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { PainelProducaoView } from '@/lib/types';
 import { Button } from '@/components/ui/button';
@@ -29,7 +29,10 @@ export default function BarPage() {
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      setPedidos(data || []);
+
+      // Filtro preventivo no frontend
+      const pendentes = (data || []).filter((p: any) => p.status !== 'pronto');
+      setPedidos(pendentes);
     } catch (err: any) {
       console.error('[BDS_FETCH_ERROR]', err);
     } finally {
@@ -55,6 +58,9 @@ export default function BarPage() {
   }, [store?.id, fetchPedidos]);
 
   const handleMarkReady = async (itemId: string) => {
+    // 🚀 ATUALIZAÇÃO OTIMISTA: Remove o item do estado imediatamente
+    setPedidos(prev => prev.filter(p => p.item_id !== itemId));
+
     try {
       const { error } = await supabase
         .from('comanda_itens')
@@ -64,9 +70,10 @@ export default function BarPage() {
       if (error) throw error;
       
       toast({ title: 'Bebida Pronta!', description: 'O item foi marcado como servido.' });
-      fetchPedidos();
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Erro', description: err.message });
+      // Rollback em caso de erro
+      fetchPedidos();
     }
   };
 
@@ -84,7 +91,8 @@ export default function BarPage() {
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
         {pedidos.map(p => {
           const elapsed = differenceInMinutes(now, parseISO(p.created_at));
-          const isLate = elapsed > (p.prep_time_minutes || 5);
+          const targetTime = p.prep_time_minutes || 5;
+          const isLate = elapsed > targetTime;
 
           return (
             <Card key={p.item_id} className={`border-none shadow-xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300 transition-colors ${isLate ? 'bg-red-50 ring-2 ring-red-500 ring-offset-2 animate-pulse' : 'bg-background'}`}>
@@ -111,7 +119,7 @@ export default function BarPage() {
                 <div className="flex justify-between items-start">
                   <div className="space-y-1">
                     <p className={`text-3xl font-black leading-tight uppercase tracking-tight ${isLate ? 'text-red-900' : 'text-cyan-700'}`}>{p.produto}</p>
-                    <p className="text-[10px] font-bold text-muted-foreground uppercase">Tempo Alvo: {p.prep_time_minutes} min</p>
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase">Tempo Alvo: {targetTime} min</p>
                   </div>
                   <div className={`h-16 w-16 rounded-2xl flex items-center justify-center border transition-colors ${isLate ? 'bg-red-600 text-white border-red-700 shadow-lg' : 'bg-cyan-50 text-cyan-600 border-cyan-100'}`}>
                     <span className="text-4xl font-black">{p.quantidade}</span>
