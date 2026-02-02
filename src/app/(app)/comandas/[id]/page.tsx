@@ -1,5 +1,9 @@
 'use client';
 
+/**
+ * @fileOverview Detalhes da Comanda (Visão de Atendimento)
+ */
+
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/components/auth-provider';
@@ -40,7 +44,7 @@ export default function ComandaDetailsPage() {
   const [items, setItems] = useState<ComandaItem[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // Pedido temporário
+  // Pedido temporário (Rascunho)
   const [isAdding, setIsAdding] = useState(false);
   const [search, setSearch] = useState('');
   const [tempItems, setTempItems] = useState<{ product: Product; quantity: number }[]>([]);
@@ -65,7 +69,7 @@ export default function ComandaDetailsPage() {
       setComanda(comandaRes.data);
       setItems(itemsRes.data || []);
 
-      // Busca dados do cliente se houver customer_id (buscando na tabela base comandas)
+      // Busca dados do cliente via customer_id
       const { data: baseComanda } = await supabase.from('comandas').select('customer_id').eq('id', id).single();
       if (baseComanda?.customer_id) {
         const { data: custData } = await supabase.from('customers').select('*').eq('id', baseComanda.customer_id).single();
@@ -81,7 +85,6 @@ export default function ComandaDetailsPage() {
   useEffect(() => {
     fetchData();
     
-    // Realtime para itens da comanda
     const channel = supabase.channel(`sync_comanda_${id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'comanda_itens', filter: `comanda_id=eq.${id}` }, () => fetchData())
       .subscribe();
@@ -162,7 +165,7 @@ export default function ComandaDetailsPage() {
                 Status: Aberta
               </Badge>
               <span className="text-[10px] font-black uppercase text-muted-foreground flex items-center gap-1">
-                <MapPin className="h-3 w-3" /> {comanda?.mesa}
+                <MapPin className="h-3 w-3" /> {comanda?.mesa || 'Balcão'}
               </span>
             </div>
           </div>
@@ -176,7 +179,6 @@ export default function ComandaDetailsPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-6">
-          {/* Card do Cliente */}
           <Card className="border-none shadow-sm bg-muted/20">
             <CardContent className="p-4 flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -189,18 +191,17 @@ export default function ComandaDetailsPage() {
                 </div>
               </div>
               <div className="text-right">
-                <p className="text-[10px] font-bold text-muted-foreground">{customer?.phone || 'Sem telefone'}</p>
-                <p className="text-[9px] text-muted-foreground font-mono">{customer?.cpf || 'Sem CPF'}</p>
+                <p className="text-[10px] font-bold text-muted-foreground">{customer?.phone || '—'}</p>
+                <p className="text-[9px] text-muted-foreground font-mono">{customer?.cpf || '—'}</p>
               </div>
             </CardContent>
           </Card>
 
-          {/* Rascunho de Lançamento */}
           {tempItems.length > 0 && (
             <Card className="border-primary bg-primary/5 shadow-lg animate-in slide-in-from-top-2">
               <CardHeader className="py-3 border-b border-primary/10">
                 <CardTitle className="text-xs font-black uppercase text-primary flex items-center gap-2">
-                  <Plus className="h-3 w-3" /> Itens a Lançar
+                  <Plus className="h-3 w-3" /> Itens a Enviar
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-4 space-y-4">
@@ -214,13 +215,12 @@ export default function ComandaDetailsPage() {
                 ))}
                 <Button className="w-full h-12 font-black uppercase tracking-widest" onClick={confirmOrder} disabled={isSubmitting}>
                   {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Send className="mr-2 h-4 w-4" />}
-                  Confirmar e Enviar para Produção
+                  Confirmar e Enviar para Preparo
                 </Button>
               </CardContent>
             </Card>
           )}
 
-          {/* Lista de Itens Já Lançados */}
           <Card className="border-none shadow-sm">
             <CardHeader className="flex flex-row justify-between items-center bg-muted/10 border-b">
               <CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground">Consumo Registrado</CardTitle>
@@ -260,7 +260,6 @@ export default function ComandaDetailsPage() {
           </Card>
         </div>
 
-        {/* Coluna de Ação Lateral */}
         <div className="space-y-6">
           <Card className="border-primary/20 bg-primary/5 shadow-2xl overflow-hidden sticky top-24">
             <CardHeader className="bg-primary/10 text-center py-6">
@@ -279,16 +278,11 @@ export default function ComandaDetailsPage() {
               >
                 <CheckCircle2 className="h-6 w-6 mr-2" /> Fechar Conta
               </Button>
-              
-              <p className="text-[9px] text-center text-muted-foreground font-medium uppercase tracking-tight">
-                Certifique-se de que todos os itens foram lançados antes de fechar.
-              </p>
             </CardContent>
           </Card>
         </div>
       </div>
 
-      {/* MODAL: ADICIONAR ITENS */}
       <Dialog open={isAdding} onOpenChange={setIsAdding}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
@@ -296,10 +290,10 @@ export default function ComandaDetailsPage() {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <Input 
-              placeholder="Buscar produto por nome ou categoria..." 
+              placeholder="Buscar produto..." 
               value={search} 
               onChange={e => setSearch(e.target.value)}
-              className="h-12 text-lg"
+              className="h-12"
               autoFocus
             />
             <ScrollArea className="h-96 pr-4">
@@ -310,10 +304,10 @@ export default function ComandaDetailsPage() {
                     <Button 
                       key={p.id} 
                       variant="outline" 
-                      className="h-20 flex flex-col items-start gap-1 justify-center px-4 hover:border-primary transition-all group"
+                      className="h-20 flex flex-col items-start gap-1 justify-center px-4"
                       onClick={() => addTempItem(p)}
                     >
-                      <span className="font-black text-xs uppercase leading-tight text-left group-hover:text-primary">{p.name}</span>
+                      <span className="font-black text-xs uppercase leading-tight text-left">{p.name}</span>
                       <span className="text-[10px] font-bold text-muted-foreground">{formatCurrency(p.price_cents)}</span>
                     </Button>
                   ))}
@@ -326,37 +320,26 @@ export default function ComandaDetailsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* MODAL: PAGAMENTO */}
       <Dialog open={isClosing} onOpenChange={setIsClosing}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-center font-black uppercase tracking-tighter text-2xl">Forma de Pagamento</DialogTitle>
-            <DialogDescription className="text-center">Selecione como o cliente deseja liquidar o débito de {formatCurrency(comanda?.total || 0)}.</DialogDescription>
+            <DialogTitle className="text-center font-black uppercase tracking-tighter text-2xl">Pagamento</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col gap-3 pt-6">
-            <Button variant="outline" className="h-16 justify-start text-base font-black uppercase tracking-widest gap-4 border-2 hover:border-primary group" onClick={() => handleCloseComanda('cash')}>
-              <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center text-green-600 group-hover:bg-green-600 group-hover:text-white transition-colors">
-                <CreditCard className="h-6 w-6" />
-              </div>
-              Dinheiro / Espécie
+            <Button variant="outline" className="h-16 justify-start text-base font-black uppercase tracking-widest gap-4 border-2" onClick={() => handleCloseComanda('cash')}>
+              <CreditCard className="h-6 w-6" /> Dinheiro
             </Button>
-            <Button variant="outline" className="h-16 justify-start text-base font-black uppercase tracking-widest gap-4 border-2 hover:border-primary group" onClick={() => handleCloseComanda('pix')}>
-              <div className="h-10 w-10 rounded-full bg-cyan-100 flex items-center justify-center text-cyan-600 group-hover:bg-cyan-600 group-hover:text-white transition-colors">
-                <Plus className="h-6 w-6" />
-              </div>
-              PIX Instantâneo
+            <Button variant="outline" className="h-16 justify-start text-base font-black uppercase tracking-widest gap-4 border-2" onClick={() => handleCloseComanda('pix')}>
+              <Plus className="h-6 w-6" /> PIX
             </Button>
-            <Button variant="outline" className="h-16 justify-start text-base font-black uppercase tracking-widest gap-4 border-2 hover:border-primary group" onClick={() => handleCloseComanda('card')}>
-              <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                <CreditCard className="h-6 w-6" />
-              </div>
-              Cartão Débito/Crédito
+            <Button variant="outline" className="h-16 justify-start text-base font-black uppercase tracking-widest gap-4 border-2" onClick={() => handleCloseComanda('card')}>
+              <CreditCard className="h-6 w-6" /> Cartão
             </Button>
           </div>
           {isSubmitting && (
-            <div className="absolute inset-0 bg-background/80 flex flex-col items-center justify-center z-50 animate-in fade-in">
+            <div className="absolute inset-0 bg-background/80 flex flex-col items-center justify-center z-50">
               <Loader2 className="h-10 w-10 animate-spin text-primary mb-2" />
-              <p className="text-xs font-black uppercase tracking-widest">Sincronizando Banco...</p>
+              <p className="text-xs font-black uppercase tracking-widest">Sincronizando...</p>
             </div>
           )}
         </DialogContent>
