@@ -1,7 +1,12 @@
 
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+/**
+ * @fileOverview Gestão de Atendimento e Autoatendimento (QR Code).
+ * Adicionado: Gerenciamento de mesas e geração de tokens para Cardápio Digital.
+ */
+
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useAuth } from '@/components/auth-provider';
 import { supabase } from '@/lib/supabase/client';
 import { PageHeader } from '@/components/page-header';
@@ -19,11 +24,15 @@ import {
   User,
   QrCode,
   Copy,
-  ExternalLink
+  ExternalLink,
+  Trash2,
+  Sparkles,
+  Link2
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useRouter } from 'next/navigation';
 import { CreateComandaDialog } from '@/components/comandas/create-comanda-dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import type { ComandaTotalView, TableInfo } from '@/lib/types';
 
@@ -36,10 +45,13 @@ export default function ComandasPage() {
   const { toast } = useToast();
   
   const [comandas, setComandas] = useState<ComandaTotalView[]>([]);
-  const [tables, setTables] = useState<any[]>([]);
+  const [tables, setTables] = useState<TableInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [isNewDialogOpen, setIsNewDialogOpen] = useState(false);
+  const [isNewComandaOpen, setIsNewComandaOpen] = useState(false);
+  const [isNewTableOpen, setIsNewTableOpen] = useState(false);
+  const [newTableNumber, setNewTableNumber] = useState('');
+  const [isCreatingTable, setIsCreatingTable] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!store?.id) return;
@@ -60,7 +72,7 @@ export default function ComandasPage() {
 
       if (comandasRes.error) throw comandasRes.error;
       setComandas(comandasRes.data || []);
-      setTables(tablesRes.data || []);
+      setTables((tablesRes.data as any) || []);
     } catch (err) {
       console.error('[FETCH_ERROR]', err);
     } finally {
@@ -76,16 +88,74 @@ export default function ComandasPage() {
       .channel('comandas_global_sync')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'comandas', filter: `store_id=eq.${store.id}` }, () => fetchData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'comanda_itens' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tables', filter: `store_id=eq.${store.id}` }, () => fetchData())
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, [store?.id, fetchData]);
 
-  const filteredComandas = comandas.filter(c => 
-    c.numero.toString().includes(search) || 
-    (c.mesa || '').toLowerCase().includes(search.toLowerCase()) ||
-    (c.cliente_nome || '').toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredComandas = useMemo(() => 
+    comandas.filter(c => 
+      c.numero.toString().includes(search) || 
+      (c.mesa || '').toLowerCase().includes(search.toLowerCase()) ||
+      (c.cliente_nome || '').toLowerCase().includes(search.toLowerCase())
+    )
+  , [comandas, search]);
+
+  const handleCreateTable = async () => {
+    if (!store?.id || !newTableNumber || isCreatingTable) return;
+    setIsCreatingTable(true);
+
+    try {
+      const token = `mesa-${newTableNumber}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+      const { error } = await supabase
+        .from('tables')
+        .insert({
+          store_id: store.id,
+          table_number: parseInt(newTableNumber),
+          table_token: token,
+          table_status: 'disponivel'
+        });
+
+      if (error) throw error;
+
+      toast({ title: 'Mesa Cadastrada!', description: `Link gerado para a mesa ${newTableNumber}.` });
+      setNewTableNumber('');
+      setIsNewTableOpen(false);
+      await fetchData();
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Erro ao cadastrar', description: err.message });
+    } finally {
+      setIsCreatingTable(false);
+    }
+  };
+
+  const handleQuickGenerateLink = async (mesaNome: string) => {
+    if (!store?.id || !mesaNome) return;
+    const num = mesaNome.replace(/\D/g, '');
+    if (!num) {
+      toast({ variant: 'destructive', title: 'Mesa Inválida', description: 'O nome da mesa deve conter um número.' });
+      return;
+    }
+
+    try {
+      const token = `mesa-${num}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+      const { error } = await supabase
+        .from('tables')
+        .insert({
+          store_id: store.id,
+          table_number: parseInt(num),
+          table_token: token,
+          table_status: 'ocupada'
+        });
+
+      if (error) throw error;
+      toast({ title: 'Link Gerado!', description: `Mesa ${num} agora possui acesso digital.` });
+      await fetchData();
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Erro ao gerar', description: err.message });
+    }
+  };
 
   const handleCopyLink = (token: string) => {
     if (!store?.id) return;
@@ -93,8 +163,19 @@ export default function ComandasPage() {
     navigator.clipboard.writeText(url);
     toast({
       title: 'Link Copiado!',
-      description: 'O link do cardápio digital desta mesa está na sua área de transferência.',
+      description: 'Pronto para enviar ao cliente ou imprimir QR Code.',
     });
+  };
+
+  const handleDeleteTable = async (id: string) => {
+    if (!confirm('Excluir esta mesa e seu link de acesso?')) return;
+    try {
+      await supabase.from('tables').delete().eq('id', id);
+      toast({ title: 'Mesa removida.' });
+      await fetchData();
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Erro ao remover', description: err.message });
+    }
   };
 
   if (loading) {
@@ -109,7 +190,7 @@ export default function ComandasPage() {
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <PageHeader title="Gestão de Atendimento" subtitle="Comandas abertas e links de autoatendimento.">
-        <Button onClick={() => setIsNewDialogOpen(true)} className="h-12 font-black uppercase text-xs tracking-widest shadow-lg shadow-primary/20">
+        <Button onClick={() => setIsNewComandaOpen(true)} className="h-12 font-black uppercase text-xs tracking-widest shadow-lg shadow-primary/20">
           <Plus className="h-4 w-4 mr-2" /> Nova Comanda
         </Button>
       </PageHeader>
@@ -132,40 +213,70 @@ export default function ComandasPage() {
           </div>
 
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {filteredComandas.map(comanda => (
-              <Card 
-                key={comanda.comanda_id} 
-                className="group cursor-pointer hover:border-primary transition-all shadow-sm border-primary/5 bg-background relative overflow-hidden"
-                onClick={() => router.push(`/comandas/${comanda.comanda_id}`)}
-              >
-                <div className="absolute top-0 left-0 w-1 h-full bg-primary opacity-0 group-hover:opacity-100 transition-opacity" />
-                <CardHeader className="bg-muted/20 border-b py-4">
-                  <div className="flex justify-between items-start">
-                    <CardTitle className="text-3xl font-black tracking-tighter">#{comanda.numero}</CardTitle>
-                    <Badge variant="outline" className="text-[8px] font-black uppercase bg-background border-primary/20">Aberta</Badge>
-                  </div>
-                  <div className="flex flex-col gap-1 mt-2">
-                    <div className="flex items-center gap-1.5 text-[10px] font-black uppercase text-primary">
-                      <MapPin className="h-3 w-3" /> {comanda.mesa || 'Sem mesa'}
+            {filteredComandas.map(comanda => {
+              const mesaNum = comanda.mesa?.replace(/\D/g, '');
+              const linkedTable = tables.find(t => t.table_number.toString() === mesaNum);
+
+              return (
+                <Card 
+                  key={comanda.comanda_id} 
+                  className="group cursor-pointer hover:border-primary transition-all shadow-sm border-primary/5 bg-background relative overflow-hidden"
+                  onClick={() => router.push(`/comandas/${comanda.comanda_id}`)}
+                >
+                  <div className="absolute top-0 left-0 w-1 h-full bg-primary opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <CardHeader className="bg-muted/20 border-b py-4">
+                    <div className="flex justify-between items-start">
+                      <CardTitle className="text-3xl font-black tracking-tighter">#{comanda.numero}</CardTitle>
+                      <Badge variant="outline" className="text-[8px] font-black uppercase bg-background border-primary/20">Aberta</Badge>
                     </div>
-                    {comanda.cliente_nome && (
-                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground">
-                        <User className="h-3 w-3" /> {comanda.cliente_nome}
+                    <div className="flex flex-col gap-1 mt-2">
+                      <div className="flex items-center gap-1.5 text-[10px] font-black uppercase text-primary">
+                        <MapPin className="h-3 w-3" /> {comanda.mesa || 'Sem mesa'}
                       </div>
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent className="pt-6 pb-4">
-                  <p className="text-[9px] uppercase font-black text-muted-foreground tracking-widest mb-1">Total Acumulado</p>
-                  <p className="text-2xl font-black text-foreground tracking-tighter">{formatCurrency(comanda.total)}</p>
-                </CardContent>
-                <CardFooter className="pt-0 pb-4 flex justify-end">
-                  <span className="text-[10px] font-black uppercase text-primary flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all transform translate-x-2 group-hover:translate-x-0">
-                    Gerenciar <ArrowRight className="h-3 w-3" />
-                  </span>
-                </CardFooter>
-              </Card>
-            ))}
+                      {comanda.cliente_nome && (
+                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground">
+                          <User className="h-3 w-3" /> {comanda.cliente_nome}
+                        </div>
+                      )}
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-6 pb-4">
+                    <div className="flex justify-between items-end">
+                      <div>
+                        <p className="text-[9px] uppercase font-black text-muted-foreground tracking-widest mb-1">Acumulado</p>
+                        <p className="text-2xl font-black text-foreground tracking-tighter">{formatCurrency(comanda.total)}</p>
+                      </div>
+                      
+                      {linkedTable ? (
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-10 w-10 text-primary hover:bg-primary/10" 
+                          onClick={(e) => { e.stopPropagation(); handleCopyLink(linkedTable.table_token); }}
+                          title="Copiar Link do Cardápio"
+                        >
+                          <QrCode className="h-5 w-5" />
+                        </Button>
+                      ) : (
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-8 text-[8px] font-black uppercase tracking-widest text-muted-foreground hover:text-primary"
+                          onClick={(e) => { e.stopPropagation(); handleQuickGenerateLink(comanda.mesa || ''); }}
+                        >
+                          <Plus className="h-3 w-3 mr-1" /> Gerar Link
+                        </Button>
+                      )}
+                    </div>
+                  </CardContent>
+                  <CardFooter className="pt-0 pb-4 flex justify-end">
+                    <span className="text-[10px] font-black uppercase text-primary flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all transform translate-x-2 group-hover:translate-x-0">
+                      Gerenciar <ArrowRight className="h-3 w-3" />
+                    </span>
+                  </CardFooter>
+                </Card>
+              );
+            })}
 
             {filteredComandas.length === 0 && (
               <div className="col-span-full py-20 text-center border-2 border-dashed rounded-3xl opacity-30 flex flex-col items-center gap-4">
@@ -176,52 +287,108 @@ export default function ComandasPage() {
           </div>
         </TabsContent>
 
-        <TabsContent value="links" className="m-0">
-          <Card className="border-none shadow-sm overflow-hidden">
-            <CardHeader className="bg-primary/5 border-b py-6 px-8">
-              <CardTitle className="flex items-center gap-3 text-xl font-headline font-black uppercase tracking-tighter">
-                <QrCode className="h-6 w-6 text-primary" /> Links do Cardápio Digital
-              </CardTitle>
-              <p className="text-sm text-muted-foreground font-medium">Envie esses links para os clientes ou gere QR Codes para as mesas.</p>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="grid divide-y">
-                {tables.map(table => (
-                  <div key={table.id} className="p-6 flex items-center justify-between hover:bg-muted/20 transition-colors group">
+        <TabsContent value="links" className="m-0 space-y-6">
+          <div className="flex justify-between items-center bg-primary/5 p-6 rounded-2xl border border-primary/10">
+            <div className="space-y-1">
+              <h3 className="text-sm font-black uppercase tracking-tighter flex items-center gap-2 text-primary">
+                <Sparkles className="h-4 w-4" /> Autoatendimento Digital
+              </h3>
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                Gerencie as mesas que possuem acesso ao cardápio via QR Code.
+              </p>
+            </div>
+            <Button onClick={() => setIsNewTableOpen(true)} size="sm" className="h-10 font-black uppercase text-[10px] tracking-widest px-6 shadow-lg shadow-primary/20">
+              <Plus className="h-4 w-4 mr-2" /> Cadastrar Mesa
+            </Button>
+          </div>
+
+          <div className="grid gap-4">
+            {tables.map(table => (
+              <Card key={table.table_id} className="border-none shadow-sm hover:shadow-md transition-all group overflow-hidden">
+                <CardContent className="p-0">
+                  <div className="flex items-center justify-between p-6">
                     <div className="flex items-center gap-6">
-                      <div className="h-12 w-12 rounded-2xl bg-background border flex items-center justify-center font-black text-lg shadow-sm">
-                        {table.table_number}
+                      <div className="h-14 w-14 rounded-2xl bg-muted/30 border-2 border-dashed border-primary/20 flex flex-col items-center justify-center group-hover:border-primary/40 transition-colors">
+                        <span className="text-[8px] font-black uppercase opacity-40">Mesa</span>
+                        <span className="text-xl font-black">{table.table_number}</span>
                       </div>
                       <div>
-                        <h4 className="font-black text-sm uppercase tracking-tight">Mesa {table.table_number}</h4>
-                        <p className="text-[10px] font-mono text-muted-foreground uppercase opacity-60">{table.table_token}</p>
+                        <h4 className="font-black text-sm uppercase tracking-tight flex items-center gap-2">
+                          Mesa #{table.table_number}
+                          <Badge variant="secondary" className="h-4 text-[8px] font-black uppercase bg-green-50 text-green-600 border-green-100">
+                            {table.table_status}
+                          </Badge>
+                        </h4>
+                        <div className="flex items-center gap-2 mt-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                          <Link2 className="h-3 w-3 text-primary" />
+                          <span className="text-[10px] font-mono text-muted-foreground truncate max-w-[200px]">{table.table_token}</span>
+                        </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Button variant="outline" size="sm" className="font-black text-[10px] uppercase tracking-widest h-10 px-4" onClick={() => handleCopyLink(table.table_token)}>
+                    
+                    <div className="flex items-center gap-3">
+                      <Button variant="outline" size="sm" className="h-10 px-4 font-black uppercase text-[9px] tracking-[0.15em] border-primary/10 hover:bg-primary hover:text-white transition-all" onClick={() => handleCopyLink(table.table_token)}>
                         <Copy className="h-3.5 w-3.5 mr-2" /> Copiar Link
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-10 w-10 text-primary" onClick={() => window.open(`/m/${store?.id}/${table.table_token}`, '_blank')}>
+                      <Button variant="ghost" size="icon" className="h-10 w-10 text-primary hover:bg-primary/10" onClick={() => window.open(`/m/${store?.id}/${table.table_token}`, '_blank')}>
                         <ExternalLink className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-10 w-10 text-destructive/40 hover:text-destructive hover:bg-destructive/5" onClick={() => handleDeleteTable(table.table_id)}>
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
                   </div>
-                ))}
-                {tables.length === 0 && (
-                  <div className="py-24 text-center text-muted-foreground space-y-4">
-                    <QrCode className="h-12 w-12 mx-auto opacity-10" />
-                    <p className="text-xs font-black uppercase tracking-widest">Nenhuma mesa cadastrada para esta loja.</p>
-                  </div>
-                )}
+                </CardContent>
+              </Card>
+            ))}
+
+            {tables.length === 0 && (
+              <div className="py-32 text-center border-2 border-dashed rounded-[40px] opacity-20">
+                <QrCode className="h-16 w-16 mx-auto mb-4" />
+                <p className="text-sm font-black uppercase tracking-[0.2em]">Nenhuma mesa com link digital</p>
               </div>
-            </CardContent>
-          </Card>
+            )}
+          </div>
         </TabsContent>
       </Tabs>
 
+      {/* MODAL: NOVA MESA */}
+      <Dialog open={isNewTableOpen} onOpenChange={setIsNewTableOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black font-headline uppercase tracking-tighter">Cadastrar Mesa</DialogTitle>
+            <DialogDescription>Crie uma mesa física no sistema para habilitar o Cardápio Digital.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6 py-4">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Número da Mesa</label>
+              <Input 
+                type="number" 
+                placeholder="Ex: 10" 
+                className="h-14 text-2xl font-black text-center" 
+                value={newTableNumber}
+                onChange={(e) => setNewTableNumber(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="bg-primary/5 p-4 rounded-xl border border-primary/10">
+              <p className="text-[10px] font-bold text-primary uppercase leading-relaxed">
+                Ao cadastrar, o sistema gera um link exclusivo e seguro. Você poderá imprimir o QR Code correspondente para colocar na mesa física.
+              </p>
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:flex-row-reverse">
+            <Button onClick={handleCreateTable} disabled={!newTableNumber || isCreatingTable} className="flex-1 h-12 font-black uppercase text-xs tracking-widest shadow-lg shadow-primary/20">
+              {isCreatingTable ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <QrCode className="mr-2 h-4 w-4" />} Ativar Mesa
+            </Button>
+            <Button variant="ghost" onClick={() => setIsNewTableOpen(false)} className="flex-1 h-12 font-black uppercase text-xs tracking-widest">Cancelar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <CreateComandaDialog 
-        isOpen={isNewDialogOpen} 
-        onOpenChange={setIsNewDialogOpen} 
+        isOpen={isNewComandaOpen} 
+        onOpenChange={setIsNewComandaOpen} 
         onSuccess={fetchData} 
       />
     </div>
