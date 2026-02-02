@@ -3,7 +3,6 @@ import { Suspense } from "react";
 import Script from "next/script";
 import { Providers } from "./providers";
 import { AnalyticsTracker } from "@/components/analytics-tracker";
-import { AdSenseScript } from "@/components/adsense-script";
 import "./globals.css";
 
 /**
@@ -53,6 +52,11 @@ export const metadata: Metadata = {
     index: true,
     follow: true,
   },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'VendaFácil',
+  },
 };
 
 export const viewport: Viewport = {
@@ -96,21 +100,23 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&display=swap"
           rel="stylesheet"
         />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="mobile-web-app-capable" content="yes" />
         <link rel="manifest" href="/manifest.webmanifest" />
         <link rel="apple-touch-icon" href="/logo.png" />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }}
         />
+        {/* Google AdSense Direct Script to avoid data-nscript attribute warning */}
+        <script 
+          async 
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7101977987227464" 
+          crossOrigin="anonymous"
+        ></script>
       </head>
       <body className="font-body antialiased min-h-screen">
         <Suspense fallback={null}>
           <Providers>
-            {/* AdSense condicional para verificação e monetização */}
-            <AdSenseScript />
-            
             {/* Analytics */}
             <AnalyticsTracker />
             {children}

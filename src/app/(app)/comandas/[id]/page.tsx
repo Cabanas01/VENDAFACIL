@@ -24,7 +24,9 @@ import {
   CreditCard,
   Send,
   XCircle,
-  Clock
+  Clock,
+  Search,
+  Coins
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
