@@ -1,3 +1,4 @@
+
 'use client';
 
 /**
@@ -153,22 +154,31 @@ export default function ComandaDetailsPage() {
   };
 
   const handleCloseComanda = async (method: 'cash' | 'pix' | 'card') => {
+    if (!comanda || !comanda.total || comanda.total <= 0) {
+      toast({ variant: 'destructive', title: 'Comanda sem consumo', description: 'Não é possível fechar uma comanda vazia.' });
+      return;
+    }
+
     if (tempItems.length > 0) {
       toast({ variant: 'destructive', title: 'Pedido pendente', description: 'Confirme ou remova os itens em rascunho antes de fechar.' });
       return;
     }
+
     setIsSubmitting(true);
     try {
+      // Chamada RPC: O total_cents é calculado pelo banco a partir da view
       const { error } = await supabase.rpc('fechar_comanda', {
         p_comanda_id: id as string,
         p_payment_method: method
       });
 
       if (error) throw error;
-      toast({ title: 'Comanda Encerrada!', description: 'Venda registrada com sucesso.' });
+      
+      toast({ title: 'Comanda Encerrada!', description: `Venda de ${formatCurrency(comanda.total)} registrada.` });
       router.push('/comandas');
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Erro no fechamento', description: err.message });
+      console.error('[CLOSE_ERROR]', err);
+      toast({ variant: 'destructive', title: 'Erro no fechamento', description: err.message || 'Verifique se o caixa está aberto.' });
     } finally {
       setIsSubmitting(false);
     }
@@ -316,7 +326,7 @@ export default function ComandaDetailsPage() {
               <Button 
                 className="w-full h-14 font-black uppercase tracking-widest text-xs gap-3 shadow-lg shadow-primary/20"
                 onClick={() => setIsClosing(true)}
-                disabled={items.length === 0 || tempItems.length > 0 || isSubmitting}
+                disabled={!comanda.total || comanda.total <= 0 || tempItems.length > 0 || isSubmitting}
               >
                 <Wallet className="h-4 w-4" /> Fechar Conta
               </Button>
@@ -370,22 +380,31 @@ export default function ComandaDetailsPage() {
       </Dialog>
 
       <Dialog open={isClosing} onOpenChange={setIsClosing}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle className="text-center font-black uppercase text-lg tracking-tighter">Escolha o Recebimento</DialogTitle></DialogHeader>
-          <div className="grid grid-cols-1 gap-3 py-4">
-            <Button variant="outline" className="h-16 justify-start font-black gap-4 border-2 hover:border-primary" onClick={() => handleCloseComanda('cash')}>
+        <DialogContent className="sm:max-w-md p-0 overflow-hidden">
+          <div className="p-6 bg-primary/5 text-center border-b">
+            <DialogTitle className="font-black uppercase text-lg tracking-tighter">Escolha o Recebimento</DialogTitle>
+            <p className="text-muted-foreground text-xs font-bold mt-1 uppercase">Valor Final: {formatCurrency(comanda.total)}</p>
+          </div>
+          <div className="grid grid-cols-1 gap-3 p-6">
+            <Button variant="outline" className="h-16 justify-start font-black gap-4 border-2 hover:border-primary" onClick={() => handleCloseComanda('cash')} disabled={isSubmitting}>
               <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center text-green-600"><Wallet className="h-5 w-5" /></div>
               Dinheiro
             </Button>
-            <Button variant="outline" className="h-16 justify-start font-black gap-4 border-2 hover:border-primary" onClick={() => handleCloseComanda('pix')}>
+            <Button variant="outline" className="h-16 justify-start font-black gap-4 border-2 hover:border-primary" onClick={() => handleCloseComanda('pix')} disabled={isSubmitting}>
               <div className="h-10 w-10 rounded-full bg-cyan-100 flex items-center justify-center text-cyan-600"><ShoppingCart className="h-5 w-5" /></div>
               PIX
             </Button>
-            <Button variant="outline" className="h-16 justify-start font-black gap-4 border-2 hover:border-primary" onClick={() => handleCloseComanda('card')}>
+            <Button variant="outline" className="h-16 justify-start font-black gap-4 border-2 hover:border-primary" onClick={() => handleCloseComanda('card')} disabled={isSubmitting}>
               <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600"><Wallet className="h-5 w-5" /></div>
               Cartão
             </Button>
           </div>
+          {isSubmitting && (
+            <div className="absolute inset-0 bg-background/80 flex flex-col items-center justify-center z-50 animate-in fade-in">
+              <Loader2 className="h-10 w-10 animate-spin text-primary mb-2" />
+              <p className="text-xs font-black uppercase tracking-widest">Sincronizando Banco...</p>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
