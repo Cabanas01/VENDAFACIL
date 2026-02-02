@@ -128,7 +128,7 @@ export type Comanda = {
   numero: number;
   mesa?: string | null;
   cliente_nome?: string | null;
-  status: string;
+  status: 'aberta' | 'fechada' | 'cancelada';
   created_at: string;
   closed_at?: string;
 };
@@ -140,8 +140,8 @@ export type ComandaItem = {
   product_name: string;
   quantidade: number;
   preco_unitario: number;
-  destino_preparo: string;
-  status: string;
+  destino_preparo: 'cozinha' | 'bar' | 'nenhum';
+  status: 'pendente' | 'em_preparo' | 'pronto' | 'cancelado';
   created_at: string;
 };
 
