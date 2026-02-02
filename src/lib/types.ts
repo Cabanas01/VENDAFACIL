@@ -116,8 +116,8 @@ export type Customer = {
     id: string;
     store_id: string;
     name: string;
-    email: string;
-    phone: string;
+    email?: string | null;
+    phone: string | null;
     cpf: string | null;
     created_at: string;
 };
@@ -127,10 +127,10 @@ export type Comanda = {
   store_id: string;
   numero: number;
   mesa?: string | null;
-  cliente_nome?: string | null;
+  customer_id?: string | null;
   status: 'aberta' | 'fechada' | 'cancelada';
   created_at: string;
-  closed_at?: string;
+  closed_at?: string | null;
 };
 
 export type ComandaItem = {
@@ -160,7 +160,6 @@ export type PainelProducaoView = {
   comanda_id: string;
   comanda_numero: number;
   mesa: string | null;
-  cliente_nome?: string | null;
   produto: string;
   quantidade: number;
   created_at: string;
