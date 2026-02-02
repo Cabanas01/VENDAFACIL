@@ -55,6 +55,7 @@ export type Store = {
   status: 'active' | 'trial' | 'suspended' | 'blocked' | 'deleted';
   trial_used: boolean;
   trial_started_at: string | null;
+  use_comanda: boolean;
 };
 
 export type Product = {
@@ -69,6 +70,7 @@ export type Product = {
   active: boolean;
   barcode?: string;
   created_at: string;
+  destino_preparo: 'cozinha' | 'bar' | 'nenhum';
 };
 
 export type Sale = {
@@ -118,6 +120,47 @@ export type Customer = {
     phone: string;
     cpf: string | null;
     created_at: string;
+};
+
+export type Comanda = {
+  id: string;
+  store_id: string;
+  numero_comanda: string;
+  mesa_cliente?: string;
+  status: 'aberta' | 'fechada' | 'cancelada';
+  created_at: string;
+  closed_at?: string;
+};
+
+export type ComandaItem = {
+  id: string;
+  comanda_id: string;
+  product_id: string;
+  quantity: number;
+  unit_price_cents: number;
+  subtotal_cents: number;
+  status_preparo: 'pendente' | 'em_preparo' | 'pronto' | 'entregue' | 'cancelado';
+  created_at: string;
+  product_name?: string; // vindo de join ou view
+};
+
+export type ComandaTotalView = {
+  id: string;
+  numero_comanda: string;
+  mesa_cliente: string;
+  status: string;
+  total_cents: number;
+  itens_count: number;
+};
+
+export type PainelProducaoView = {
+  id: string; // comanda_item_id
+  numero_comanda: string;
+  mesa_cliente: string;
+  nome_produto: string;
+  quantidade: number;
+  status_item: string;
+  created_at: string;
 };
 
 export type StoreStatus = 

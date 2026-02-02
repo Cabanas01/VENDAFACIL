@@ -15,7 +15,16 @@ export default function PDVControleCaixaPage() {
         <div className="space-y-10">
           <section>
             <h2>Gestão de fluxo de caixa no PDV</h2>
-            <p>O <strong>controle de caixa</strong> é o processo de registrar todas as entradas e saídas de dinheiro. O VendaFácil elimina diferenças através de um fluxo guiado de abertura e fechamento de turno.</p>
+            <p>
+              O <strong>controle de caixa</strong> é o processo de registrar todas as entradas e saídas de dinheiro. O VendaFácil elimina diferenças através de um fluxo guiado de abertura e fechamento de turno.
+            </p>
+          </section>
+
+          <section>
+            <h2>Segurança e Transparência</h2>
+            <p>
+              Como cada transação é registrada com data e hora, qualquer divergência pode ser auditada rapidamente. Isso protege tanto o proprietário quanto o colaborador.
+            </p>
           </section>
         </div>
       }

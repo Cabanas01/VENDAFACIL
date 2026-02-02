@@ -37,18 +37,26 @@ import {
   Users,
   Target,
   Users2,
-  ChevronRight
+  ChevronRight,
+  ClipboardList,
+  ChefHat,
+  GlassWater
 } from 'lucide-react';
 import { useAuth } from '@/components/auth-provider';
 import { cn } from '@/lib/utils';
-import { Badge } from '@/components/ui/badge';
 
 const mainNavItems = [
   { href: '/dashboard', label: 'Visão Geral', icon: Home, exact: true },
   { href: '/sales/new', label: 'Vendas / PDV', icon: ShoppingCart, exact: false },
+  { href: '/comandas', label: 'Comandas Eletrônicas', icon: ClipboardList, exact: false },
   { href: '/dashboard/products', label: 'Produtos', icon: Package, exact: true },
   { href: '/dashboard/customers', label: 'Clientes', icon: Users, exact: true },
   { href: '/cash', label: 'Caixa', icon: Wallet, exact: true },
+];
+
+const productionNavItems = [
+  { href: '/painel/cozinha', label: 'Cozinha', icon: ChefHat, exact: true },
+  { href: '/painel/bar', label: 'Bar', icon: GlassWater, exact: true },
 ];
 
 const managementNavItems = [
@@ -64,12 +72,15 @@ const configNavItems = [
 
 export function MainNav() {
   const pathname = usePathname();
-  const { user, store, logout } = useAuth();
+  const { user, store, logout, products } = useAuth();
   const router = useRouter();
 
   const isActive = (href: string, exact: boolean) => {
     return exact ? pathname === href : pathname.startsWith(href);
   };
+
+  const hasCozinha = products?.some(p => p.destino_preparo === 'cozinha');
+  const hasBar = products?.some(p => p.destino_preparo === 'bar');
 
   return (
     <Sidebar className="border-r border-white/5 bg-slate-950 text-white">
@@ -126,6 +137,38 @@ export function MainNav() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {(hasCozinha || hasBar) && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-[0.25em] px-4 text-slate-500 mb-2">
+              Produção
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu className="gap-1.5">
+                {hasCozinha && (
+                  <SidebarMenuItem>
+                    <SidebarMenuButton asChild isActive={isActive('/painel/cozinha', true)} className={cn("px-4 h-11 rounded-lg text-slate-400 hover:bg-white/5 hover:text-white", isActive('/painel/cozinha', true) && "bg-primary text-white")}>
+                      <Link href="/painel/cozinha" className="flex items-center gap-3">
+                        <ChefHat className="h-4 w-4" />
+                        <span className="font-bold text-xs tracking-tight">Cozinha</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )}
+                {hasBar && (
+                  <SidebarMenuItem>
+                    <SidebarMenuButton asChild isActive={isActive('/painel/bar', true)} className={cn("px-4 h-11 rounded-lg text-slate-400 hover:bg-white/5 hover:text-white", isActive('/painel/bar', true) && "bg-primary text-white")}>
+                      <Link href="/painel/bar" className="flex items-center gap-3">
+                        <GlassWater className="h-4 w-4" />
+                        <span className="font-bold text-xs tracking-tight">Bar</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
         <SidebarGroup>
           <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-[0.25em] px-4 text-slate-500 mb-2">
