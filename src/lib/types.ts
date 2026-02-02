@@ -77,9 +77,10 @@ export type Product = {
 export type Sale = {
   id: string;
   store_id: string;
+  customer_id?: string | null;
   created_at: string;
   total_cents: number;
-  payment_method: 'dinheiro' | 'pix' | 'cartao';
+  payment_method: 'dinheiro' | 'pix' | 'cartao' | 'cash' | 'card';
   items: SaleItem[];
 };
 
