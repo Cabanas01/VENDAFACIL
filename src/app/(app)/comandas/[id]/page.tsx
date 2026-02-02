@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * @fileOverview Gestão Detalhada da Comanda - Fluxo de Pedido Confirmado e Fechamento via RPC
+ * @fileOverview Gestão Detalhada da Comanda - Sincronização Garantida Pós-Fechamento
  */
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
@@ -27,7 +27,7 @@ import {
   ClipboardList,
   Search,
   Send
-} from 'lucide-react';
+} from 'lucide-center';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -37,21 +37,11 @@ import { cn } from '@/lib/utils';
 const formatCurrency = (val: number) => 
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((val || 0) / 100);
 
-const itemStatusConfig: Record<string, { label: string, color: string, icon: React.ReactNode }> = {
-  pendente: { label: 'Aguardando', color: 'bg-slate-500', icon: <Clock className="h-3 w-3 mr-1" /> },
-  em_preparo: { label: 'Em Preparo', color: 'bg-orange-500', icon: <Loader2 className="h-3 w-3 mr-1 animate-spin" /> },
-  pronto: { label: 'Pronto', color: 'bg-green-500', icon: <CheckCircle2 className="h-3 w-3 mr-1" /> },
-  cancelado: { label: 'Cancelado', color: 'bg-red-500', icon: <Trash2 className="h-3 w-3 mr-1" /> },
-};
-
-type TempItem = {
-  product: Product;
-  quantity: number;
-};
+type TempItem = { product: Product; quantity: number; };
 
 export default function ComandaDetailsPage() {
   const { id } = useParams();
-  const { store, products, refreshStatus } = useAuth();
+  const { products, refreshStatus } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -68,11 +58,16 @@ export default function ComandaDetailsPage() {
     if (!id) return;
     try {
       const [comandaRes, itemsRes] = await Promise.all([
-        supabase.from('v_comandas_totais').select('*').eq('comanda_id', id).single(),
+        supabase.from('v_comandas_totais').select('*').eq('comanda_id', id).maybeSingle(),
         supabase.from('comanda_itens').select('*').eq('comanda_id', id).order('created_at', { ascending: false })
       ]);
 
-      if (comandaRes.error) throw comandaRes.error;
+      // Se a comanda não retornar (foi fechada por outro terminal)
+      if (!comandaRes.data || comandaRes.data.status !== 'aberta') {
+        router.replace('/comandas');
+        return;
+      }
+
       setComanda(comandaRes.data);
       setItems(itemsRes.data || []);
     } catch (err: any) {
@@ -80,72 +75,57 @@ export default function ComandaDetailsPage() {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, router]);
 
   useEffect(() => {
     fetchData();
-    const channel = supabase
-      .channel(`comanda_detail_${id}`)
+    const channel = supabase.channel(`sync_comanda_${id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'comandas', filter: `id=eq.${id}` }, (payload) => {
+        if (payload.new && (payload.new as any).status !== 'aberta') {
+          router.replace('/comandas');
+        }
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'comanda_itens', filter: `comanda_id=eq.${id}` }, () => fetchData())
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [id, fetchData]);
-
-  const filteredProducts = useMemo(() => 
-    products.filter(p => p.active && (p.name.toLowerCase().includes(search.toLowerCase()) || (p.barcode || '').includes(search))),
-  [products, search]);
+  }, [id, fetchData, router]);
 
   const addTempItem = (product: Product) => {
     setTempItems(prev => {
-      const existing = prev.find(i => i.product.id === product.id);
-      if (existing) {
-        return prev.map(i => i.product.id === product.id ? { ...i, quantity: i.quantity + 1 } : i);
-      }
-      return [...prev, { product, quantity: 1 }];
+      const ex = prev.find(i => i.product.id === product.id);
+      return ex ? prev.map(i => i.product.id === product.id ? { ...i, quantity: i.quantity + 1 } : i) : [...prev, { product, quantity: 1 }];
     });
-  };
-
-  const removeTempItem = (productId: string) => {
-    setTempItems(prev => prev.filter(i => i.product.id !== productId));
   };
 
   const confirmOrder = async () => {
     if (tempItems.length === 0) return;
     setIsSubmitting(true);
     try {
-      const itemsToInsert = tempItems.map(item => ({
+      const { error } = await supabase.from('comanda_itens').insert(tempItems.map(i => ({
         comanda_id: id as string,
-        product_id: item.product.id,
-        product_name: item.product.name,
-        quantidade: item.quantity,
-        preco_unitario: item.product.price_cents,
-        destino_preparo: item.product.destino_preparo || 'nenhum'
-      }));
-
-      const { error } = await supabase.from('comanda_itens').insert(itemsToInsert);
+        product_id: i.product.id,
+        product_name: i.product.name,
+        quantidade: i.quantity,
+        preco_unitario: i.product.price_cents,
+        destino_preparo: i.product.destino_preparo || 'nenhum'
+      })));
       if (error) throw error;
-
-      toast({ title: 'Pedido Confirmado!', description: 'Itens enviados para produção.' });
+      toast({ title: 'Pedido Enviado!' });
       setTempItems([]);
       setIsAdding(false);
       fetchData();
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Erro ao enviar', description: err.message });
+      toast({ variant: 'destructive', title: 'Erro', description: err.message });
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleCloseComanda = async (method: 'cash' | 'pix' | 'card') => {
-    if (!comanda || !comanda.total || comanda.total <= 0) {
-      toast({ variant: 'destructive', title: 'Erro', description: 'Comanda sem consumo.' });
-      return;
-    }
-
+    if (!comanda?.total || comanda.total <= 0) return;
     setIsSubmitting(true);
     try {
-      // Regra de Ouro: Confiança total na RPC de fechamento
       const { data, error } = await supabase.rpc('fechar_comanda', {
         p_comanda_id: id as string,
         p_payment_method: method
@@ -153,226 +133,98 @@ export default function ComandaDetailsPage() {
 
       if (error) throw error;
       
-      // Sucesso
-      toast({ title: 'Comanda Encerrada!', description: `Venda de ${formatCurrency(comanda.total)} registrada.` });
-      
-      // Recarregar dados globais para atualizar caixa/dashboard
-      await refreshStatus();
+      // REGRA DE OURO: Invalida todos os estados locais ANTES de mudar de página
+      await refreshStatus(); 
+      toast({ title: 'Comanda Encerrada!' });
       router.push('/comandas');
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Falha no fechamento', description: err.message });
-    } finally {
+      toast({ variant: 'destructive', title: 'Erro ao fechar', description: err.message });
       setIsSubmitting(false);
     }
   };
 
-  if (loading) return (
-    <div className="h-[60vh] flex flex-col items-center justify-center gap-4">
-      <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      <p className="font-black uppercase text-[10px] tracking-widest text-muted-foreground">Carregando detalhes...</p>
-    </div>
-  );
-
-  if (!comanda) return <div className="py-20 text-center text-muted-foreground uppercase font-black text-xs">Comanda não localizada.</div>;
+  if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-primary" /></div>;
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 pb-32">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" className="rounded-full" onClick={() => router.push('/comandas')}>
-          <ArrowLeft className="h-6 w-6" />
-        </Button>
-        <div className="flex-1">
-          <div className="flex items-center gap-3">
-            <h1 className="text-4xl font-black font-headline tracking-tighter uppercase">Comanda #{comanda.numero}</h1>
-            <Badge className="bg-green-500 font-black uppercase text-[9px] border-none text-white">Aberta</Badge>
-          </div>
-          {comanda.mesa && (
-            <p className="text-sm text-muted-foreground font-bold uppercase mt-1">Identificação: {comanda.mesa}</p>
-          )}
-        </div>
+      <div className="flex items-center justify-between">
+        <Button variant="ghost" onClick={() => router.push('/comandas')}><ArrowLeft className="mr-2" /> Comandas</Button>
         <div className="text-right">
-          <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Total Acumulado</p>
-          <p className="text-4xl font-black text-primary tracking-tighter">{formatCurrency(comanda.total)}</p>
+          <p className="text-[10px] font-black uppercase text-muted-foreground">Total</p>
+          <p className="text-4xl font-black text-primary">{formatCurrency(comanda?.total || 0)}</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-6">
-          {/* Rascunho de Novos Itens */}
           {tempItems.length > 0 && (
-            <Card className="border-primary border-2 shadow-xl bg-primary/5 animate-in slide-in-from-top-4">
-              <CardHeader className="bg-primary/10 border-b border-primary/10">
-                <CardTitle className="text-xs font-black uppercase tracking-widest flex items-center gap-2 text-primary">
-                  <ShoppingCart className="h-4 w-4" /> Itens a Confirmar
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <Table>
-                  <TableBody>
-                    {tempItems.map(item => (
-                      <TableRow key={item.product.id} className="border-primary/10">
-                        <TableCell className="px-6 py-4 font-bold text-sm uppercase">{item.product.name}</TableCell>
-                        <TableCell className="text-center font-black">x{item.quantity}</TableCell>
-                        <TableCell className="text-right">
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeTempItem(item.product.id)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                <div className="p-4">
-                  <Button className="w-full h-12 font-black uppercase tracking-widest gap-2 shadow-lg" onClick={confirmOrder} disabled={isSubmitting}>
-                    {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                    Confirmar Pedido
-                  </Button>
-                </div>
+            <Card className="border-primary bg-primary/5">
+              <CardContent className="p-4 space-y-4">
+                <h3 className="font-black text-xs uppercase text-primary">Rascunho do Pedido</h3>
+                {tempItems.map(i => (
+                  <div key={i.product.id} className="flex justify-between font-bold text-sm">
+                    <span>{i.product.name} x{i.quantity}</span>
+                    <Button variant="ghost" size="icon" onClick={() => setTempItems(prev => prev.filter(x => x.product.id !== i.product.id))}><Trash2 className="h-4 w-4" /></Button>
+                  </div>
+                ))}
+                <Button className="w-full" onClick={confirmOrder} disabled={isSubmitting}>Confirmar e Enviar</Button>
               </CardContent>
             </Card>
           )}
 
-          {/* Consumo Efetivado */}
-          <Card className="border-none shadow-sm overflow-hidden">
-            <CardHeader className="bg-muted/10 border-b pb-4">
-              <div className="flex justify-between items-center">
-                <CardTitle className="text-xs font-black uppercase tracking-widest flex items-center gap-2">
-                  <ClipboardList className="h-4 w-4 text-primary" /> Histórico de Consumo
-                </CardTitle>
-                <Button size="sm" onClick={() => setIsAdding(true)} className="h-8 font-black uppercase text-[10px]">
-                  <Plus className="h-3 w-3 mr-1" /> Lançar Produto
-                </Button>
-              </div>
+          <Card>
+            <CardHeader className="flex flex-row justify-between items-center bg-muted/10">
+              <CardTitle className="text-xs font-black uppercase">Consumo Efetivado</CardTitle>
+              <Button size="sm" onClick={() => setIsAdding(true)}>Adicionar Itens</Button>
             </CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader className="bg-muted/20">
-                  <TableRow>
-                    <TableHead className="font-black text-[10px] uppercase px-6">Produto</TableHead>
-                    <TableHead className="font-black text-[10px] uppercase px-6 text-center">Status</TableHead>
-                    <TableHead className="font-black text-[10px] uppercase px-6 text-right">Subtotal</TableHead>
+            <Table>
+              <TableBody>
+                {items.map(item => (
+                  <TableRow key={item.id}>
+                    <TableCell className="font-bold text-sm">{item.product_name} <span className="text-xs text-muted-foreground ml-2">x{item.quantidade}</span></TableCell>
+                    <TableCell className="text-right font-black">{formatCurrency(item.quantidade * item.preco_unitario)}</TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {items.map(item => {
-                    const config = itemStatusConfig[item.status] || itemStatusConfig.pendente;
-                    return (
-                      <TableRow key={item.id} className="hover:bg-muted/5 transition-colors border-b border-muted/10">
-                        <TableCell className="px-6 py-4">
-                          <div className="flex flex-col">
-                            <span className="font-black text-xs uppercase text-foreground">{item.product_name}</span>
-                            <span className="text-[10px] text-muted-foreground font-bold">{item.quantidade}un x {formatCurrency(item.preco_unitario)}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="px-6 text-center">
-                          <Badge className={cn("text-[8px] font-black uppercase border-none text-white", config.color)}>
-                            {config.icon} {config.label}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="px-6 text-right font-black text-sm text-foreground">
-                          {formatCurrency(item.quantidade * item.preco_unitario)}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                  {items.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={3} className="text-center py-20 text-muted-foreground text-xs font-black uppercase tracking-widest opacity-30">
-                        Nenhum item consumido
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
+                ))}
+              </TableBody>
+            </Table>
           </Card>
         </div>
 
         <div className="space-y-6">
-          <Card className="border-primary/10 shadow-2xl bg-primary/5 sticky top-6">
-            <CardContent className="p-8 space-y-6">
-              <div className="space-y-1 text-center">
-                <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Valor do Checkout</p>
-                <p className="text-5xl font-black text-primary tracking-tighter">{formatCurrency(comanda.total)}</p>
-              </div>
-              <Separator className="bg-primary/10" />
-              <Button 
-                className="w-full h-14 font-black uppercase tracking-widest text-xs gap-3 shadow-lg shadow-primary/20"
-                onClick={() => setIsClosing(true)}
-                disabled={!comanda.total || comanda.total <= 0 || tempItems.length > 0 || isSubmitting}
-              >
-                <Wallet className="h-4 w-4" /> Finalizar Pagamento
-              </Button>
-            </CardContent>
+          <Card className="bg-primary/5 p-6 border-primary/10">
+            <Button 
+              className="w-full h-14 font-black uppercase" 
+              onClick={() => setIsClosing(true)}
+              disabled={!comanda?.total || comanda.total <= 0 || tempItems.length > 0}
+            >
+              Fechar e Receber
+            </Button>
           </Card>
         </div>
       </div>
 
-      {/* Modal de Seleção de Produtos */}
       <Dialog open={isAdding} onOpenChange={setIsAdding}>
-        <DialogContent className="sm:max-w-2xl p-0 overflow-hidden">
-          <div className="p-6 bg-muted/30 border-b">
-            <DialogTitle className="font-black uppercase tracking-widest text-xs">Adicionar ao Pedido</DialogTitle>
-            <div className="relative mt-4">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Localizar produto..." className="pl-10 h-12 text-sm font-bold" value={search} onChange={(e) => setSearch(e.target.value)} autoFocus />
-            </div>
-          </div>
-          <ScrollArea className="h-[50vh] p-4">
-            <div className="grid grid-cols-2 gap-3">
-              {filteredProducts.map(p => (
-                <Card key={p.id} className="cursor-pointer hover:border-primary transition-all active:scale-95" onClick={() => addTempItem(p)}>
-                  <CardContent className="p-4 flex justify-between items-center">
-                    <div>
-                      <p className="font-black uppercase text-[10px] truncate max-w-[120px]">{p.name}</p>
-                      <p className="text-sm font-black text-primary mt-1">{formatCurrency(p.price_cents)}</p>
-                    </div>
-                    <div className="h-8 w-8 rounded-full bg-primary/5 flex items-center justify-center">
-                      <Plus className="h-4 w-4 text-primary" />
-                    </div>
-                  </CardContent>
-                </Card>
+        <DialogContent className="sm:max-w-xl">
+          <Input placeholder="Buscar produto..." value={search} onChange={e => setSearch(e.target.value)} />
+          <ScrollArea className="h-96">
+            <div className="grid grid-cols-2 gap-2">
+              {products.filter(p => p.name.toLowerCase().includes(search.toLowerCase())).map(p => (
+                <Button key={p.id} variant="outline" className="h-16 text-xs font-bold" onClick={() => addTempItem(p)}>{p.name}</Button>
               ))}
             </div>
           </ScrollArea>
-          <DialogFooter className="p-4 bg-muted/10 border-t">
-            <Button variant="ghost" onClick={() => setIsAdding(false)} className="font-black uppercase text-[10px]">Cancelar</Button>
-            {tempItems.length > 0 && (
-              <Button onClick={() => setIsAdding(false)} className="font-black uppercase text-[10px]">
-                Revisar {tempItems.length} Itens
-              </Button>
-            )}
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Modal de Pagamento */}
       <Dialog open={isClosing} onOpenChange={setIsClosing}>
-        <DialogContent className="sm:max-w-md p-0 overflow-hidden">
-          <div className="p-6 bg-primary/5 text-center border-b">
-            <DialogTitle className="font-black uppercase text-lg tracking-tighter">Escolha o Meio de Recebimento</DialogTitle>
-            <p className="text-muted-foreground text-xs font-bold mt-1 uppercase">Total a Receber: {formatCurrency(comanda.total)}</p>
+        <DialogContent>
+          <DialogHeader><DialogTitle className="text-center">Forma de Pagamento</DialogTitle></DialogHeader>
+          <div className="flex flex-col gap-2 pt-4">
+            <Button variant="outline" className="h-12 font-black" onClick={() => handleCloseComanda('cash')}>DINHEIRO</Button>
+            <Button variant="outline" className="h-12 font-black" onClick={() => handleCloseComanda('pix')}>PIX</Button>
+            <Button variant="outline" className="h-12 font-black" onClick={() => handleCloseComanda('card')}>CARTÃO</Button>
           </div>
-          <div className="grid grid-cols-1 gap-3 p-6">
-            <Button variant="outline" className="h-16 justify-start font-black gap-4 border-2 hover:border-primary" onClick={() => handleCloseComanda('cash')} disabled={isSubmitting}>
-              <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center text-green-600"><Wallet className="h-5 w-5" /></div>
-              Dinheiro
-            </Button>
-            <Button variant="outline" className="h-16 justify-start font-black gap-4 border-2 hover:border-primary" onClick={() => handleCloseComanda('pix')} disabled={isSubmitting}>
-              <div className="h-10 w-10 rounded-full bg-cyan-100 flex items-center justify-center text-cyan-600"><ShoppingCart className="h-5 w-5" /></div>
-              PIX
-            </Button>
-            <Button variant="outline" className="h-16 justify-start font-black gap-4 border-2 hover:border-primary" onClick={() => handleCloseComanda('card')} disabled={isSubmitting}>
-              <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600"><Wallet className="h-5 w-5" /></div>
-              Cartão
-            </Button>
-          </div>
-          {isSubmitting && (
-            <div className="absolute inset-0 bg-background/80 flex flex-col items-center justify-center z-50 animate-in fade-in">
-              <Loader2 className="h-10 w-10 animate-spin text-primary mb-2" />
-              <p className="text-xs font-black uppercase tracking-widest">Processando Fluxo Financeiro...</p>
-            </div>
-          )}
+          {isSubmitting && <div className="flex justify-center p-4"><Loader2 className="animate-spin" /></div>}
         </DialogContent>
       </Dialog>
     </div>
