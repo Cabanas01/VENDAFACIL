@@ -145,22 +145,22 @@ export type ComandaItem = {
   created_at: string;
 };
 
-// Estrutura exata da view v_comandas_totais
 export type ComandaTotalView = {
   comanda_id: string;
   store_id: string;
   numero: number;
   mesa?: string | null;
+  cliente_nome?: string | null;
   status: string;
   total: number;
 };
 
-// Estrutura exata das views v_painel_cozinha e v_painel_bar
 export type PainelProducaoView = {
   item_id: string;
   comanda_id: string;
   comanda_numero: number;
   mesa: string | null;
+  cliente_nome?: string | null;
   produto: string;
   quantidade: number;
   created_at: string;

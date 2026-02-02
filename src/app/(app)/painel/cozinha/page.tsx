@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * @fileOverview KDS - Painel de Cozinha Reativo
+ * @fileOverview KDS - Painel de Cozinha Reativo (Visão Mesa/Cliente)
  */
 
 import { useEffect, useState, useCallback } from 'react';
@@ -10,7 +10,7 @@ import { supabase } from '@/lib/supabase/client';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ChefHat, Clock, History, Loader2 } from 'lucide-react';
+import { ChefHat, Clock, History, Loader2, MapPin, Users } from 'lucide-react';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { PainelProducaoView } from '@/lib/types';
@@ -23,7 +23,6 @@ export default function CozinhaPage() {
   const fetchPedidos = useCallback(async () => {
     if (!store?.id) return;
     try {
-      // A View v_painel_cozinha já filtra status = 'aberta'
       const { data, error } = await supabase
         .from('v_painel_cozinha')
         .select('*')
@@ -41,7 +40,6 @@ export default function CozinhaPage() {
   useEffect(() => {
     fetchPedidos();
 
-    // ESCUTA TABELAS BASE: Se a comanda fechar ou itens mudarem, refetch a View
     const channel = supabase
       .channel('kds_sync_global')
       .on('postgres_changes', { 
@@ -75,7 +73,19 @@ export default function CozinhaPage() {
         {pedidos.map(p => (
           <Card key={p.item_id} className="border-none shadow-xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
             <div className="px-6 py-4 flex justify-between items-center border-b bg-muted/30">
-              <span className="text-2xl font-black font-headline tracking-tighter uppercase">Comanda #{p.comanda_numero}</span>
+              <div className="flex flex-col">
+                <span className="text-2xl font-black font-headline tracking-tighter uppercase leading-none">Comanda #{p.comanda_numero}</span>
+                <div className="flex items-center gap-3 mt-1.5">
+                  <div className="flex items-center gap-1 text-[10px] font-black uppercase text-primary">
+                    <MapPin className="h-3 w-3" /> {p.mesa || 'Sem mesa'}
+                  </div>
+                  {p.cliente_nome && (
+                    <div className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground uppercase tracking-tight">
+                      <Users className="h-3 w-3" /> {p.cliente_nome}
+                    </div>
+                  )}
+                </div>
+              </div>
               <div className="flex items-center gap-2 text-[10px] font-black uppercase text-muted-foreground">
                 <Clock className="h-3 w-3" /> {formatDistanceToNow(parseISO(p.created_at), { locale: ptBR })}
               </div>
@@ -85,7 +95,6 @@ export default function CozinhaPage() {
               <div className="flex justify-between items-start">
                 <div className="space-y-1">
                   <p className="text-3xl font-black leading-tight uppercase tracking-tight text-foreground">{p.produto}</p>
-                  {p.mesa && <Badge variant="secondary" className="text-[10px] font-black uppercase bg-muted/50 border-none">Mesa: {p.mesa}</Badge>}
                 </div>
                 <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center border border-primary/10">
                   <span className="text-4xl font-black text-primary">{p.quantidade}</span>
