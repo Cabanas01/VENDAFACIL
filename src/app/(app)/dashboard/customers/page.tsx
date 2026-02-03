@@ -1,9 +1,8 @@
-
 'use client';
 
 /**
  * @fileOverview Gestão de Clientes do Dashboard com Histórico de Compras.
- * Refinado para corresponder exatamente à imagem solicitada.
+ * Refinado para corresponder exatamente à imagem solicitada e tratar integridade de dados.
  */
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
@@ -29,7 +28,8 @@ import {
   CalendarDays,
   CreditCard,
   ChevronRight,
-  X
+  X,
+  AlertTriangle
 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -152,14 +152,32 @@ export default function CustomersDashboardPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Excluir cliente permanentemente?')) return;
+    if (!confirm('Deseja realmente excluir este cliente?')) return;
+    
     try {
       const { error } = await supabase.from('customers').delete().eq('id', id);
-      if (error) throw error;
-      toast({ title: 'Cliente removido.' });
+      
+      if (error) {
+        // Erro de Foreign Key (Código 23503)
+        if (error.code === '23503') {
+          toast({ 
+            variant: 'destructive', 
+            title: 'Exclusão Bloqueada', 
+            description: 'Este cliente possui histórico de pedidos vinculados e não pode ser removido para manter a integridade dos seus dados operacionais.' 
+          });
+          return;
+        }
+        throw error;
+      }
+      
+      toast({ title: 'Cliente removido com sucesso.' });
       loadCustomers();
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Erro ao excluir', description: err.message });
+      toast({ 
+        variant: 'destructive', 
+        title: 'Falha na Operação', 
+        description: err.message || 'Ocorreu um erro ao tentar excluir o registro.' 
+      });
     }
   };
 
@@ -272,10 +290,9 @@ export default function CustomersDashboardPage() {
         </CardContent>
       </Card>
 
-      {/* MODAL: HISTÓRICO DE CONSUMO (REFINADO CONFORME IMAGEM) */}
+      {/* MODAL: HISTÓRICO DE CONSUMO */}
       <Dialog open={isHistoryOpen} onOpenChange={setIsHistoryOpen}>
         <DialogContent className="sm:max-w-3xl p-0 overflow-hidden border-none shadow-2xl">
-          {/* Close button handled by Dialog, but we can style the top part */}
           <div className="bg-background pt-12 pb-8 px-10 relative">
             <div className="flex items-start justify-between">
               <div className="flex items-start gap-4">
@@ -367,7 +384,7 @@ export default function CustomersDashboardPage() {
 
       {/* MODAL: CADASTRO / EDIÇÃO */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl">
+        <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl rounded-[32px]">
           <div className="bg-primary/5 pt-10 pb-6 px-8 text-center border-b border-primary/10">
             <div className="mx-auto h-12 w-12 rounded-2xl bg-white flex items-center justify-center shadow-sm border border-primary/10 mb-4">
               <Plus className="h-6 w-6 text-primary" />
