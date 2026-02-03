@@ -3,7 +3,7 @@
 
 /**
  * @fileOverview Gestão de Atendimento e Autoatendimento (QR Code).
- * Adicionado: Gerenciamento de mesas e geração de tokens para Cardápio Digital.
+ * Central de gerenciamento de comandas e links de acesso para clientes.
  */
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
@@ -27,7 +27,9 @@ import {
   ExternalLink,
   Trash2,
   Sparkles,
-  Link2
+  Link2,
+  Info,
+  HelpCircle
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useRouter } from 'next/navigation';
@@ -248,15 +250,26 @@ export default function ComandasPage() {
                       </div>
                       
                       {linkedTable ? (
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-10 w-10 text-primary hover:bg-primary/10" 
-                          onClick={(e) => { e.stopPropagation(); handleCopyLink(linkedTable.table_token); }}
-                          title="Copiar Link do Cardápio"
-                        >
-                          <QrCode className="h-5 w-5" />
-                        </Button>
+                        <div className="flex gap-1">
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-10 w-10 text-primary hover:bg-primary/10" 
+                            onClick={(e) => { e.stopPropagation(); handleCopyLink(linkedTable.table_token); }}
+                            title="Copiar Link"
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-10 w-10 text-muted-foreground hover:text-primary" 
+                            onClick={(e) => { e.stopPropagation(); window.open(`/m/${store?.id}/${linkedTable.table_token}`, '_blank'); }}
+                            title="Ver Cardápio"
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </Button>
+                        </div>
                       ) : (
                         <Button 
                           variant="ghost" 
@@ -264,7 +277,7 @@ export default function ComandasPage() {
                           className="h-8 text-[8px] font-black uppercase tracking-widest text-muted-foreground hover:text-primary"
                           onClick={(e) => { e.stopPropagation(); handleQuickGenerateLink(comanda.mesa || ''); }}
                         >
-                          <Plus className="h-3 w-3 mr-1" /> Gerar Link
+                          <Plus className="h-3 w-3 mr-1" /> Ativar Link QR
                         </Button>
                       )}
                     </div>
@@ -288,13 +301,13 @@ export default function ComandasPage() {
         </TabsContent>
 
         <TabsContent value="links" className="m-0 space-y-6">
-          <div className="flex justify-between items-center bg-primary/5 p-6 rounded-2xl border border-primary/10">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-primary/5 p-6 rounded-2xl border border-primary/10 gap-4">
             <div className="space-y-1">
               <h3 className="text-sm font-black uppercase tracking-tighter flex items-center gap-2 text-primary">
                 <Sparkles className="h-4 w-4" /> Autoatendimento Digital
               </h3>
               <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                Gerencie as mesas que possuem acesso ao cardápio via QR Code.
+                Como funciona? Gere um link para cada mesa física e coloque um QR Code nela. O cliente pede, e você recebe no PDV.
               </p>
             </div>
             <Button onClick={() => setIsNewTableOpen(true)} size="sm" className="h-10 font-black uppercase text-[10px] tracking-widest px-6 shadow-lg shadow-primary/20">
@@ -306,34 +319,46 @@ export default function ComandasPage() {
             {tables.map(table => (
               <Card key={table.table_id} className="border-none shadow-sm hover:shadow-md transition-all group overflow-hidden">
                 <CardContent className="p-0">
-                  <div className="flex items-center justify-between p-6">
-                    <div className="flex items-center gap-6">
-                      <div className="h-14 w-14 rounded-2xl bg-muted/30 border-2 border-dashed border-primary/20 flex flex-col items-center justify-center group-hover:border-primary/40 transition-colors">
+                  <div className="flex flex-col sm:flex-row items-center justify-between p-6 gap-4">
+                    <div className="flex items-center gap-6 w-full">
+                      <div className="h-14 w-14 rounded-2xl bg-muted/30 border-2 border-dashed border-primary/20 flex flex-col items-center justify-center group-hover:border-primary/40 transition-colors shrink-0">
                         <span className="text-[8px] font-black uppercase opacity-40">Mesa</span>
                         <span className="text-xl font-black">{table.table_number}</span>
                       </div>
-                      <div>
+                      <div className="overflow-hidden">
                         <h4 className="font-black text-sm uppercase tracking-tight flex items-center gap-2">
                           Mesa #{table.table_number}
                           <Badge variant="secondary" className="h-4 text-[8px] font-black uppercase bg-green-50 text-green-600 border-green-100">
                             {table.table_status}
                           </Badge>
                         </h4>
-                        <div className="flex items-center gap-2 mt-1 opacity-60 group-hover:opacity-100 transition-opacity">
-                          <Link2 className="h-3 w-3 text-primary" />
-                          <span className="text-[10px] font-mono text-muted-foreground truncate max-w-[200px]">{table.table_token}</span>
+                        <div className="flex items-center gap-2 mt-1 opacity-60 group-hover:opacity-100 transition-opacity overflow-hidden">
+                          <Link2 className="h-3 w-3 text-primary shrink-0" />
+                          <span className="text-[10px] font-mono text-muted-foreground truncate">.../m/{store?.id?.substring(0,8)}/{table.table_token.substring(0,10)}...</span>
                         </div>
                       </div>
                     </div>
                     
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
                       <Button variant="outline" size="sm" className="h-10 px-4 font-black uppercase text-[9px] tracking-[0.15em] border-primary/10 hover:bg-primary hover:text-white transition-all" onClick={() => handleCopyLink(table.table_token)}>
                         <Copy className="h-3.5 w-3.5 mr-2" /> Copiar Link
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-10 w-10 text-primary hover:bg-primary/10" onClick={() => window.open(`/m/${store?.id}/${table.table_token}`, '_blank')}>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-10 w-10 text-primary hover:bg-primary/10" 
+                        onClick={() => window.open(`/m/${store?.id}/${table.table_token}`, '_blank')}
+                        title="Visualizar como Cliente"
+                      >
                         <ExternalLink className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-10 w-10 text-destructive/40 hover:text-destructive hover:bg-destructive/5" onClick={() => handleDeleteTable(table.table_id)}>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-10 w-10 text-destructive/40 hover:text-destructive hover:bg-destructive/5" 
+                        onClick={() => handleDeleteTable(table.table_id)}
+                        title="Excluir Mesa"
+                      >
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
@@ -343,9 +368,12 @@ export default function ComandasPage() {
             ))}
 
             {tables.length === 0 && (
-              <div className="py-32 text-center border-2 border-dashed rounded-[40px] opacity-20">
-                <QrCode className="h-16 w-16 mx-auto mb-4" />
-                <p className="text-sm font-black uppercase tracking-[0.2em]">Nenhuma mesa com link digital</p>
+              <div className="py-32 text-center border-2 border-dashed rounded-[40px] opacity-20 flex flex-col items-center gap-4">
+                <QrCode className="h-16 w-16 mx-auto" />
+                <div className="space-y-1">
+                  <p className="text-sm font-black uppercase tracking-[0.2em]">Nenhuma mesa com link digital</p>
+                  <p className="text-[10px] font-bold uppercase">Cadastre uma mesa acima para habilitar o cardápio via QR Code.</p>
+                </div>
               </div>
             )}
           </div>
@@ -356,12 +384,12 @@ export default function ComandasPage() {
       <Dialog open={isNewTableOpen} onOpenChange={setIsNewTableOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-2xl font-black font-headline uppercase tracking-tighter">Cadastrar Mesa</DialogTitle>
-            <DialogDescription>Crie uma mesa física no sistema para habilitar o Cardápio Digital.</DialogDescription>
+            <DialogTitle className="text-2xl font-black font-headline uppercase tracking-tighter">Cadastrar Mesa Digital</DialogTitle>
+            <DialogDescription>Isso criará um link de acesso exclusivo para o cardápio desta mesa.</DialogDescription>
           </DialogHeader>
           <div className="space-y-6 py-4">
             <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Número da Mesa</label>
+              <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Número da Mesa Física</label>
               <Input 
                 type="number" 
                 placeholder="Ex: 10" 
@@ -371,15 +399,16 @@ export default function ComandasPage() {
                 autoFocus
               />
             </div>
-            <div className="bg-primary/5 p-4 rounded-xl border border-primary/10">
+            <div className="bg-primary/5 p-4 rounded-xl border border-primary/10 flex items-start gap-3">
+              <HelpCircle className="h-5 w-5 text-primary shrink-0 mt-0.5" />
               <p className="text-[10px] font-bold text-primary uppercase leading-relaxed">
-                Ao cadastrar, o sistema gera um link exclusivo e seguro. Você poderá imprimir o QR Code correspondente para colocar na mesa física.
+                Após ativar, copie o link e use um gerador de QR Code gratuito (como o qr-code-generator.com) para criar a etiqueta física da mesa.
               </p>
             </div>
           </div>
           <DialogFooter className="gap-2 sm:flex-row-reverse">
             <Button onClick={handleCreateTable} disabled={!newTableNumber || isCreatingTable} className="flex-1 h-12 font-black uppercase text-xs tracking-widest shadow-lg shadow-primary/20">
-              {isCreatingTable ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <QrCode className="mr-2 h-4 w-4" />} Ativar Mesa
+              {isCreatingTable ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <QrCode className="mr-2 h-4 w-4" />} Gerar Link QR
             </Button>
             <Button variant="ghost" onClick={() => setIsNewTableOpen(false)} className="flex-1 h-12 font-black uppercase text-xs tracking-widest">Cancelar</Button>
           </DialogFooter>
