@@ -5,6 +5,7 @@
  * @fileOverview Rota de Entrada do Autoatendimento (QR Code)
  * 
  * Responsável por validar a sessão e identificar a mesa de forma segura via RPC.
+ * O fluxo de identificação do cliente ocorre dentro do componente DigitalMenu.
  */
 
 import { useEffect, useState, useCallback } from 'react';
@@ -29,43 +30,45 @@ export default function TableMenuPage() {
     setError(null);
 
     try {
-      // 1. Resolver Mesa via RPC Segura
+      // 1. Resolver Mesa via RPC Segura (Valida Token e Existência)
       const { data: tableData, error: tableError } = await supabase.rpc('get_table_by_token', {
         p_store_id: storeId as string,
         p_table_token: tableToken as string
       });
 
       if (tableError || !tableData || (Array.isArray(tableData) && tableData.length === 0)) {
-        console.error('[TABLE_ERROR]', tableError);
+        console.error('[TABLE_VALIDATION_FAILED]', tableError);
         throw new Error('Link de mesa inválido ou expirado. Por favor, peça ajuda ao atendente.');
       }
 
       const resolvedTable = Array.isArray(tableData) ? tableData[0] : tableData;
       setTable(resolvedTable);
 
-      // 2. Buscar Contexto da Loja
+      // 2. Buscar Contexto da Loja (Para Nome e Logo)
       const { data: storeData } = await supabase
         .from('stores')
         .select('*')
         .eq('id', storeId)
         .single();
       
+      if (!storeData) throw new Error('Dados da loja não localizados.');
       setStore(storeData);
 
-      // 3. Sincronizar Comanda Aberta (ou Criar Nova)
+      // 3. Sincronizar Comanda Aberta para esta mesa via RPC
       const { data: comandaData, error: comandaError } = await supabase.rpc('get_or_create_comanda_by_table', {
         p_table_id: resolvedTable.table_id
       });
 
       if (comandaError || !comandaData) {
-        throw new Error('Falha ao sincronizar atendimento da mesa.');
+        console.error('[COMANDA_SYNC_FAILED]', comandaError);
+        throw new Error('Falha ao sincronizar o atendimento da mesa.');
       }
 
       setComandaId(typeof comandaData === 'string' ? comandaData : (comandaData as any).comanda_id);
 
     } catch (err: any) {
-      console.error('[MENU_BOOTSTRAP_ERROR]', err);
-      setError(err.message || 'Erro inesperado ao carregar o cardápio.');
+      console.error('[BOOTSTRAP_FATAL]', err);
+      setError(err.message || 'Erro crítico ao carregar o autoatendimento.');
     } finally {
       setLoading(false);
     }
@@ -79,8 +82,8 @@ export default function TableMenuPage() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#F8FAFC] gap-4">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        <p className="font-black uppercase text-[10px] tracking-[0.25em] text-muted-foreground animate-pulse text-center px-10">
-          Validando Mesa &<br/>Conectando Cardápio...
+        <p className="font-black uppercase text-[10px] tracking-[0.25em] text-muted-foreground animate-pulse text-center px-10 leading-loose">
+          Mesa Identificada<br/>Conectando Cardápio...
         </p>
       </div>
     );
@@ -92,8 +95,8 @@ export default function TableMenuPage() {
         <div className="bg-red-50 p-8 rounded-[40px] border border-red-100 shadow-inner ring-8 ring-red-50/50">
           <AlertCircle className="h-16 w-16 text-red-500" />
         </div>
-        <div className="space-y-2 max-w-xs">
-          <h1 className="text-2xl font-black font-headline uppercase tracking-tighter">Link Inválido</h1>
+        <div className="space-y-2 max-w-xs mx-auto">
+          <h1 className="text-2xl font-black font-headline uppercase tracking-tighter">Acesso Negado</h1>
           <p className="text-muted-foreground font-medium text-sm leading-relaxed">{error}</p>
         </div>
         <button 

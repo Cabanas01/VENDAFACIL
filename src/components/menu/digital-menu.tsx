@@ -7,6 +7,7 @@
  * - Identificação obrigatória (CRM)
  * - Pedidos via RPC add_itens_from_table_link
  * - Mobile First & UX Premium
+ * - Persistência de identificação para evitar cadastros duplicados na mesma visita.
  */
 
 import { useState, useEffect, useMemo } from 'react';
@@ -43,7 +44,7 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [cart, setCart] = useState<CartItem[]>([]);
+  const [cart, setCart] = useState<(CartItem & { notes?: string })[]>([]);
   const [isSending, setIsSending] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
@@ -67,7 +68,8 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
       setLoading(false);
     }
 
-    const savedCustomerId = localStorage.getItem(`vf_customer_${comandaId}`);
+    // Tenta recuperar identificação anterior desta comanda
+    const savedCustomerId = localStorage.getItem(`vf_cust_v3_${comandaId}`);
     if (savedCustomerId) {
       setCustomerId(savedCustomerId);
     }
@@ -130,6 +132,7 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
 
     setIsIdentifying(true);
     try {
+      // RPC OBRIGATÓRIA: Registra cliente e vincula à comanda
       const { data, error } = await supabase.rpc('register_customer_on_table', {
         p_comanda_id: comandaId,
         p_name: customerData.name,
@@ -139,24 +142,26 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
 
       if (error) throw error;
 
-      const newId = typeof data === 'string' ? data : (data as any).customer_id;
-      setCustomerId(newId);
-      localStorage.setItem(`vf_customer_${comandaId}`, newId);
+      // Resposta da RPC pode variar (objeto ou string)
+      const resId = typeof data === 'string' ? data : (data as any).customer_id;
       
-      toast({ title: 'Acesso Liberado!', description: `Bem-vindo, ${customerData.name.split(' ')[0]}.` });
+      setCustomerId(resId);
+      localStorage.setItem(`vf_cust_v3_${comandaId}`, resId);
+      
+      toast({ title: 'Acesso Liberado!', description: `Bom apetite, ${customerData.name.split(' ')[0]}!` });
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Falha na Identificação', description: err.message });
+      toast({ variant: 'destructive', title: 'Identificação Recusada', description: err.message });
     } finally {
       setIsIdentifying(false);
     }
   };
 
   const handleSendOrder = async () => {
-    if (!customerId) return;
-    if (cart.length === 0 || isSending) return;
+    if (!customerId || cart.length === 0 || isSending) return;
     
     setIsSending(true);
     try {
+      // Formatação dos itens para o JSONB esperado pela RPC
       const payload = cart.map(i => ({
         product_id: i.product_id,
         qty: i.quantity,
@@ -174,12 +179,16 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
       setCart([]);
       setIsCartOpen(false);
       setOrderSuccess(true);
-      setTimeout(() => setOrderSuccess(false), 4000);
+      
+      // Feedback temporário de sucesso
+      setTimeout(() => setOrderSuccess(false), 5000);
+      
+      toast({ title: 'Pedido Enviado!', description: 'Sua solicitação já está na produção.' });
     } catch (err: any) {
       toast({
         variant: 'destructive',
-        title: 'Erro no Pedido',
-        description: err.message || 'Falha ao enviar itens.',
+        title: 'Erro no Envio',
+        description: err.message || 'Falha ao comunicar com a cozinha.',
       });
     } finally {
       setIsSending(false);
@@ -190,11 +199,14 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#F8FAFC] gap-4">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        <p className="font-black uppercase text-[10px] tracking-[0.2em] text-muted-foreground animate-pulse">Sincronizando Cardápio...</p>
+        <p className="font-black uppercase text-[10px] tracking-[0.25em] text-muted-foreground animate-pulse text-center">
+          Sincronizando<br/>Cardápio Digital...
+        </p>
       </div>
     );
   }
 
+  // TELA DE IDENTIFICAÇÃO (BLOQUEIA O CARDÁPIO)
   if (!customerId) {
     return (
       <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center justify-center p-6">
@@ -205,8 +217,8 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
             </div>
             <div className="space-y-1">
               <h1 className="text-2xl font-black font-headline uppercase tracking-tighter">Identificação</h1>
-              <p className="text-[9px] font-black uppercase text-muted-foreground tracking-widest px-8 leading-relaxed">
-                Mesa {table.table_number} - Seus dados são necessários para abrir seu pedido
+              <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest px-8 leading-relaxed">
+                Mesa {table.table_number} - Identifique-se para liberar o cardápio
               </p>
             </div>
           </div>
@@ -214,44 +226,42 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
             <form onSubmit={handleRegisterCustomer} className="space-y-6">
               <div className="space-y-4">
                 <div className="space-y-1.5">
-                  <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground ml-1">Nome Completo</label>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Nome Completo</label>
                   <Input 
-                    placeholder="Como podemos te chamar?" 
+                    placeholder="Como devemos te chamar?" 
                     value={customerData.name}
                     onChange={e => setCustomerData({...customerData, name: e.target.value})}
                     className="h-14 font-bold border-muted-foreground/20 rounded-2xl focus-visible:ring-primary/20 text-base"
                     required
                   />
                 </div>
-                <div className="grid grid-cols-1 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground ml-1">WhatsApp</label>
-                    <Input 
-                      placeholder="(00) 00000-0000" 
-                      value={customerData.phone}
-                      onChange={e => setCustomerData({...customerData, phone: e.target.value})}
-                      className="h-14 font-bold border-muted-foreground/20 rounded-2xl focus-visible:ring-primary/20"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground ml-1">CPF (Opcional)</label>
-                    <Input 
-                      placeholder="000.000.000-00" 
-                      value={customerData.cpf}
-                      onChange={e => setCustomerData({...customerData, cpf: e.target.value})}
-                      className="h-14 font-bold border-muted-foreground/20 rounded-2xl focus-visible:ring-primary/20"
-                    />
-                  </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">WhatsApp / Celular</label>
+                  <Input 
+                    placeholder="(00) 00000-0000" 
+                    value={customerData.phone}
+                    onChange={e => setCustomerData({...customerData, phone: e.target.value})}
+                    className="h-14 font-bold border-muted-foreground/20 rounded-2xl focus-visible:ring-primary/20"
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">CPF (Opcional)</label>
+                  <Input 
+                    placeholder="000.000.000-00" 
+                    value={customerData.cpf}
+                    onChange={e => setCustomerData({...customerData, cpf: e.target.value})}
+                    className="h-14 font-bold border-muted-foreground/20 rounded-2xl focus-visible:ring-primary/20"
+                  />
                 </div>
               </div>
               <Button 
                 type="submit" 
-                className="w-full h-16 rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl shadow-primary/20"
+                className="w-full h-16 rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl shadow-primary/20 transition-all hover:scale-[1.02] active:scale-95"
                 disabled={isIdentifying || !customerData.name || !customerData.phone}
               >
                 {isIdentifying ? <Loader2 className="animate-spin mr-2 h-5 w-5" /> : <ChevronRight className="mr-2 h-5 w-5" />}
-                Ver Cardápio
+                Confirmar e Ver Produtos
               </Button>
             </form>
           </CardContent>
@@ -260,22 +270,22 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
     );
   }
 
+  // CARDÁPIO LIBERADO
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-32">
       <header className="bg-white/80 backdrop-blur-md border-b sticky top-0 z-40 px-6 py-4 shadow-sm flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Avatar className="h-10 w-10 rounded-xl border border-primary/10 shadow-inner ring-2 ring-primary/5">
-            <AvatarImage src={store.logo_url} />
-            <AvatarFallback className="bg-primary text-white font-black text-xs">VF</AvatarFallback>
+            <AvatarFallback className="bg-primary text-white font-black text-xs">
+              {store.name?.substring(0,2).toUpperCase()}
+            </AvatarFallback>
           </Avatar>
           <div className="flex flex-col">
             <h1 className="text-sm font-black font-headline uppercase tracking-tighter leading-none">{store.name}</h1>
-            <span className="text-[9px] font-black uppercase text-primary tracking-widest mt-1">Mesa #{table.table_number}</span>
+            <span className="text-[10px] font-black uppercase text-primary tracking-widest mt-1">Mesa #{table.table_number}</span>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[8px] font-black uppercase text-green-600 bg-green-50 px-2 py-1 rounded-full border border-green-100">Sistema Ativo</span>
-        </div>
+        <Badge variant="outline" className="text-[8px] font-black uppercase text-green-600 bg-green-50 border-green-100">Autoatendimento</Badge>
       </header>
 
       <div className="p-6 space-y-6">
@@ -354,6 +364,7 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
         </div>
       </div>
 
+      {/* FEEDBACK DE SUCESSO APÓS PEDIDO */}
       {orderSuccess && (
         <div className="fixed top-24 inset-x-6 z-50 animate-in slide-in-from-top-4 fade-in duration-500">
           <div className="bg-green-600 text-white p-4 rounded-2xl shadow-2xl flex items-center gap-4 border border-green-500 ring-8 ring-green-500/10">
@@ -361,13 +372,14 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
               <CheckCircle2 className="h-6 w-6" />
             </div>
             <div>
-              <p className="text-xs font-black uppercase tracking-widest">Pedido Enviado!</p>
-              <p className="text-[10px] font-bold opacity-80 uppercase mt-0.5">Estamos preparando seu pedido agora.</p>
+              <p className="text-[10px] font-black uppercase tracking-widest">Pedido Enviado!</p>
+              <p className="text-[10px] font-bold opacity-80 uppercase mt-0.5">Sua solicitação está sendo preparada.</p>
             </div>
           </div>
         </div>
       )}
 
+      {/* BOTÃO FLUTUANTE DO CARRINHO */}
       {cart.length > 0 && !isCartOpen && (
         <div className="fixed bottom-8 inset-x-6 z-50 animate-in slide-in-from-bottom-4 duration-500">
           <Button 
@@ -380,20 +392,19 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
               </div>
               <span>Meu Carrinho</span>
             </div>
-            <div className="flex items-center gap-3">
-              <span className="text-base tracking-tighter">{formatCurrency(cartTotal)}</span>
-            </div>
+            <span className="text-base tracking-tighter">{formatCurrency(cartTotal)}</span>
           </Button>
         </div>
       )}
 
+      {/* MODAL DO CARRINHO (FULLSCREEN MOBILE) */}
       {isCartOpen && (
         <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-[100] flex flex-col justify-end animate-in fade-in duration-300">
           <div className="bg-white rounded-t-[40px] max-h-[90vh] flex flex-col animate-in slide-in-from-bottom-8 duration-500">
             <div className="p-8 border-b flex items-center justify-between">
               <div className="space-y-1">
-                <h2 className="text-2xl font-black font-headline uppercase tracking-tighter">Confirmar Pedido</h2>
-                <p className="text-[9px] font-black uppercase text-primary tracking-widest">Revise seus itens antes de enviar</p>
+                <h2 className="text-2xl font-black font-headline uppercase tracking-tighter">Meu Pedido</h2>
+                <p className="text-[10px] font-black uppercase text-primary tracking-widest">Confirme seus itens</p>
               </div>
               <Button variant="ghost" size="icon" className="h-12 w-12 rounded-full hover:bg-slate-100" onClick={() => setIsCartOpen(false)}>
                 <X className="h-6 w-6" />
@@ -431,7 +442,7 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
 
             <div className="p-8 bg-slate-50 border-t space-y-6">
               <div className="flex justify-between items-end px-2">
-                <span className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Total do Lançamento</span>
+                <span className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Total do Pedido</span>
                 <span className="text-4xl font-black tracking-tighter text-primary">{formatCurrency(cartTotal)}</span>
               </div>
               <Button 
@@ -445,7 +456,7 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
                   </>
                 ) : (
                   <>
-                    Enviar para Cozinha <ChevronRight className="ml-3 h-5 w-5" />
+                    Enviar p/ Produção <ChevronRight className="ml-3 h-5 w-5" />
                   </>
                 )}
               </Button>
