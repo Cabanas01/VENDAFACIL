@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -58,10 +59,15 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
       
       onOpenChange(false);
       form.reset();
-      if (onSuccess) onSuccess();
       
-      if (data && (data as any).comanda_id) {
-        router.push(`/comandas/${(data as any).comanda_id}`);
+      // Captura o ID de forma resiliente (pode ser string direta ou objeto com comanda_id)
+      const comandaId = typeof data === 'string' ? data : (data as any)?.comanda_id;
+      
+      if (comandaId) {
+        router.push(`/comandas/${comandaId}`);
+      } else {
+        // Fallback caso não venha ID, apenas atualiza a lista
+        if (onSuccess) onSuccess();
       }
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Erro ao abrir comanda', description: err.message });

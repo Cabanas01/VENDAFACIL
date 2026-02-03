@@ -28,7 +28,8 @@ import {
   Printer,
   CircleDollarSign,
   QrCode,
-  X
+  X,
+  AlertCircle
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
@@ -49,6 +50,7 @@ export default function ComandaDetailsPage() {
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [items, setItems] = useState<ComandaItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
   
   const [isAdding, setIsAdding] = useState(false);
   const [search, setSearch] = useState('');
@@ -65,13 +67,22 @@ export default function ComandaDetailsPage() {
         supabase.from('comanda_itens').select('*').eq('comanda_id', id).order('created_at', { ascending: false })
       ]);
 
-      if (!comandaRes.data || comandaRes.data.status !== 'aberta') {
+      // Se não encontrar a comanda na View, aguarda um pouco antes de dar erro (evita lag de sincronização)
+      if (!comandaRes.data) {
+        setNotFound(true);
+        return;
+      }
+
+      // Normalização de status para evitar que feche por causa de case-sensitivity
+      const status = (comandaRes.data.status || '').toLowerCase();
+      if (status !== 'aberta') {
         router.replace('/comandas');
         return;
       }
 
       setComanda(comandaRes.data);
       setItems(itemsRes.data || []);
+      setNotFound(false);
 
       const { data: baseComanda } = await supabase.from('comandas').select('customer_id').eq('id', id).single();
       if (baseComanda?.customer_id) {
@@ -186,6 +197,19 @@ export default function ComandaDetailsPage() {
     <div className="h-[60vh] flex flex-col items-center justify-center gap-4">
       <Loader2 className="animate-spin text-primary" />
       <p className="font-black uppercase text-[10px] tracking-widest text-muted-foreground">Sincronizando...</p>
+    </div>
+  );
+
+  if (notFound && !comanda) return (
+    <div className="h-[60vh] flex flex-col items-center justify-center gap-6 text-center px-8">
+      <div className="p-6 bg-primary/5 rounded-full ring-8 ring-primary/5">
+        <AlertCircle className="h-12 w-12 text-primary opacity-40" />
+      </div>
+      <div className="space-y-2">
+        <h2 className="text-xl font-black uppercase tracking-tight">Comanda em Processamento</h2>
+        <p className="text-sm text-muted-foreground max-w-xs mx-auto font-medium">Aguardando o sistema sincronizar os dados da nova comanda. Por favor, aguarde um momento.</p>
+      </div>
+      <Button variant="outline" onClick={fetchData} className="font-black uppercase text-[10px] tracking-widest px-8">Tentar Novamente</Button>
     </div>
   );
 
