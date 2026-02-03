@@ -13,7 +13,10 @@ import {
   Loader2,
   X,
   UtensilsCrossed,
-  Clock
+  Clock,
+  UserCheck,
+  MessageSquare,
+  CheckCircle2
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -22,6 +25,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { Textarea } from '@/components/ui/textarea';
 
 const formatCurrency = (val: number) => 
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((val || 0) / 100);
@@ -34,8 +38,14 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isSending, setIsSubmitting] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  
+  // Estados de Identificação do Cliente
+  const [customerId, setCustomerId] = useState<string | null>(null);
+  const [isIdentifying, setIsIdentifying] = useState(false);
+  const [customerData, setCustomerData] = useState({ name: '', phone: '', cpf: '' });
 
   useEffect(() => {
+    // 1. Carregar produtos
     async function loadProducts() {
       const { data } = await supabase
         .from('products')
@@ -48,8 +58,15 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
       setProducts(data || []);
       setLoading(false);
     }
+
+    // 2. Verificar identificação prévia no localStorage
+    const savedCustomerId = localStorage.getItem(`vf_customer_${comandaId}`);
+    if (savedCustomerId) {
+      setCustomerId(savedCustomerId);
+    }
+
     loadProducts();
-  }, [store.id]);
+  }, [store.id, comandaId]);
 
   const categories = useMemo(() => {
     const cats = Array.from(new Set(products.map(p => p.category || 'Geral')));
@@ -78,7 +95,8 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
         quantity: 1,
         unit_price_cents: product.price_cents,
         subtotal_cents: product.price_cents,
-        stock_qty: product.stock_qty
+        stock_qty: product.stock_qty,
+        notes: ''
       }];
     });
   };
@@ -96,16 +114,51 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
     });
   };
 
-  const handleSendOrder = async () => {
-    if (cart.length === 0 || isSending) return;
-    setIsSubmitting(true);
+  const updateItemNotes = (productId: string, notes: string) => {
+    setCart(prev => prev.map(i => i.product_id === productId ? { ...i, notes } : i));
+  };
 
+  const handleRegisterCustomer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customerData.name || !customerData.phone || isIdentifying) return;
+
+    setIsIdentifying(true);
+    try {
+      const { data, error } = await supabase.rpc('register_customer_on_table', {
+        p_comanda_id: comandaId,
+        p_name: customerData.name,
+        p_phone: customerData.phone,
+        p_cpf: customerData.cpf || null
+      });
+
+      if (error) throw error;
+
+      const newId = typeof data === 'string' ? data : (data as any).customer_id;
+      setCustomerId(newId);
+      localStorage.setItem(`vf_customer_${comandaId}`, newId);
+      
+      toast({ title: 'Bem-vindo!', description: `Acesso liberado para ${customerData.name}.` });
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Erro na Identificação', description: err.message });
+    } finally {
+      setIsIdentifying(false);
+    }
+  };
+
+  const handleSendOrder = async () => {
+    if (!customerId) {
+      toast({ variant: 'destructive', title: 'Identificação Necessária', description: 'Por favor, identifique-se antes de pedir.' });
+      return;
+    }
+    if (cart.length === 0 || isSending) return;
+    
+    setIsSubmitting(true);
     try {
       const items = cart.map(i => ({
         product_id: i.product_id,
         qty: i.quantity,
         price: i.unit_price_cents,
-        notes: ''
+        notes: i.notes || ''
       }));
 
       const { error } = await supabase.rpc('add_itens_from_table_link', {
@@ -138,7 +191,74 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#F8FAFC] gap-4">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
         <p className="font-black uppercase text-[10px] tracking-[0.2em] text-muted-foreground animate-pulse">
-          Abrindo Cardápio...
+          Abrindo Cardápio Digital...
+        </p>
+      </div>
+    );
+  }
+
+  // TELA DE IDENTIFICAÇÃO OBRIGATÓRIA
+  if (!customerId) {
+    return (
+      <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center justify-center p-6">
+        <Card className="w-full max-w-md border-none shadow-2xl overflow-hidden rounded-[32px]">
+          <div className="bg-primary/5 p-10 text-center space-y-4 border-b border-primary/10">
+            <div className="mx-auto h-16 w-16 rounded-3xl bg-white shadow-xl flex items-center justify-center text-primary">
+              <UserCheck className="h-8 w-8" />
+            </div>
+            <div className="space-y-1">
+              <h1 className="text-2xl font-black font-headline uppercase tracking-tighter">Seja Bem-vindo!</h1>
+              <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">
+                Identificação Obrigatória - Mesa {table.table_number}
+              </p>
+            </div>
+          </div>
+          <CardContent className="p-8">
+            <form onSubmit={handleRegisterCustomer} className="space-y-6">
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Nome Completo</label>
+                  <Input 
+                    placeholder="Como podemos te chamar?" 
+                    value={customerData.name}
+                    onChange={e => setCustomerData({...customerData, name: e.target.value})}
+                    className="h-14 font-bold border-muted-foreground/20 rounded-2xl focus-visible:ring-primary/20"
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">WhatsApp / Celular</label>
+                  <Input 
+                    placeholder="(00) 00000-0000" 
+                    value={customerData.phone}
+                    onChange={e => setCustomerData({...customerData, phone: e.target.value})}
+                    className="h-14 font-bold border-muted-foreground/20 rounded-2xl focus-visible:ring-primary/20"
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">CPF (Opcional)</label>
+                  <Input 
+                    placeholder="000.000.000-00" 
+                    value={customerData.cpf}
+                    onChange={e => setCustomerData({...customerData, cpf: e.target.value})}
+                    className="h-14 font-bold border-muted-foreground/20 rounded-2xl focus-visible:ring-primary/20"
+                  />
+                </div>
+              </div>
+              <Button 
+                type="submit" 
+                className="w-full h-16 rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl shadow-primary/20"
+                disabled={isIdentifying || !customerData.name || !customerData.phone}
+              >
+                {isIdentifying ? <Loader2 className="animate-spin mr-2 h-5 w-5" /> : <ChevronRight className="mr-2 h-5 w-5" />}
+                Liberar Cardápio
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+        <p className="mt-8 text-[9px] font-black uppercase text-muted-foreground tracking-widest opacity-40">
+          VendaFácil Brasil - Autoatendimento Seguro
         </p>
       </div>
     );
@@ -154,7 +274,11 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
           </Avatar>
           <div className="flex flex-col">
             <h1 className="text-sm font-black font-headline uppercase tracking-tighter leading-none">{store.name}</h1>
-            <span className="text-[10px] font-black uppercase text-primary mt-1 tracking-widest">Mesa #{table.table_number}</span>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-[10px] font-black uppercase text-primary tracking-widest">Mesa #{table.table_number}</span>
+              <div className="h-1 w-1 rounded-full bg-slate-300" />
+              <span className="text-[9px] font-bold text-muted-foreground lowercase">@{customerData.name.split(' ')[0] || 'cliente'}</span>
+            </div>
           </div>
         </div>
         <Badge variant="secondary" className="bg-green-50 text-green-600 border-green-100 font-black text-[10px] uppercase h-6">
@@ -260,11 +384,11 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
 
       {isCartOpen && (
         <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-[100] flex flex-col justify-end animate-in fade-in duration-300">
-          <div className="bg-white rounded-t-[40px] max-h-[85vh] flex flex-col animate-in slide-in-from-bottom-8 duration-500">
+          <div className="bg-white rounded-t-[40px] max-h-[90vh] flex flex-col animate-in slide-in-from-bottom-8 duration-500">
             <div className="p-8 border-b flex items-center justify-between">
               <div className="space-y-1">
                 <h2 className="text-2xl font-black font-headline uppercase tracking-tighter">Meu Pedido</h2>
-                <p className="text-[10px] font-black uppercase text-primary tracking-widest">Confirme os itens abaixo</p>
+                <p className="text-[10px] font-black uppercase text-primary tracking-widest">Confirme itens e observações</p>
               </div>
               <Button variant="ghost" size="icon" className="h-12 w-12 rounded-full hover:bg-slate-100" onClick={() => setIsCartOpen(false)}>
                 <X className="h-6 w-6" />
@@ -272,20 +396,31 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
             </div>
 
             <ScrollArea className="flex-1 px-8 py-6">
-              <div className="space-y-6">
+              <div className="space-y-8">
                 {cart.map(item => (
-                  <div key={item.product_id} className="flex justify-between items-center group">
-                    <div className="flex-1">
-                      <h5 className="font-black text-sm uppercase tracking-tight">{item.product_name_snapshot}</h5>
-                      <p className="text-[10px] font-bold text-muted-foreground">{formatCurrency(item.unit_price_cents)} unid.</p>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <div className="flex items-center bg-slate-100 rounded-xl h-10 px-1 shadow-inner">
-                        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => removeFromCart(item.product_id)}><Minus className="h-3.5 w-3.5" /></Button>
-                        <span className="w-8 text-center text-xs font-black">{item.quantity}</span>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => addToCart(products.find(p => p.id === item.product_id)!)}><Plus className="h-3.5 w-3.5" /></Button>
+                  <div key={item.product_id} className="space-y-3 group">
+                    <div className="flex justify-between items-center">
+                      <div className="flex-1">
+                        <h5 className="font-black text-sm uppercase tracking-tight">{item.product_name_snapshot}</h5>
+                        <p className="text-[10px] font-bold text-muted-foreground">{formatCurrency(item.unit_price_cents)} unid.</p>
                       </div>
-                      <span className="font-black text-sm text-primary w-20 text-right">{formatCurrency(item.subtotal_cents)}</span>
+                      <div className="flex items-center gap-4">
+                        <div className="flex items-center bg-slate-100 rounded-xl h-10 px-1 shadow-inner">
+                          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => removeFromCart(item.product_id)}><Minus className="h-3.5 w-3.5" /></Button>
+                          <span className="w-8 text-center text-xs font-black">{item.quantity}</span>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => addToCart(products.find(p => p.id === item.product_id)!)}><Plus className="h-3.5 w-3.5" /></Button>
+                        </div>
+                        <span className="font-black text-sm text-primary w-20 text-right">{formatCurrency(item.subtotal_cents)}</span>
+                      </div>
+                    </div>
+                    <div className="relative">
+                      <MessageSquare className="absolute left-3 top-3 h-3.5 w-3.5 text-muted-foreground/40" />
+                      <Input 
+                        placeholder="Observações (ex: sem gelo, mal passado...)" 
+                        value={item.notes}
+                        onChange={(e) => updateItemNotes(item.product_id, e.target.value)}
+                        className="pl-9 h-10 text-[11px] font-bold border-dashed border-muted-foreground/20 rounded-xl"
+                      />
                     </div>
                   </div>
                 ))}
@@ -294,7 +429,7 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
 
             <div className="p-8 bg-slate-50 border-t space-y-6">
               <div className="flex justify-between items-end">
-                <span className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Valor total deste envio</span>
+                <span className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Total deste pedido</span>
                 <span className="text-4xl font-black tracking-tighter text-primary">{formatCurrency(cartTotal)}</span>
               </div>
               <Button 
@@ -308,7 +443,7 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
                   </>
                 ) : (
                   <>
-                    Enviar para Produção <ChevronRight className="ml-3 h-6 w-6" />
+                    Confirmar Pedido <CheckCircle2 className="ml-3 h-6 w-6" />
                   </>
                 )}
               </Button>
