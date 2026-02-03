@@ -3,7 +3,6 @@
 
 /**
  * @fileOverview Gestão de Atendimento e Autoatendimento (QR Code).
- * Central de gerenciamento de comandas e links de acesso para clientes.
  */
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
@@ -66,14 +65,14 @@ export default function ComandasPage() {
           .order('numero', { ascending: true }),
         supabase
           .from('tables')
-          .select('table_id:id, store_id, table_number:number, table_status:status, table_token:token')
+          .select('*')
           .eq('store_id', store.id)
           .order('number', { ascending: true })
       ]);
 
       if (comandasRes.error) throw comandasRes.error;
       setComandas(comandasRes.data || []);
-      setTables((tablesRes.data as any) || []);
+      setTables(tablesRes.data || []);
     } catch (err) {
       console.error('[FETCH_ERROR]', err);
     } finally {
@@ -108,7 +107,6 @@ export default function ComandasPage() {
     setIsCreatingTable(true);
 
     try {
-      // Uso da RPC create_table em vez de insert direto
       const { error } = await supabase.rpc('create_table', {
         p_store_id: store.id,
         p_number: parseInt(newTableNumber)
@@ -129,8 +127,8 @@ export default function ComandasPage() {
 
   const handleQuickGenerateLink = async (mesaNome: string) => {
     if (!store?.id || !mesaNome) return;
-    const num = mesaNome.replace(/\D/g, '');
-    if (!num) {
+    const numStr = mesaNome.replace(/\D/g, '');
+    if (!numStr) {
       toast({ variant: 'destructive', title: 'Mesa Inválida', description: 'O nome da mesa deve conter um número.' });
       return;
     }
@@ -138,11 +136,11 @@ export default function ComandasPage() {
     try {
       const { error } = await supabase.rpc('create_table', {
         p_store_id: store.id,
-        p_number: parseInt(num)
+        p_number: parseInt(numStr)
       });
 
       if (error) throw error;
-      toast({ title: 'Link Gerado!', description: `Mesa ${num} agora possui acesso digital.` });
+      toast({ title: 'Link Gerado!', description: `Mesa ${numStr} agora possui acesso digital.` });
       await fetchData();
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Erro ao gerar link', description: err.message });
@@ -150,7 +148,7 @@ export default function ComandasPage() {
   };
 
   const handleCopyLink = (token: string) => {
-    if (!store?.id) return;
+    if (!store?.id || !token) return;
     const url = `${window.location.origin}/m/${store.id}/${token}`;
     navigator.clipboard.writeText(url);
     toast({
@@ -207,13 +205,13 @@ export default function ComandasPage() {
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {filteredComandas.map(comanda => {
               const mesaNum = comanda.mesa?.replace(/\D/g, '');
-              const linkedTable = tables.find(t => t.table_number.toString() === mesaNum);
+              const linkedTable = tables.find(t => t.number.toString() === mesaNum);
 
               return (
                 <Card 
-                  key={comanda.comanda_id} 
+                  key={comanda.id} 
                   className="group cursor-pointer hover:border-primary transition-all shadow-sm border-primary/5 bg-background relative overflow-hidden"
-                  onClick={() => router.push(`/comandas/${comanda.comanda_id}`)}
+                  onClick={() => router.push(`/comandas/${comanda.id}`)}
                 >
                   <div className="absolute top-0 left-0 w-1 h-full bg-primary opacity-0 group-hover:opacity-100 transition-opacity" />
                   <CardHeader className="bg-muted/20 border-b py-4">
@@ -245,7 +243,7 @@ export default function ComandasPage() {
                             variant="ghost" 
                             size="icon" 
                             className="h-10 w-10 text-primary hover:bg-primary/10" 
-                            onClick={(e) => { e.stopPropagation(); handleCopyLink(linkedTable.table_token); }}
+                            onClick={(e) => { e.stopPropagation(); handleCopyLink(linkedTable.public_token); }}
                             title="Copiar Link"
                           >
                             <Copy className="h-4 w-4" />
@@ -254,7 +252,7 @@ export default function ComandasPage() {
                             variant="ghost" 
                             size="icon" 
                             className="h-10 w-10 text-muted-foreground hover:text-primary" 
-                            onClick={(e) => { e.stopPropagation(); window.open(`/m/${store?.id}/${linkedTable.table_token}`, '_blank'); }}
+                            onClick={(e) => { e.stopPropagation(); window.open(`/m/${store?.id}/${linkedTable.public_token}`, '_blank'); }}
                             title="Ver Cardápio"
                           >
                             <ExternalLink className="h-4 w-4" />
@@ -297,7 +295,7 @@ export default function ComandasPage() {
                 <Sparkles className="h-4 w-4" /> Autoatendimento Digital
               </h3>
               <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                Como funciona? Gere um link para cada mesa física e coloque um QR Code nela. O cliente pede, e você recebe no PDV.
+                Configure mesas e QR Codes para permitir pedidos digitais.
               </p>
             </div>
             <Button onClick={() => setIsNewTableOpen(true)} size="sm" className="h-10 font-black uppercase text-[10px] tracking-widest px-6 shadow-lg shadow-primary/20">
@@ -307,37 +305,37 @@ export default function ComandasPage() {
 
           <div className="grid gap-4">
             {tables.map(table => (
-              <Card key={table.table_id} className="border-none shadow-sm hover:shadow-md transition-all group overflow-hidden bg-white">
+              <Card key={table.id} className="border-none shadow-sm hover:shadow-md transition-all group overflow-hidden bg-white">
                 <CardContent className="p-0">
                   <div className="flex flex-col sm:flex-row items-center justify-between p-6 gap-4">
                     <div className="flex items-center gap-6 w-full">
-                      <div className="h-14 w-14 rounded-2xl bg-muted/30 border-2 border-dashed border-primary/20 flex flex-col items-center justify-center group-hover:border-primary/40 transition-colors shrink-0">
+                      <div className="h-14 w-14 rounded-2xl bg-muted/30 border-2 border-dashed border-primary/20 flex flex-col items-center justify-center shrink-0">
                         <span className="text-[8px] font-black uppercase opacity-40">Mesa</span>
-                        <span className="text-xl font-black">{table.table_number}</span>
+                        <span className="text-xl font-black">{table.number}</span>
                       </div>
                       <div className="overflow-hidden">
                         <h4 className="font-black text-sm uppercase tracking-tight flex items-center gap-2">
-                          Mesa #{table.table_number}
+                          Mesa #{table.number}
                           <Badge variant="secondary" className="h-4 text-[8px] font-black uppercase bg-green-50 text-green-600 border-green-100">
-                            {table.table_status}
+                            {table.status}
                           </Badge>
                         </h4>
                         <div className="flex items-center gap-2 mt-1 opacity-60 group-hover:opacity-100 transition-opacity overflow-hidden">
                           <Link2 className="h-3 w-3 text-primary shrink-0" />
-                          <span className="text-[10px] font-mono text-muted-foreground truncate">.../m/{store?.id?.substring(0,8)}/{table.table_token?.substring(0,10)}...</span>
+                          <span className="text-[10px] font-mono text-muted-foreground truncate">.../m/{store?.id?.substring(0,8)}/{table.public_token?.substring(0,10)}...</span>
                         </div>
                       </div>
                     </div>
                     
                     <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
-                      <Button variant="outline" size="sm" className="h-10 px-4 font-black uppercase text-[9px] tracking-[0.15em] border-primary/10 hover:bg-primary hover:text-white transition-all" onClick={() => handleCopyLink(table.table_token)}>
+                      <Button variant="outline" size="sm" className="h-10 px-4 font-black uppercase text-[9px] tracking-[0.15em] border-primary/10 hover:bg-primary hover:text-white transition-all" onClick={() => handleCopyLink(table.public_token)}>
                         <Copy className="h-3.5 w-3.5 mr-2" /> Copiar Link
                       </Button>
                       <Button 
                         variant="ghost" 
                         size="icon" 
                         className="h-10 w-10 text-primary hover:bg-primary/10" 
-                        onClick={() => window.open(`/m/${store?.id}/${table.table_token}`, '_blank')}
+                        onClick={() => window.open(`/m/${store?.id}/${table.public_token}`, '_blank')}
                         title="Visualizar como Cliente"
                       >
                         <ExternalLink className="h-4 w-4" />
@@ -346,7 +344,7 @@ export default function ComandasPage() {
                         variant="ghost" 
                         size="icon" 
                         className="h-10 w-10 text-destructive/40 hover:text-destructive hover:bg-destructive/5" 
-                        onClick={() => handleDeleteTable(table.table_id)}
+                        onClick={() => handleDeleteTable(table.id)}
                         title="Excluir Mesa"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -362,7 +360,6 @@ export default function ComandasPage() {
                 <QrCode className="h-16 w-16 mx-auto" />
                 <div className="space-y-1">
                   <p className="text-sm font-black uppercase tracking-[0.2em]">Nenhuma mesa com link digital</p>
-                  <p className="text-[10px] font-bold uppercase">Cadastre uma mesa acima para habilitar o cardápio via QR Code.</p>
                 </div>
               </div>
             )}
@@ -370,12 +367,11 @@ export default function ComandasPage() {
         </TabsContent>
       </Tabs>
 
-      {/* MODAL: NOVA MESA (CORRIGIDO PARA RPC) */}
       <Dialog open={isNewTableOpen} onOpenChange={setIsNewTableOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-2xl font-black font-headline uppercase tracking-tighter">Cadastrar Mesa Digital</DialogTitle>
-            <DialogDescription>Isso criará um link de acesso exclusivo para o cardápio desta mesa.</DialogDescription>
+            <DialogDescription>Gere um link de acesso automático para uma nova mesa.</DialogDescription>
           </DialogHeader>
           <div className="space-y-6 py-4">
             <div className="space-y-2">
@@ -392,7 +388,7 @@ export default function ComandasPage() {
             <div className="bg-primary/5 p-4 rounded-xl border border-primary/10 flex items-start gap-3">
               <HelpCircle className="h-5 w-5 text-primary shrink-0 mt-0.5" />
               <p className="text-[10px] font-bold text-primary uppercase leading-relaxed">
-                Esta ação gerará automaticamente um token de segurança único. Clientes poderão acessar o cardápio apenas pelo QR Code desta mesa.
+                O sistema gerará um token de segurança exclusivo. O public_token será usado no QR Code.
               </p>
             </div>
           </div>

@@ -141,7 +141,7 @@ export type ComandaItem = {
 };
 
 export type ComandaTotalView = {
-  comanda_id: string;
+  id: string; // ID da comanda
   store_id: string;
   numero: number;
   mesa: string | null;
@@ -164,11 +164,11 @@ export type PainelProducaoView = {
 };
 
 export type TableInfo = {
-  table_id: string;
+  id: string;
   store_id: string;
-  table_number: number;
-  table_status: string;
-  table_token: string;
+  number: number;
+  status: string;
+  public_token: string;
 };
 
 export type StoreStatus = 

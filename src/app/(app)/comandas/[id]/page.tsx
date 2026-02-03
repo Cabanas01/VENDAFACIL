@@ -3,10 +3,9 @@
 
 /**
  * @fileOverview Detalhe da Comanda - Fluxo de Fechamento e Pagamento.
- * Refinado para corresponder ao layout profissional da captura de tela.
  */
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/components/auth-provider';
 import { supabase } from '@/lib/supabase/client';
@@ -26,9 +25,7 @@ import {
   CreditCard,
   Send,
   Search,
-  Coins,
   Printer,
-  PiggyBank,
   CircleDollarSign,
   QrCode,
   X
@@ -64,7 +61,7 @@ export default function ComandaDetailsPage() {
     if (!id || !store?.id) return;
     try {
       const [comandaRes, itemsRes] = await Promise.all([
-        supabase.from('v_comandas_totais').select('*').eq('comanda_id', id).maybeSingle(),
+        supabase.from('v_comandas_totais').select('*').eq('id', id).maybeSingle(),
         supabase.from('comanda_itens').select('*').eq('comanda_id', id).order('created_at', { ascending: false })
       ]);
 
@@ -122,7 +119,7 @@ export default function ComandaDetailsPage() {
       const { error } = await supabase.from('comanda_itens').insert(inserts);
       if (error) throw error;
 
-      toast({ title: 'Pedido Enviado!', description: 'Itens foram enviados para produção.' });
+      toast({ title: 'Pedido Enviado!', description: 'Itens registrados na comanda.' });
       setTempItems([]);
       setIsAdding(false);
       await fetchData();
@@ -152,22 +149,21 @@ export default function ComandaDetailsPage() {
   };
 
   const handleCloseComanda = async (method: 'dinheiro' | 'pix' | 'cartao') => {
-    if (!comanda?.total || comanda.total <= 0 || isSubmitting || !store) return;
+    if (!comanda || isSubmitting || !store) return;
     setIsSubmitting(true);
     
     try {
       const { data, error } = await supabase.rpc('fechar_comanda', {
-        p_comanda_id: id as string,
+        p_comanda_id: comanda.id,
         p_payment_method: method
       });
 
       if (error) throw error;
       
-      // Validação defensiva da resposta para evitar crash no front
       const res = typeof data === 'string' ? JSON.parse(data) : data;
       
       if (!res || res.success === false) {
-        throw new Error(res?.message || 'Falha desconhecida no servidor.');
+        throw new Error(res?.message || 'Falha ao processar fechamento.');
       }
 
       toast({ title: 'Venda registrada!', description: 'Comanda encerrada com sucesso.' });
@@ -180,7 +176,7 @@ export default function ComandaDetailsPage() {
       toast({ 
         variant: 'destructive', 
         title: 'Erro ao fechar', 
-        description: err.message || 'Verifique sua conexão ou tente novamente.' 
+        description: err.message 
       });
       setIsSubmitting(false);
     }
@@ -305,7 +301,7 @@ export default function ComandaDetailsPage() {
         <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl">
           <div className="bg-muted/30 px-6 py-8 text-center border-b">
             <h2 className="text-3xl font-black font-headline uppercase tracking-tighter">PAGAMENTO</h2>
-            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mt-1">Escolha o meio para finalizar a comanda #{comanda?.numero}</p>
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mt-1">Escolha o meio para finalizar a comanda</p>
           </div>
           
           <div className="p-6 space-y-3">
@@ -353,7 +349,7 @@ export default function ComandaDetailsPage() {
           {isSubmitting && (
             <div className="absolute inset-0 bg-background/90 backdrop-blur-sm flex flex-col items-center justify-center z-50 animate-in fade-in">
               <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-foreground">Finalizando Venda...</p>
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-foreground">Processando...</p>
             </div>
           )}
         </DialogContent>
