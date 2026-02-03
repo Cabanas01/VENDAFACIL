@@ -186,29 +186,24 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
 
       if (error) throw error;
 
-      const resId = typeof data === 'string' ? data : (data as any).customer_id;
-      setCustomerId(resId);
-      localStorage.setItem(`vf_cust_v3_${comandaId}`, resId);
+      const rawData = Array.isArray(data) ? data[0] : data;
+      const resId = typeof rawData === 'string' ? rawData : (rawData?.customer_id || rawData?.id);
+      
+      if (resId) {
+          setCustomerId(resId);
+          localStorage.setItem(`vf_cust_v3_${comandaId}`, resId);
+      }
+      
       setShowIdModal(false);
       
       // Prossegue com o envio do pedido automaticamente após identificar
       await handleSendOrder();
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Identificação Recusada', description: err.message });
-      setIsIdentifying(false);
+    } finally {
+        setIsIdentifying(false);
     }
   };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#F8FAFC] gap-4">
-        <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        <p className="font-black uppercase text-[10px] tracking-[0.25em] text-muted-foreground animate-pulse text-center">
-          Sincronizando<br/>Cardápio Digital...
-        </p>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-32">
@@ -221,7 +216,7 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
           </Avatar>
           <div className="flex flex-col">
             <h1 className="text-sm font-black font-headline uppercase tracking-tighter leading-none">{store.name}</h1>
-            <span className="text-[10px] font-black uppercase text-primary tracking-widest mt-1">Mesa #{table.table_number}</span>
+            <span className="text-[10px] font-black uppercase text-primary tracking-widest mt-1">Mesa #{table.number}</span>
           </div>
         </div>
         <Badge variant="outline" className="text-[8px] font-black uppercase text-green-600 bg-green-50 border-green-100">Autoatendimento</Badge>
@@ -414,7 +409,7 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
             <div className="space-y-1">
               <h1 className="text-2xl font-black font-headline uppercase tracking-tighter">Quase lá!</h1>
               <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest px-8 leading-relaxed">
-                Identifique-se para que possamos levar o pedido até você na Mesa {table.table_number}.
+                Identifique-se para que possamos levar o pedido até você na Mesa {table.number}.
               </p>
             </div>
           </div>
