@@ -59,6 +59,7 @@ export default function ComandaDetailsPage() {
   
   const [isClosing, setIsClosing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isClosingInProgress, setIsClosingInProgress] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!id || id === 'undefined' || !store?.id) {
@@ -78,7 +79,8 @@ export default function ComandaDetailsPage() {
       }
 
       const status = (comandaRes.data.status || '').toLowerCase();
-      if (status !== 'aberta') {
+      // Só redireciona automaticamente se não estivermos no meio de um fechamento manual
+      if (status !== 'aberta' && !isClosingInProgress) {
         router.replace('/comandas');
         return;
       }
@@ -97,7 +99,7 @@ export default function ComandaDetailsPage() {
     } finally {
       setLoading(false);
     }
-  }, [id, store?.id, router]);
+  }, [id, store?.id, router, isClosingInProgress]);
 
   useEffect(() => {
     if (id === 'undefined') {
@@ -169,9 +171,12 @@ export default function ComandaDetailsPage() {
 
   const handleCloseComanda = async (method: 'dinheiro' | 'pix' | 'cartao') => {
     if (!comanda || isSubmitting || !store) return;
+    
     setIsSubmitting(true);
+    setIsClosingInProgress(true); // Protege contra redirecionamento do realtime
     
     try {
+      // 1. Executa fechamento no backend
       const { data, error } = await supabase.rpc('fechar_comanda', {
         p_comanda_id: comanda.id,
         p_payment_method: method
@@ -182,22 +187,30 @@ export default function ComandaDetailsPage() {
       const res = typeof data === 'string' ? JSON.parse(data) : data;
       
       if (!res || res.success === false) {
-        throw new Error(res?.message || 'Falha ao processar fechamento.');
+        throw new Error(res?.message || 'O servidor recusou o fechamento da comanda.');
       }
 
-      toast({ title: 'Venda registrada!', description: 'Comanda encerrada com sucesso.' });
+      // 2. Feedback visual
+      toast({ 
+        title: 'Comanda Encerrada!', 
+        description: `Venda registrada via ${method.toUpperCase()}.` 
+      });
       
+      // 3. Ações pós-sucesso
       handlePrint();
       await refreshStatus(); 
+      
+      // 4. Redirecionamento controlado
       router.push('/comandas');
     } catch (err: any) {
       console.error('[CLOSE_ERROR]', err);
       toast({ 
         variant: 'destructive', 
-        title: 'Erro ao fechar', 
+        title: 'Falha no Fechamento', 
         description: err.message 
       });
       setIsSubmitting(false);
+      setIsClosingInProgress(false); // Libera para o fluxo normal em caso de erro
     }
   };
 
@@ -321,15 +334,15 @@ export default function ComandaDetailsPage() {
                 <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest mb-1">Total da Conta</p>
                 <p className="text-5xl font-black text-foreground tracking-tighter">{formatCurrency(comanda?.total || 0)}</p>
               </div>
-              <Button className="w-full h-20 text-lg font-black uppercase tracking-widest shadow-2xl shadow-primary/30 transition-all hover:scale-[1.03] active:scale-95 group" onClick={() => setIsClosing(true)} disabled={!comanda?.total || comanda.total <= 0 || tempItems.length > 0}>
-                <CheckCircle2 className="h-7 w-7 mr-3" /> Fechar Conta
+              <Button className="w-full h-20 text-lg font-black uppercase tracking-widest shadow-2xl shadow-primary/30 transition-all hover:scale-[1.03] active:scale-95 group" onClick={() => setIsClosing(true)} disabled={!comanda?.total || comanda.total <= 0 || tempItems.length > 0 || isSubmitting}>
+                {isSubmitting ? <Loader2 className="h-7 w-7 animate-spin mr-3" /> : <CheckCircle2 className="h-7 w-7 mr-3" />} Fechar Conta
               </Button>
             </CardContent>
           </Card>
         </div>
       </div>
 
-      <Dialog open={isClosing} onOpenChange={setIsClosing}>
+      <Dialog open={isClosing} onOpenChange={(open) => !isSubmitting && setIsClosing(open)}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl">
           <div className="bg-muted/30 px-6 py-8 text-center border-b">
             <h2 className="text-3xl font-black font-headline uppercase tracking-tighter">PAGAMENTO</h2>
@@ -338,6 +351,7 @@ export default function ComandaDetailsPage() {
           
           <div className="p-6 space-y-3">
             <Button 
+              type="button"
               variant="outline" 
               className="w-full h-16 justify-start text-sm font-black uppercase tracking-widest gap-4 border-2 bg-background hover:border-green-500 hover:bg-green-50 transition-all" 
               onClick={() => handleCloseComanda('dinheiro')}
@@ -349,6 +363,7 @@ export default function ComandaDetailsPage() {
               Dinheiro
             </Button>
             <Button 
+              type="button"
               variant="outline" 
               className="w-full h-16 justify-start text-sm font-black uppercase tracking-widest gap-4 border-2 bg-background hover:border-cyan-500 hover:bg-cyan-50 transition-all" 
               onClick={() => handleCloseComanda('pix')}
@@ -360,6 +375,7 @@ export default function ComandaDetailsPage() {
               PIX
             </Button>
             <Button 
+              type="button"
               variant="outline" 
               className="w-full h-16 justify-start text-sm font-black uppercase tracking-widest gap-4 border-2 bg-background hover:border-blue-500 hover:bg-blue-50 transition-all" 
               onClick={() => handleCloseComanda('cartao')}
@@ -373,7 +389,7 @@ export default function ComandaDetailsPage() {
           </div>
 
           <div className="p-4 bg-muted/10 text-center">
-            <Button variant="ghost" onClick={() => setIsClosing(false)} className="text-[10px] font-black uppercase tracking-widest opacity-50 hover:opacity-100">
+            <Button type="button" variant="ghost" onClick={() => setIsClosing(false)} className="text-[10px] font-black uppercase tracking-widest opacity-50 hover:opacity-100" disabled={isSubmitting}>
               Cancelar
             </Button>
           </div>
@@ -381,7 +397,7 @@ export default function ComandaDetailsPage() {
           {isSubmitting && (
             <div className="absolute inset-0 bg-background/90 backdrop-blur-sm flex flex-col items-center justify-center z-50 animate-in fade-in">
               <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-foreground">Processando...</p>
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-foreground">Finalizando Venda...</p>
             </div>
           )}
         </DialogContent>
