@@ -4,10 +4,10 @@
 /**
  * @fileOverview Cardápio Digital Profissional (Autoatendimento)
  * 
- * - Identificação obrigatória (CRM)
- * - Pedidos via RPC add_itens_from_table_link
- * - Mobile First & UX Premium
- * - Persistência de identificação para evitar cadastros duplicados na mesma visita.
+ * - Navegação pública livre (sem bloqueio inicial).
+ * - Identificação do cliente solicitada apenas no checkout do pedido.
+ * - Pedidos via RPC add_itens_from_table_link.
+ * - Mobile First & UX Premium.
  */
 
 import { useState, useEffect, useMemo } from 'react';
@@ -34,7 +34,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
-import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 
 const formatCurrency = (val: number) => 
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((val || 0) / 100);
@@ -52,6 +53,7 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
   // Identificação do Cliente
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [isIdentifying, setIsIdentifying] = useState(false);
+  const [showIdModal, setShowIdModal] = useState(false);
   const [customerData, setCustomerData] = useState({ name: '', phone: '', cpf: '' });
 
   useEffect(() => {
@@ -126,42 +128,17 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
     setCart(prev => prev.map(i => i.product_id === productId ? { ...i, notes } : i));
   };
 
-  const handleRegisterCustomer = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!customerData.name || !customerData.phone || isIdentifying) return;
-
-    setIsIdentifying(true);
-    try {
-      // RPC OBRIGATÓRIA: Registra cliente e vincula à comanda
-      const { data, error } = await supabase.rpc('register_customer_on_table', {
-        p_comanda_id: comandaId,
-        p_name: customerData.name,
-        p_phone: customerData.phone,
-        p_cpf: customerData.cpf || null
-      });
-
-      if (error) throw error;
-
-      // Resposta da RPC pode variar (objeto ou string)
-      const resId = typeof data === 'string' ? data : (data as any).customer_id;
-      
-      setCustomerId(resId);
-      localStorage.setItem(`vf_cust_v3_${comandaId}`, resId);
-      
-      toast({ title: 'Acesso Liberado!', description: `Bom apetite, ${customerData.name.split(' ')[0]}!` });
-    } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Identificação Recusada', description: err.message });
-    } finally {
-      setIsIdentifying(false);
-    }
-  };
-
   const handleSendOrder = async () => {
-    if (!customerId || cart.length === 0 || isSending) return;
+    if (cart.length === 0 || isSending) return;
+
+    // Se não estiver identificado, abre o modal antes de enviar
+    if (!customerId) {
+      setShowIdModal(true);
+      return;
+    }
     
     setIsSending(true);
     try {
-      // Formatação dos itens para o JSONB esperado pela RPC
       const payload = cart.map(i => ({
         product_id: i.product_id,
         qty: i.quantity,
@@ -180,7 +157,6 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
       setIsCartOpen(false);
       setOrderSuccess(true);
       
-      // Feedback temporário de sucesso
       setTimeout(() => setOrderSuccess(false), 5000);
       
       toast({ title: 'Pedido Enviado!', description: 'Sua solicitação já está na produção.' });
@@ -195,6 +171,34 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
     }
   };
 
+  const handleRegisterAndSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customerData.name || !customerData.phone || isIdentifying) return;
+
+    setIsIdentifying(true);
+    try {
+      const { data, error } = await supabase.rpc('register_customer_on_table', {
+        p_comanda_id: comandaId,
+        p_name: customerData.name,
+        p_phone: customerData.phone,
+        p_cpf: customerData.cpf || null
+      });
+
+      if (error) throw error;
+
+      const resId = typeof data === 'string' ? data : (data as any).customer_id;
+      setCustomerId(resId);
+      localStorage.setItem(`vf_cust_v3_${comandaId}`, resId);
+      setShowIdModal(false);
+      
+      // Prossegue com o envio do pedido automaticamente após identificar
+      await handleSendOrder();
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Identificação Recusada', description: err.message });
+      setIsIdentifying(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#F8FAFC] gap-4">
@@ -206,71 +210,6 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
     );
   }
 
-  // TELA DE IDENTIFICAÇÃO (BLOQUEIA O CARDÁPIO)
-  if (!customerId) {
-    return (
-      <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center justify-center p-6">
-        <Card className="w-full max-w-md border-none shadow-2xl overflow-hidden rounded-[32px] animate-in fade-in zoom-in duration-500">
-          <div className="bg-primary/5 p-10 text-center space-y-4 border-b border-primary/10">
-            <div className="mx-auto h-16 w-16 rounded-3xl bg-white shadow-xl flex items-center justify-center text-primary ring-8 ring-primary/5">
-              <UserCheck className="h-8 w-8" />
-            </div>
-            <div className="space-y-1">
-              <h1 className="text-2xl font-black font-headline uppercase tracking-tighter">Identificação</h1>
-              <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest px-8 leading-relaxed">
-                Mesa {table.table_number} - Identifique-se para liberar o cardápio
-              </p>
-            </div>
-          </div>
-          <CardContent className="p-8">
-            <form onSubmit={handleRegisterCustomer} className="space-y-6">
-              <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Nome Completo</label>
-                  <Input 
-                    placeholder="Como devemos te chamar?" 
-                    value={customerData.name}
-                    onChange={e => setCustomerData({...customerData, name: e.target.value})}
-                    className="h-14 font-bold border-muted-foreground/20 rounded-2xl focus-visible:ring-primary/20 text-base"
-                    required
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">WhatsApp / Celular</label>
-                  <Input 
-                    placeholder="(00) 00000-0000" 
-                    value={customerData.phone}
-                    onChange={e => setCustomerData({...customerData, phone: e.target.value})}
-                    className="h-14 font-bold border-muted-foreground/20 rounded-2xl focus-visible:ring-primary/20"
-                    required
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">CPF (Opcional)</label>
-                  <Input 
-                    placeholder="000.000.000-00" 
-                    value={customerData.cpf}
-                    onChange={e => setCustomerData({...customerData, cpf: e.target.value})}
-                    className="h-14 font-bold border-muted-foreground/20 rounded-2xl focus-visible:ring-primary/20"
-                  />
-                </div>
-              </div>
-              <Button 
-                type="submit" 
-                className="w-full h-16 rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl shadow-primary/20 transition-all hover:scale-[1.02] active:scale-95"
-                disabled={isIdentifying || !customerData.name || !customerData.phone}
-              >
-                {isIdentifying ? <Loader2 className="animate-spin mr-2 h-5 w-5" /> : <ChevronRight className="mr-2 h-5 w-5" />}
-                Confirmar e Ver Produtos
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  // CARDÁPIO LIBERADO
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-32">
       <header className="bg-white/80 backdrop-blur-md border-b sticky top-0 z-40 px-6 py-4 shadow-sm flex items-center justify-between">
@@ -456,7 +395,7 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
                   </>
                 ) : (
                   <>
-                    Enviar p/ Produção <ChevronRight className="ml-3 h-5 w-5" />
+                    Confirmar Pedido <ChevronRight className="ml-3 h-5 w-5" />
                   </>
                 )}
               </Button>
@@ -464,6 +403,66 @@ export function DigitalMenu({ table, comandaId, store }: { table: TableInfo; com
           </div>
         </div>
       )}
+
+      {/* MODAL DE IDENTIFICAÇÃO (CHAMADO NO CHECKOUT) */}
+      <Dialog open={showIdModal} onOpenChange={setShowIdModal}>
+        <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl rounded-[32px]">
+          <div className="bg-primary/5 p-10 text-center space-y-4 border-b border-primary/10">
+            <div className="mx-auto h-16 w-16 rounded-3xl bg-white shadow-xl flex items-center justify-center text-primary ring-8 ring-primary/5">
+              <UserCheck className="h-8 w-8" />
+            </div>
+            <div className="space-y-1">
+              <h1 className="text-2xl font-black font-headline uppercase tracking-tighter">Quase lá!</h1>
+              <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest px-8 leading-relaxed">
+                Identifique-se para que possamos levar o pedido até você na Mesa {table.table_number}.
+              </p>
+            </div>
+          </div>
+          <div className="p-8">
+            <form onSubmit={handleRegisterAndSend} className="space-y-6">
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Nome Completo</label>
+                  <Input 
+                    placeholder="Como devemos te chamar?" 
+                    value={customerData.name}
+                    onChange={e => setCustomerData({...customerData, name: e.target.value})}
+                    className="h-14 font-bold border-muted-foreground/20 rounded-2xl focus-visible:ring-primary/20 text-base"
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">WhatsApp / Celular</label>
+                  <Input 
+                    placeholder="(00) 00000-0000" 
+                    value={customerData.phone}
+                    onChange={e => setCustomerData({...customerData, phone: e.target.value})}
+                    className="h-14 font-bold border-muted-foreground/20 rounded-2xl focus-visible:ring-primary/20"
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">CPF (Opcional)</label>
+                  <Input 
+                    placeholder="000.000.000-00" 
+                    value={customerData.cpf}
+                    onChange={e => setCustomerData({...customerData, cpf: e.target.value})}
+                    className="h-14 font-bold border-muted-foreground/20 rounded-2xl focus-visible:ring-primary/20"
+                  />
+                </div>
+              </div>
+              <Button 
+                type="submit" 
+                className="w-full h-16 rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl shadow-primary/20 transition-all hover:scale-[1.02] active:scale-95"
+                disabled={isIdentifying || !customerData.name || !customerData.phone}
+              >
+                {isIdentifying ? <Loader2 className="animate-spin mr-2 h-5 w-5" /> : <CheckCircle2 className="mr-2 h-5 w-5" />}
+                Finalizar e Enviar Pedido
+              </Button>
+            </form>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {!loading && products.length === 0 && (
         <div className="py-40 flex flex-col items-center justify-center text-center px-10 space-y-6 opacity-30">
