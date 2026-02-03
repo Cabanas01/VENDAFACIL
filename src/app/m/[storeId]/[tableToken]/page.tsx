@@ -1,11 +1,11 @@
-
 'use client';
 
 /**
- * @fileOverview Rota de Entrada do Autoatendimento (QR Code)
+ * @fileOverview Rota de Entrada do Autoatendimento (QR Code) - Versão Aberta.
  * 
- * Responsável por validar a sessão e identificar a mesa de forma segura via RPC.
- * O fluxo de identificação do cliente ocorre dentro do componente DigitalMenu.
+ * - Valida a existência da mesa via link público.
+ * - Libera o cardápio IMEDIATAMENTE após validação da mesa.
+ * - Não exige comanda aberta para visualização.
  */
 
 import { useEffect, useState, useCallback } from 'react';
@@ -23,7 +23,6 @@ export default function TableMenuPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [table, setTable] = useState<TableInfo | null>(null);
-  const [comandaId, setComandaId] = useState<string | null>(null);
   const [store, setStore] = useState<Store | null>(null);
 
   const initializeSession = useCallback(async () => {
@@ -37,7 +36,8 @@ export default function TableMenuPage() {
     setError(null);
 
     try {
-      // 1. Resolver Mesa via RPC Segura (Valida Token e Existência)
+      // 1. Validar Mesa (Acesso Público)
+      // O frontend deve ser resiliente ao formato de retorno da RPC
       const { data: tableData, error: tableError } = await supabase.rpc('get_table_by_token', {
         p_store_id: storeId,
         p_table_token: tableToken
@@ -45,73 +45,39 @@ export default function TableMenuPage() {
 
       if (tableError || !tableData) {
         console.error('[TABLE_VALIDATION_FAILED]', tableError);
-        throw new Error('Link de mesa inválido ou expirado. Peça ajuda ao atendente.');
+        throw new Error('Mesa não localizada. Verifique o QR Code ou chame o atendente.');
       }
 
-      const resolvedTableRaw = Array.isArray(tableData) ? tableData[0] : tableData;
+      // Tratar retorno como objeto único
+      const resolvedTable = Array.isArray(tableData) ? tableData[0] : tableData;
       
-      if (!resolvedTableRaw) {
-          throw new Error('Mesa não encontrada no sistema.');
+      if (!resolvedTable) {
+        throw new Error('Identificação da mesa inválida.');
       }
 
-      // Normalização dos dados da mesa (Independente do formato de retorno da RPC)
-      const mappedTable: TableInfo = {
-          id: resolvedTableRaw.table_id || resolvedTableRaw.id,
-          store_id: resolvedTableRaw.store_id,
-          number: resolvedTableRaw.table_number || resolvedTableRaw.number,
-          status: resolvedTableRaw.table_status || resolvedTableRaw.status || 'ativo',
-          public_token: tableToken
-      };
-      
-      if (!mappedTable.id) {
-          throw new Error('Falha ao identificar o código interno da mesa.');
-      }
+      setTable({
+        id: resolvedTable.table_id || resolvedTable.id,
+        store_id: storeId,
+        number: resolvedTable.table_number || resolvedTable.number,
+        status: resolvedTable.table_status || resolvedTable.status || 'ativo',
+        public_token: tableToken
+      });
 
-      setTable(mappedTable);
-
-      // 2. Buscar Contexto da Loja (Para Nome e Logo)
+      // 2. Buscar Dados da Loja (Branding)
       const { data: storeData, error: storeErr } = await supabase
         .from('stores')
         .select('*')
         .eq('id', storeId)
-        .single();
+        .maybeSingle();
       
       if (storeErr || !storeData) {
-          console.error('[STORE_FETCH_FAILED]', storeErr);
-          throw new Error('Falha ao carregar informações da loja.');
+        throw new Error('Falha ao carregar informações da loja.');
       }
       setStore(storeData);
 
-      // 3. Sincronizar Comanda Aberta para esta mesa via RPC
-      const { data: comandaData, error: comandaError } = await supabase.rpc('get_or_create_comanda_by_table', {
-        p_table_id: mappedTable.id
-      });
-
-      if (comandaError) {
-        console.error('[COMANDA_SYNC_FAILED]', comandaError);
-        throw new Error('Erro ao sincronizar seu atendimento com o servidor.');
-      }
-
-      if (!comandaData) {
-          throw new Error('Não foi possível iniciar um atendimento nesta mesa.');
-      }
-
-      // Tratamento resiliente do ID da comanda
-      const rawComanda = Array.isArray(comandaData) ? comandaData[0] : comandaData;
-      const finalComandaId = typeof rawComanda === 'string' 
-        ? rawComanda 
-        : (rawComanda?.comanda_id || rawComanda?.id);
-
-      if (!finalComandaId) {
-          console.error('[COMANDA_ID_EXTRACTION_FAILED]', comandaData);
-          throw new Error('Falha ao processar o identificador da comanda.');
-      }
-
-      setComandaId(finalComandaId);
-
     } catch (err: any) {
       console.error('[BOOTSTRAP_FATAL]', err);
-      setError(err.message || 'Ocorreu um erro inesperado ao conectar à mesa.');
+      setError(err.message || 'Erro de conexão com o restaurante.');
     } finally {
       setLoading(false);
     }
@@ -125,8 +91,8 @@ export default function TableMenuPage() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#F8FAFC] gap-4">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        <p className="font-black uppercase text-[10px] tracking-[0.25em] text-muted-foreground animate-pulse text-center">
-          Conectando Mesa...
+        <p className="font-black uppercase text-[10px] tracking-[0.25em] text-muted-foreground animate-pulse">
+          Abrindo Cardápio...
         </p>
       </div>
     );
@@ -139,7 +105,7 @@ export default function TableMenuPage() {
           <AlertCircle className="h-16 w-16 text-red-500" />
         </div>
         <div className="space-y-2 max-w-xs mx-auto">
-          <h1 className="text-2xl font-black font-headline uppercase tracking-tighter">ACESSO NEGADO</h1>
+          <h1 className="text-2xl font-black font-headline uppercase tracking-tighter">MESA NÃO LOCALIZADA</h1>
           <p className="text-muted-foreground font-medium text-sm leading-relaxed">{error}</p>
         </div>
         <button 
@@ -152,12 +118,11 @@ export default function TableMenuPage() {
     );
   }
 
-  if (!table || !comandaId || !store) return null;
+  if (!table || !store) return null;
 
   return (
     <DigitalMenu 
       table={table} 
-      comandaId={comandaId} 
       store={store} 
     />
   );
