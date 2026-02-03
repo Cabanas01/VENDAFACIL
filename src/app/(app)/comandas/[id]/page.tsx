@@ -41,7 +41,8 @@ const formatCurrency = (val: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((val || 0) / 100);
 
 export default function ComandaDetailsPage() {
-  const { id } = useParams();
+  const params = useParams();
+  const id = params?.id as string;
   const { products, refreshStatus, store } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
@@ -60,20 +61,22 @@ export default function ComandaDetailsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchData = useCallback(async () => {
-    if (!id || !store?.id) return;
+    if (!id || id === 'undefined' || !store?.id) {
+      if (id === 'undefined') router.replace('/comandas');
+      return;
+    }
+
     try {
       const [comandaRes, itemsRes] = await Promise.all([
         supabase.from('v_comandas_totais').select('*').eq('id', id).maybeSingle(),
         supabase.from('comanda_itens').select('*').eq('comanda_id', id).order('created_at', { ascending: false })
       ]);
 
-      // Se não encontrar a comanda na View, aguarda um pouco antes de dar erro (evita lag de sincronização)
       if (!comandaRes.data) {
         setNotFound(true);
         return;
       }
 
-      // Normalização de status para evitar que feche por causa de case-sensitivity
       const status = (comandaRes.data.status || '').toLowerCase();
       if (status !== 'aberta') {
         router.replace('/comandas');
@@ -97,13 +100,18 @@ export default function ComandaDetailsPage() {
   }, [id, store?.id, router]);
 
   useEffect(() => {
+    if (id === 'undefined') {
+      router.replace('/comandas');
+      return;
+    }
+    
     fetchData();
     const channel = supabase.channel(`sync_comanda_${id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'comanda_itens', filter: `comanda_id=eq.${id}` }, () => fetchData())
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'comandas', filter: `id=eq.${id}` }, () => fetchData())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [id, fetchData]);
+  }, [id, fetchData, router]);
 
   const addTempItem = (product: Product) => {
     setTempItems(prev => {
@@ -118,7 +126,7 @@ export default function ComandaDetailsPage() {
     setIsSubmitting(true);
     try {
       const inserts = tempItems.map(i => ({
-        comanda_id: id as string,
+        comanda_id: id,
         product_id: i.product.id,
         product_name: i.product.name,
         quantidade: i.quantity,
@@ -193,7 +201,7 @@ export default function ComandaDetailsPage() {
     }
   };
 
-  if (loading) return (
+  if (loading && !notFound) return (
     <div className="h-[60vh] flex flex-col items-center justify-center gap-4">
       <Loader2 className="animate-spin text-primary" />
       <p className="font-black uppercase text-[10px] tracking-widest text-muted-foreground">Sincronizando...</p>

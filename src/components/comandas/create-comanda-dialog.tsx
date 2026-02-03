@@ -55,21 +55,27 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
 
       if (error) throw error;
 
-      toast({ title: 'Comanda Aberta!', description: `Mesa ${values.mesa} para ${values.cliente_nome}.` });
+      // Captura o ID de forma resiliente. RPCs podem retornar UUID direto ou objeto JSON.
+      let comandaId = null;
+      if (typeof data === 'string') {
+        comandaId = data;
+      } else if (data && typeof data === 'object') {
+        comandaId = (data as any).comanda_id || (data as any).id;
+      }
       
-      onOpenChange(false);
-      form.reset();
-      
-      // Captura o ID de forma resiliente (pode ser string direta ou objeto com comanda_id)
-      const comandaId = typeof data === 'string' ? data : (data as any)?.comanda_id;
-      
-      if (comandaId) {
+      if (comandaId && comandaId !== 'undefined') {
+        toast({ title: 'Comanda Aberta!', description: `Mesa ${values.mesa} para ${values.cliente_nome}.` });
+        onOpenChange(false);
+        form.reset();
         router.push(`/comandas/${comandaId}`);
       } else {
-        // Fallback caso não venha ID, apenas atualiza a lista
+        toast({ title: 'Comanda Aberta!', description: 'Redirecionando para a lista.' });
+        onOpenChange(false);
+        form.reset();
         if (onSuccess) onSuccess();
       }
     } catch (err: any) {
+      console.error('[ABRIR_COMANDA_ERROR]', err);
       toast({ variant: 'destructive', title: 'Erro ao abrir comanda', description: err.message });
     } finally {
       setIsSubmitting(false);
