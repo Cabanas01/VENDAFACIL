@@ -28,7 +28,6 @@ import {
   Trash2,
   Sparkles,
   Link2,
-  Info,
   HelpCircle
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -67,9 +66,9 @@ export default function ComandasPage() {
           .order('numero', { ascending: true }),
         supabase
           .from('tables')
-          .select('*')
+          .select('table_id:id, store_id, table_number:number, table_status:status, table_token:token')
           .eq('store_id', store.id)
-          .order('table_number', { ascending: true })
+          .order('number', { ascending: true })
       ]);
 
       if (comandasRes.error) throw comandasRes.error;
@@ -109,19 +108,15 @@ export default function ComandasPage() {
     setIsCreatingTable(true);
 
     try {
-      const token = `mesa-${newTableNumber}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
-      const { error } = await supabase
-        .from('tables')
-        .insert({
-          store_id: store.id,
-          table_number: parseInt(newTableNumber),
-          table_token: token,
-          table_status: 'disponivel'
-        });
+      // Uso da RPC create_table em vez de insert direto
+      const { error } = await supabase.rpc('create_table', {
+        p_store_id: store.id,
+        p_number: parseInt(newTableNumber)
+      });
 
       if (error) throw error;
 
-      toast({ title: 'Mesa Cadastrada!', description: `Link gerado para a mesa ${newTableNumber}.` });
+      toast({ title: 'Mesa Ativada!', description: `Mesa ${newTableNumber} agora possui link digital.` });
       setNewTableNumber('');
       setIsNewTableOpen(false);
       await fetchData();
@@ -141,21 +136,16 @@ export default function ComandasPage() {
     }
 
     try {
-      const token = `mesa-${num}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
-      const { error } = await supabase
-        .from('tables')
-        .insert({
-          store_id: store.id,
-          table_number: parseInt(num),
-          table_token: token,
-          table_status: 'ocupada'
-        });
+      const { error } = await supabase.rpc('create_table', {
+        p_store_id: store.id,
+        p_number: parseInt(num)
+      });
 
       if (error) throw error;
       toast({ title: 'Link Gerado!', description: `Mesa ${num} agora possui acesso digital.` });
       await fetchData();
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Erro ao gerar', description: err.message });
+      toast({ variant: 'destructive', title: 'Erro ao gerar link', description: err.message });
     }
   };
 
@@ -317,7 +307,7 @@ export default function ComandasPage() {
 
           <div className="grid gap-4">
             {tables.map(table => (
-              <Card key={table.table_id} className="border-none shadow-sm hover:shadow-md transition-all group overflow-hidden">
+              <Card key={table.table_id} className="border-none shadow-sm hover:shadow-md transition-all group overflow-hidden bg-white">
                 <CardContent className="p-0">
                   <div className="flex flex-col sm:flex-row items-center justify-between p-6 gap-4">
                     <div className="flex items-center gap-6 w-full">
@@ -334,7 +324,7 @@ export default function ComandasPage() {
                         </h4>
                         <div className="flex items-center gap-2 mt-1 opacity-60 group-hover:opacity-100 transition-opacity overflow-hidden">
                           <Link2 className="h-3 w-3 text-primary shrink-0" />
-                          <span className="text-[10px] font-mono text-muted-foreground truncate">.../m/{store?.id?.substring(0,8)}/{table.table_token.substring(0,10)}...</span>
+                          <span className="text-[10px] font-mono text-muted-foreground truncate">.../m/{store?.id?.substring(0,8)}/{table.table_token?.substring(0,10)}...</span>
                         </div>
                       </div>
                     </div>
@@ -380,7 +370,7 @@ export default function ComandasPage() {
         </TabsContent>
       </Tabs>
 
-      {/* MODAL: NOVA MESA */}
+      {/* MODAL: NOVA MESA (CORRIGIDO PARA RPC) */}
       <Dialog open={isNewTableOpen} onOpenChange={setIsNewTableOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -402,13 +392,13 @@ export default function ComandasPage() {
             <div className="bg-primary/5 p-4 rounded-xl border border-primary/10 flex items-start gap-3">
               <HelpCircle className="h-5 w-5 text-primary shrink-0 mt-0.5" />
               <p className="text-[10px] font-bold text-primary uppercase leading-relaxed">
-                Após ativar, copie o link e use um gerador de QR Code gratuito (como o qr-code-generator.com) para criar a etiqueta física da mesa.
+                Esta ação gerará automaticamente um token de segurança único. Clientes poderão acessar o cardápio apenas pelo QR Code desta mesa.
               </p>
             </div>
           </div>
           <DialogFooter className="gap-2 sm:flex-row-reverse">
             <Button onClick={handleCreateTable} disabled={!newTableNumber || isCreatingTable} className="flex-1 h-12 font-black uppercase text-xs tracking-widest shadow-lg shadow-primary/20">
-              {isCreatingTable ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <QrCode className="mr-2 h-4 w-4" />} Gerar Link QR
+              {isCreatingTable ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <QrCode className="mr-2 h-4 w-4" />} Ativar Mesa
             </Button>
             <Button variant="ghost" onClick={() => setIsNewTableOpen(false)} className="flex-1 h-12 font-black uppercase text-xs tracking-widest">Cancelar</Button>
           </DialogFooter>

@@ -1,3 +1,4 @@
+
 export type User = {
   id: string;
   email: string;
@@ -167,6 +168,7 @@ export type TableInfo = {
   store_id: string;
   table_number: number;
   table_status: string;
+  table_token: string;
 };
 
 export type StoreStatus = 
