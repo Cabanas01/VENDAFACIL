@@ -96,14 +96,14 @@ export default function ComandasPage() {
   , [comandas, search]);
 
   const handleManageComanda = (comanda: any) => {
-    // Garantir que usamos o UUID (id ou comanda_id da view)
+    // REGRA DE OURO: SEMPRE USAR O UUID (id ou comanda_id da view)
     const comandaId = comanda.id || comanda.comanda_id;
     
-    if (!comandaId) {
+    if (!comandaId || comandaId === 'undefined') {
       toast({ 
         variant: 'destructive', 
-        title: 'Identificador não localizado', 
-        description: 'Não foi possível carregar o ID desta comanda.' 
+        title: 'Falha na Identificação', 
+        description: 'UUID da comanda não localizado. Tente atualizar a página.' 
       });
       return;
     }

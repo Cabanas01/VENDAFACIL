@@ -66,7 +66,7 @@ export default function ComandaDetailsPage() {
     setLoading(true);
     
     try {
-      // 1. Buscar a comanda pelo ID da rota (RLS garantirá acesso)
+      // 1. Buscar a comanda pelo ID da rota (UUID)
       const { data: baseData, error: baseErr } = await supabase
         .from('comandas')
         .select('*')
@@ -91,7 +91,7 @@ export default function ComandaDetailsPage() {
         mesa: baseData.mesa,
         status: baseData.status,
         cliente_nome: baseData.cliente_nome,
-        total: 0 // Usaremos o calculado
+        total: 0 // Usaremos o calculado localmente
       });
 
       setItems(itemsRes.data || []);
@@ -108,7 +108,6 @@ export default function ComandaDetailsPage() {
   useEffect(() => {
     fetchData();
     
-    // Listener em tempo real para atualizações na comanda atual
     const channel = supabase.channel(`sync_comanda_${id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'comanda_itens', filter: `comanda_id=eq.${id}` }, () => fetchData())
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'comandas', filter: `id=eq.${id}` }, () => fetchData())
@@ -143,11 +142,11 @@ export default function ComandaDetailsPage() {
         });
       }
 
+      // SOLUÇÃO DEFINITIVA: Remove .eq('status', 'aberta') para evitar erro de constraint se já estiver em preparo
       await supabase
         .from('comandas')
         .update({ status: 'em_preparo' })
-        .eq('id', comanda.id)
-        .in('status', ['aberta', 'em_preparo']);
+        .eq('id', comanda.id);
 
       toast({ title: 'Pedido Lançado!' });
       setTempItems([]);
@@ -188,10 +187,13 @@ export default function ComandaDetailsPage() {
       }));
 
       const normalizedMethod = method === 'dinheiro' ? 'cash' : (method === 'cartao' ? 'card' : method);
+      
+      // 1. Processar a Venda no Motor Financeiro
       const result = await addSale(cartItems, normalizedMethod, customer?.id || null);
       
       if (!result.success) throw new Error(result.error);
 
+      // 2. Marcar Comanda como Fechada após sucesso do pagamento
       await supabase.from('comandas').update({ 
         status: 'fechada', 
         closed_at: new Date().toISOString() 

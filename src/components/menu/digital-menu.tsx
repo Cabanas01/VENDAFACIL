@@ -66,7 +66,6 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
 
   useEffect(() => {
     loadProducts();
-    // Removido useEffect de identificação automática via localStorage para garantir fluxo limpo
   }, [loadProducts]);
 
   const categories = useMemo(() => Array.from(new Set(products.map(p => p.category || 'Geral'))), [products]);
@@ -103,28 +102,22 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
     });
   };
 
-  /**
-   * Controlador Principal de Ações (Switch de Fluxo)
-   */
   const handleMainAction = async () => {
-    // 🥇 1º CLIQUE — CONFIRMAÇÃO VISUAL
     if (orderStep === 1) {
       setIsCartOpen(true);
       setOrderStep(2);
       return;
     }
 
-    // 🥈 2º CLIQUE — CADASTRO / LOGIN
     if (orderStep === 2) {
       if (!customerId) {
         setShowIdModal(true);
       } else {
-        setOrderStep(3); // Se já tiver ID em memória, avança direto
+        setOrderStep(3);
       }
       return;
     }
 
-    // 🥉 3º CLIQUE — CONFIRMA PEDIDO (ENVIO REAL)
     if (orderStep === 3) {
       await executeOrderSubmission();
     }
@@ -136,7 +129,6 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
     
     setIsIdentifying(true);
     try {
-      // 1. Garantir que existe uma comanda aberta para esta mesa antes de vincular o cliente
       const { data: comRes, error: comErr } = await supabase.rpc('get_or_create_comanda_by_table', { p_table_id: table.id });
       if (comErr) throw comErr;
       
@@ -145,7 +137,6 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
 
       if (!finalComId) throw new Error('Não foi possível inicializar seu atendimento.');
 
-      // 2. Registrar cliente vinculado à comanda
       const { data: custRes, error: custErr } = await supabase.rpc('register_customer_on_table', {
         p_comanda_id: finalComId,
         p_name: customerData.name,
@@ -160,11 +151,10 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
 
       if (!finalCustId) throw new Error('Erro ao salvar identificação.');
 
-      // 3. Sucesso: Atualiza estado e avança para o Passo 3
       setCustomerId(finalCustId);
       setShowIdModal(false);
       setOrderStep(3);
-      toast({ title: 'Identificado com sucesso!' });
+      toast({ title: 'Identificado!' });
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Falha na Identificação', description: err.message });
     } finally {
@@ -179,7 +169,6 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
     try {
       let comandaId: string | null = null;
 
-      // Lançar itens via número de mesa (Passo 3 Real)
       for (const item of cart) {
         const product = products.find(p => p.id === item.product_id);
         const cid = await addComandaItem({
@@ -194,22 +183,20 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
         if (!comandaId) comandaId = cid;
       }
 
-      // Transicionar status da comanda para preparo (apenas agora)
+      // SOLUÇÃO DEFINITIVA: Remove .eq('status', 'aberta') para evitar erro de constraint
       if (comandaId) {
         await supabase
           .from('comandas')
           .update({ status: 'em_preparo' })
-          .eq('id', comandaId)
-          .eq('status', 'aberta');
+          .eq('id', comandaId);
       }
 
-      // Limpeza Total
       setCart([]);
       setIsCartOpen(false);
-      setOrderStep(1); // Volta para o início do fluxo
+      setOrderStep(1);
       setOrderSuccess(true);
       setTimeout(() => setOrderSuccess(false), 5000);
-      toast({ title: 'Pedido Enviado!', description: 'Estamos preparando para você.' });
+      toast({ title: 'Pedido Enviado!' });
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Erro no Pedido', description: err.message });
     } finally {
