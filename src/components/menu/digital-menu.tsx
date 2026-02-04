@@ -3,10 +3,12 @@
 /**
  * @fileOverview Cardápio Digital (Autoatendimento)
  * 
- * Fluxo de Pedido Resiliente:
- * 1. Validação de IDs de Unidade.
- * 2. Resolução atômica da comanda.
- * 3. Fallback inteligente de RPC (trata 4 ou 5 parâmetros).
+ * Fluxo de Pedido Transacional (Frontend):
+ * 1. Validar Acesso da Loja
+ * 2. Abrir/Resolver Comanda (Obter UUID)
+ * 3. Validar UUID retornado
+ * 4. Registrar Cliente vinculado ao UUID
+ * 5. Lançar Itens
  */
 
 import { useState, useEffect, useMemo } from 'react';
@@ -39,6 +41,10 @@ import { cn } from '@/lib/utils';
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((value || 0) / 100);
+
+const isValidUUID = (uuid: string) => {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid);
+};
 
 export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }) {
   const { toast } = useToast();
@@ -113,139 +119,97 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
   };
 
   const handleProceedToIdentification = () => {
-    if (!store?.id || !table?.number) {
-      toast({ variant: 'destructive', title: 'Erro de Unidade', description: 'Dados da loja não identificados. Recarregue a página.' });
+    if (!store?.id) {
+      toast({ variant: 'destructive', title: 'Identificação Pendente', description: 'Loja não carregada.' });
       return;
     }
     setIsCartOpen(false);
-    setSubmissionError(null);
     setShowIdModal(true);
   };
 
-  /**
-   * Chamada segura para o registro do cliente com fallback de assinatura.
-   */
-  async function registerCustomerSafe(args: {
-    comandaId: string;
-    storeId: string;
-    name: string;
-    phone: string;
-    cpf?: string | null;
-  }) {
-    // 1) tenta assinatura 4 params (padrão do backend atual)
-    let { error } = await supabase.rpc('register_customer_on_table', {
-      p_comanda_id: args.comandaId,
-      p_name: args.name,
-      p_phone: args.phone,
-      p_cpf: args.cpf ?? null
-    });
-
-    if (!error) return;
-
-    // 2) se PGRST202 (function not found), tenta assinatura 5 params (compatibilidade legado)
-    const msg = (error as any)?.message || '';
-    const code = (error as any)?.code || '';
-    const isPgrst202 = code === 'PGRST202' || msg.includes('PGRST202') || msg.includes('schema cache') || msg.includes('Could not find the function');
-
-    if (isPgrst202) {
-      const retry = await supabase.rpc('register_customer_on_table', {
-        p_store_id: args.storeId,
-        p_comanda_id: args.comandaId,
-        p_name: args.name,
-        p_phone: args.phone,
-        p_cpf: args.cpf ?? null
-      });
-
-      if (retry.error) throw retry.error;
-      return;
-    }
-
-    throw error;
-  }
-
   const executeOrderSubmission = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    const p_name = (customerData.name || '').trim();
-    const p_phone = (customerData.phone || '').trim();
-    const p_cpf = (customerData.cpf || '').trim() || null;
-
-    if (isSending || !p_name || !p_phone || !store?.id) return;
+    if (isSending || cart.length === 0 || !store?.id) return;
 
     setIsSending(true);
     setSubmissionError(null);
 
     try {
-      // 1. Resolução Atômica da Comanda
-      const { data: existingComanda, error: findError } = await supabase
-        .from('comandas')
-        .select('id')
-        .eq('store_id', store.id)
-        .eq('numero', table.number)
-        .in('status', ['aberta', 'em_preparo', 'pronta', 'aguardando_pagamento'])
-        .maybeSingle();
-
-      if (findError) throw findError;
-
-      let targetComandaId = existingComanda?.id;
-
-      if (!targetComandaId) {
-        const { data: newComanda, error: createError } = await supabase
-          .from('comandas')
-          .insert({
-            store_id: store.id,
-            numero: table.number,
-            status: 'aberta'
-          })
-          .select('id')
-          .single();
-        
-        if (createError) throw createError;
-        targetComandaId = newComanda.id;
+      // 1. Validar Acesso da Loja
+      const { data: accessRes } = await supabase.rpc('get_store_access_status', { p_store_id: store.id });
+      // Se accessRes for array, pegar [0], senão direto. 
+      const access = Array.isArray(accessRes) ? accessRes[0] : accessRes;
+      
+      if (access && access.acesso_liberado === false) {
+        throw new Error('LOJA_BLOQUEADA');
       }
 
-      // 2. Lançamento Serial de Itens
+      // 2. Abrir/Resolver Comanda (Transação Principal)
+      const { data: comandaData, error: comandaError } = await supabase.rpc('abrir_comanda', {
+        p_store_id: store.id,
+        p_mesa: table.number.toString(),
+        p_cliente_nome: customerData.name,
+        p_cliente_telefone: customerData.phone,
+        p_cliente_cpf: customerData.cpf || null
+      });
+
+      if (comandaError) throw comandaError;
+
+      // 3. Validação Crítica de UUID
+      const comandaId = typeof comandaData === 'string' 
+        ? comandaData 
+        : (comandaData as any)?.id || (comandaData as any)?.comanda_id;
+
+      if (!comandaId || !isValidUUID(comandaId)) {
+        console.error('[INVALID_UUID_RECEIVED]', comandaData);
+        throw new Error('IDENTIFICACAO_FALHOU');
+      }
+
+      // 4. Registro Secundário do Cliente (CRM)
+      const { error: customerError } = await supabase.rpc('register_customer_on_table', {
+        p_comanda_id: comandaId,
+        p_name: customerData.name,
+        p_phone: customerData.phone,
+        p_cpf: customerData.cpf || null
+      });
+
+      // Nota: Se falhar o registro de CRM mas a comanda existir, prosseguimos para não perder a venda
+      if (customerError) console.warn('[CRM_REGISTRATION_FAILED]', customerError);
+
+      // 5. Lançamento Sequencial de Itens
       for (const item of cart) {
-        const product = products.find(p => p.id === item.product_id);
+        const prod = products.find(p => p.id === item.product_id);
         await addComandaItemById({
-          comandaId: targetComandaId,
+          comandaId,
           productId: item.product_id,
           productName: item.product_name_snapshot,
           qty: item.qty,
           unitPrice: item.unit_price_cents,
-          destino: product?.production_target || 'nenhum'
+          destino: prod?.production_target || 'nenhum'
         });
       }
 
-      // 3. Registro do Cliente (Com Fallback Resiliente)
-      await registerCustomerSafe({
-        comandaId: targetComandaId,
-        storeId: store.id,
-        name: p_name,
-        phone: p_phone,
-        cpf: p_cpf
-      });
-
-      // 4. Conclusão Visual
+      // Conclusão
       setCart([]);
       setShowIdModal(false);
       setOrderSuccess(true);
-      toast({ title: 'Pedido Recebido!' });
+      toast({ title: 'Pedido Confirmado!', description: 'Seus itens foram enviados para a produção.' });
       setTimeout(() => setOrderSuccess(false), 5000);
 
     } catch (err: any) {
-      console.error('[ORDER_SUBMISSION_ERROR]', err);
+      console.error('[ORDER_SUBMISSION_FATAL]', err);
       
-      let friendlyMessage = "Não foi possível concluir seu pedido agora. Por favor, tente novamente.";
+      let msg = "Não foi possível enviar seu pedido agora. Tente novamente.";
       
-      if (err.message?.includes('comandas_status_check')) {
-        friendlyMessage = "Esta mesa possui um pedido em fechamento. Chame um atendente.";
+      if (err.message === 'LOJA_BLOQUEADA') {
+        msg = "O atendimento digital desta loja está temporariamente suspenso. Fale com um atendente.";
+      } else if (err.message === 'IDENTIFICACAO_FALHOU') {
+        msg = "Falha ao identificar sua mesa. Por favor, recarregue a página.";
+      } else if (err.message?.includes('check_store_access')) {
+        msg = "Assinatura da loja expirada. O pedido não pode ser processado.";
       }
 
-      setSubmissionError({
-        type: 'error',
-        message: friendlyMessage
-      });
+      setSubmissionError({ type: 'error', message: msg });
     } finally {
       setIsSending(false);
     }
@@ -265,14 +229,14 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
             <span className="text-[10px] font-black uppercase text-primary tracking-widest mt-1">Mesa #{table.number}</span>
           </div>
         </div>
-        <Badge variant="outline" className="text-[8px] font-black uppercase text-green-600 bg-green-50">Cardápio Aberto</Badge>
+        <Badge variant="outline" className="text-[8px] font-black uppercase text-green-600 bg-green-50">Menu Ativo</Badge>
       </header>
 
       <div className="p-6 space-y-6">
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input 
-            placeholder="O que você deseja pedir?" 
+            placeholder="O que deseja pedir hoje?" 
             value={search} 
             onChange={(e) => setSearch(e.target.value)} 
             className="h-14 pl-12 rounded-2xl border-none shadow-xl bg-white focus-visible:ring-primary/20" 
@@ -387,13 +351,13 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
               className="w-full h-20 text-sm font-black uppercase tracking-[0.2em] shadow-2xl rounded-[24px] bg-primary text-white" 
               onClick={handleProceedToIdentification} 
             >
-              Identificar-se para Pedir <ArrowRight className="ml-2 h-4 w-4" />
+              Identificar e Pedir <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* MODAL: IDENTIFICAÇÃO */}
+      {/* MODAL: IDENTIFICAÇÃO (FLUXO FINAL) */}
       <Dialog open={showIdModal} onOpenChange={(open) => !isSending && setShowIdModal(open)}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl z-[9999] rounded-[32px]">
           <DialogHeader className="bg-primary/5 p-10 text-center space-y-4 border-b border-primary/10">
@@ -401,8 +365,8 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
               <UserCheck className="h-8 w-8" />
             </div>
             <div>
-              <DialogTitle className="text-2xl font-black font-headline uppercase tracking-tighter text-center">Quem está Pedindo?</DialogTitle>
-              <DialogDescription className="text-[10px] font-black uppercase tracking-widest text-muted-foreground text-center mt-1">Precisamos desses dados para iniciar seu atendimento</DialogDescription>
+              <DialogTitle className="text-2xl font-black font-headline uppercase tracking-tighter text-center">Falta pouco!</DialogTitle>
+              <DialogDescription className="text-[10px] font-black uppercase tracking-widest text-muted-foreground text-center mt-1">Identifique-se para confirmarmos seu pedido</DialogDescription>
             </div>
           </DialogHeader>
           
@@ -412,7 +376,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
                 <div className="space-y-1.5">
                   <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground ml-1">Nome Completo *</label>
                   <Input 
-                    placeholder="Seu nome" 
+                    placeholder="Como devemos te chamar?" 
                     value={customerData.name} 
                     onChange={e => setCustomerData({...customerData, name: e.target.value})} 
                     className="h-14 font-bold rounded-2xl bg-slate-50 border-none shadow-inner" 
@@ -428,16 +392,6 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
                     onChange={e => setCustomerData({...customerData, phone: e.target.value})} 
                     className="h-14 font-bold rounded-2xl bg-slate-50 border-none shadow-inner" 
                     required 
-                    disabled={isSending}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground ml-1">CPF (Opcional)</label>
-                  <Input 
-                    placeholder="000.000.000-00" 
-                    value={customerData.cpf} 
-                    onChange={e => setCustomerData({...customerData, cpf: e.target.value})} 
-                    className="h-14 font-bold rounded-2xl bg-slate-50 border-none shadow-inner" 
                     disabled={isSending}
                   />
                 </div>
@@ -459,7 +413,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
                   "w-full h-20 rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl transition-all",
                   isSending ? "bg-slate-800" : "bg-slate-950 text-white shadow-primary/20"
                 )} 
-                disabled={isSending}
+                disabled={isSending || !customerData.name || !customerData.phone}
               >
                 {isSending ? (
                   <>
@@ -467,19 +421,20 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
                     Processando...
                   </>
                 ) : (
-                  <>Confirmar Pedido <CheckCircle2 className="h-5 w-5 ml-2" /></>
+                  <>Confirmar e Enviar Pedido <CheckCircle2 className="h-5 w-5 ml-2" /></>
                 )}
               </Button>
               
-              <Button 
-                type="button" 
-                variant="ghost" 
-                className="w-full text-[10px] font-black uppercase tracking-widest opacity-50"
-                onClick={() => setShowIdModal(false)}
-                disabled={isSending}
-              >
-                Voltar
-              </Button>
+              {!isSending && (
+                <Button 
+                  type="button" 
+                  variant="ghost" 
+                  className="w-full text-[10px] font-black uppercase tracking-widest opacity-50"
+                  onClick={() => setShowIdModal(false)}
+                >
+                  Voltar ao Cardápio
+                </Button>
+              )}
             </form>
           </div>
         </DialogContent>
