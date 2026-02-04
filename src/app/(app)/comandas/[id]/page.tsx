@@ -3,10 +3,10 @@
 
 /**
  * @fileOverview Detalhe da Comanda - Fluxo de Fechamento e Pagamento.
- * Corrigido para usar RPC no lançamento de itens e garantir visibilidade imediata.
+ * Corrigido para calcular o total no frontend e evitar delay de sincronização da View.
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/components/auth-provider';
 import { supabase } from '@/lib/supabase/client';
@@ -60,6 +60,11 @@ export default function ComandaDetailsPage() {
   const [isClosing, setIsClosing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // CÁLCULO EM TEMPO REAL: Evita depender do delay da View v_comandas_totais
+  const calculatedTotal = useMemo(() => {
+    return items.reduce((acc, item) => acc + (item.quantidade * item.preco_unitario), 0);
+  }, [items]);
+
   const fetchData = useCallback(async () => {
     if (!id || id === 'undefined') {
       setNotFound(true);
@@ -68,7 +73,6 @@ export default function ComandaDetailsPage() {
     }
 
     try {
-      // Busca dados combinando a VIEW de totais e a tabela base para garantir o carregamento do número
       const [comandaRes, baseRes, itemsRes] = await Promise.all([
         supabase.from('v_comandas_totais').select('*').eq('id', id).maybeSingle(),
         supabase.from('comandas').select('*').eq('id', id).maybeSingle(),
@@ -82,7 +86,6 @@ export default function ComandaDetailsPage() {
         return;
       }
 
-      // Merge de dados: Prioriza o total da View, mas garante o numero da tabela base
       setComanda({
         ...comandaRes.data,
         id: baseRes.data.id,
@@ -130,7 +133,6 @@ export default function ComandaDetailsPage() {
     if (tempItems.length === 0 || isSubmitting) return;
     setIsSubmitting(true);
     try {
-      // OBRIGATÓRIO: Usar RPC para lançar itens, garantindo visibilidade e preparo
       const payload = tempItems.map(i => ({
         product_id: i.product.id,
         qty: i.quantity,
@@ -159,7 +161,7 @@ export default function ComandaDetailsPage() {
   const handlePrint = () => {
     if (comanda && store) {
       const saleMock = {
-        total_cents: (comanda.total || 0) * 100,
+        total_cents: calculatedTotal,
         payment_method: 'dinheiro',
         created_at: new Date().toISOString(),
         items: items.map(i => ({
@@ -240,7 +242,7 @@ export default function ComandaDetailsPage() {
           </Button>
           <div className="bg-background p-5 rounded-2xl border border-primary/10 shadow-sm flex flex-col items-end ring-4 ring-primary/5">
             <p className="text-[9px] font-black uppercase text-muted-foreground tracking-widest mb-1 opacity-60">Consumo Acumulado</p>
-            <p className="text-4xl font-black text-primary tracking-tighter">{formatCurrency(comanda?.total || 0)}</p>
+            <p className="text-4xl font-black text-primary tracking-tighter">{formatCurrency(calculatedTotal)}</p>
           </div>
         </div>
       </div>
@@ -295,8 +297,8 @@ export default function ComandaDetailsPage() {
                           <Badge className="text-[8px] h-4 px-1.5 uppercase font-black" variant={item.status === 'pronto' ? 'default' : 'secondary'}>{item.status}</Badge>
                         </div>
                       </TableCell>
-                      <TableCell className="text-center font-black text-xs px-6">x{item.quantidade}</TableCell>
-                      <TableCell className="text-right font-black text-primary px-6">{formatCurrency(item.quantidade * item.preco_unitario)}</TableCell>
+                      <TableCell className="text-center font-black text-xs px-6">x{item.quantity}</TableCell>
+                      <TableCell className="text-right font-black text-primary px-6">{formatCurrency(item.quantity * item.preco_unitario)}</TableCell>
                     </TableRow>
                   ))}
                   {items.length === 0 && (
@@ -316,9 +318,9 @@ export default function ComandaDetailsPage() {
             <CardContent className="p-8 space-y-6">
               <div className="text-center space-y-1 py-6 bg-background rounded-2xl border border-primary/5 shadow-inner">
                 <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest mb-1">Total da Conta</p>
-                <p className="text-5xl font-black text-foreground tracking-tighter">{formatCurrency(comanda?.total || 0)}</p>
+                <p className="text-5xl font-black text-foreground tracking-tighter">{formatCurrency(calculatedTotal)}</p>
               </div>
-              <Button className="w-full h-20 text-lg font-black uppercase tracking-widest shadow-2xl shadow-primary/30 transition-all hover:scale-[1.03] active:scale-95 group" onClick={() => setIsClosing(true)} disabled={!comanda?.total || comanda.total <= 0 || tempItems.length > 0 || isSubmitting}>
+              <Button className="w-full h-20 text-lg font-black uppercase tracking-widest shadow-2xl shadow-primary/30 transition-all hover:scale-[1.03] active:scale-95 group" onClick={() => setIsClosing(true)} disabled={calculatedTotal <= 0 || tempItems.length > 0 || isSubmitting}>
                 {isSubmitting ? <Loader2 className="h-7 w-7 animate-spin mr-3" /> : <CheckCircle2 className="h-7 w-7 mr-3" />} Fechar Conta
               </Button>
             </CardContent>
