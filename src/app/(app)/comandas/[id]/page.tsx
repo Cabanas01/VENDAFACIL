@@ -25,7 +25,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import type { ComandaItem, Product, ComandaTotalView, Customer, CartItem } from '@/lib/types';
 import { addComandaItemById } from '@/lib/add-comanda-item';
@@ -108,7 +108,6 @@ export default function ComandaDetailsPage() {
     return () => { supabase.removeChannel(channel); };
   }, [id, fetchData]);
 
-  // ADIÇÃO IMUTÁVEL DE ITENS TEMPORÁRIOS
   const addTempItem = (product: Product) => {
     setTempItems(prev => {
       const existing = prev.find(i => i.product.id === product.id);
@@ -266,7 +265,7 @@ export default function ComandaDetailsPage() {
                         <div className="flex items-center border rounded-lg h-8 bg-muted/20">
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeTempItem(i.product.id)}><Minus className="h-3 w-3" /></Button>
                           <span className="w-6 text-center text-xs font-black">{i.quantity}</span>
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => addTempItem(i.product.product || i.product as any)}><Plus className="h-3 w-3" /></Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => addTempItem(i.product)}><Plus className="h-3 w-3" /></Button>
                         </div>
                         <Button variant="ghost" size="icon" onClick={() => setTempItems(prev => prev.filter(x => x.product.id !== i.product.id))} className="text-destructive"><Trash2 className="h-4 w-4" /></Button>
                       </div>
@@ -332,10 +331,10 @@ export default function ComandaDetailsPage() {
 
       <Dialog open={isClosing} onOpenChange={(open) => !isSubmitting && setIsClosing(open)}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl">
-          <div className="bg-slate-950 text-white px-6 py-8 text-center border-b">
-            <h2 className="text-3xl font-black font-headline uppercase tracking-tighter">Pagamento</h2>
-            <p className="text-[10px] font-bold uppercase tracking-widest opacity-60">Selecione o meio para faturar</p>
-          </div>
+          <DialogHeader className="bg-slate-950 text-white px-6 py-8 text-center border-b">
+            <DialogTitle className="text-3xl font-black font-headline uppercase tracking-tighter text-center text-white">Pagamento</DialogTitle>
+            <DialogDescription className="text-[10px] font-bold uppercase tracking-widest opacity-60 text-center text-white/60">Selecione o meio para faturar</DialogDescription>
+          </DialogHeader>
           <div className="p-6 space-y-3 bg-background">
             <Button type="button" variant="outline" className="w-full h-16 justify-start text-sm font-black uppercase tracking-widest gap-4 border-2 hover:border-primary" onClick={() => handleCloseComandaFinal('dinheiro')} disabled={isSubmitting}>
               <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center"><CircleDollarSign className="h-6 w-6 text-green-600" /></div> Dinheiro
@@ -352,6 +351,10 @@ export default function ComandaDetailsPage() {
 
       <Dialog open={isAdding} onOpenChange={setIsAdding}>
         <DialogContent className="sm:max-w-3xl border-none shadow-2xl p-0 overflow-hidden">
+          <DialogHeader className="sr-only">
+            <DialogTitle>Adicionar Itens</DialogTitle>
+            <DialogDescription>Pesquise e selecione itens para adicionar à comanda.</DialogDescription>
+          </DialogHeader>
           <div className="p-6 space-y-6">
             <div className="relative">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

@@ -28,22 +28,37 @@ export async function addComandaItem({
   }
 
   // 1. Resolver o ID da comanda
-  const { data, error: comandaError } = await supabase.rpc(
-    'get_or_create_open_comanda',
-    {
-      p_store_id: storeId,
-      p_numero: numeroComanda,
-    }
-  );
+  // Buscamos manualmente uma comanda aberta para evitar o erro de check constraint da RPC legada
+  const { data: openComanda } = await supabase
+    .from('comandas')
+    .select('id')
+    .eq('store_id', storeId)
+    .eq('numero', numeroComanda)
+    .in('status', ['aberta', 'em_preparo', 'pronta', 'aguardando_pagamento'])
+    .maybeSingle();
 
-  if (comandaError || !data) {
-    throw comandaError || new Error('Falha ao resolver comanda para esta mesa.');
+  let comandaId = openComanda?.id;
+
+  if (!comandaId) {
+    // Se não existir uma aberta, criamos uma nova garantindo o status 'aberta'
+    const { data: newComanda, error: createError } = await supabase
+      .from('comandas')
+      .insert({
+        store_id: storeId,
+        numero: numeroComanda,
+        status: 'aberta'
+      })
+      .select('id')
+      .single();
+    
+    if (createError) {
+      console.error('[CREATE_COMANDA_ERROR]', createError);
+      throw new Error(`Falha ao iniciar atendimento: ${createError.message}`);
+    }
+    comandaId = newComanda.id;
   }
 
-  // Tratar retorno flexível da RPC (ID direto ou objeto)
-  const comandaId = typeof data === 'string' ? data : (data as any).id || (data as any).comanda_id;
-
-  // 2. Inserir o item com mapeamento para campos legados e novos
+  // 2. Inserir o item com mapeamento duplo para compatibilidade de colunas
   const { error } = await supabase.from('comanda_itens').insert({
     comanda_id: comandaId,
     product_id: productId,
@@ -56,7 +71,10 @@ export async function addComandaItem({
     status: 'pendente',
   });
 
-  if (error) throw error;
+  if (error) {
+    console.error('[INSERT_ITEM_ERROR]', error);
+    throw error;
+  }
   
   return comandaId;
 }

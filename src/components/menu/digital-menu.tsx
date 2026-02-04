@@ -168,7 +168,6 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
         if (updateError) throw updateError;
       }
 
-      // SUCESSO: Limpar tudo e fechar modal
       setCart([]);
       setShowIdModal(false);
       setOrderSuccess(true);
@@ -177,20 +176,10 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
 
     } catch (err: any) {
       console.error('[ORDER_ERROR]', err);
-      
-      // UX: Converter erro técnico em mensagem amigável e informativa
-      // Regra de Ouro: Erro de "já possui pedido" vira AVISO, não BLOQUEIO.
-      if (err.message?.includes('violate') || err.message?.includes('check constraint') || err.message?.includes('exists')) {
-        setSubmissionError({
-          type: 'warning',
-          message: "Esta mesa possui um atendimento ativo. Você pode continuar adicionando itens normalmente."
-        });
-      } else {
-        setSubmissionError({
-          type: 'error',
-          message: "Não foi possível concluir seu pedido agora. Por favor, tente novamente em alguns instantes."
-        });
-      }
+      setSubmissionError({
+        type: 'error',
+        message: err.message || "Não foi possível concluir seu pedido agora. Por favor, tente novamente."
+      });
     } finally {
       setIsSending(false);
     }
@@ -304,15 +293,15 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
       {/* MODAL 1: RESUMO DO PEDIDO */}
       <Dialog open={isCartOpen} onOpenChange={setIsCartOpen}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl rounded-t-[32px] sm:rounded-b-[32px]">
-          <div className="p-8 border-b bg-muted/10">
+          <DialogHeader className="p-8 border-b bg-muted/10">
             <div className="flex justify-between items-start">
               <div>
-                <h2 className="text-2xl font-black font-headline uppercase tracking-tighter">Meu Pedido</h2>
-                <p className="text-[10px] font-black uppercase text-primary tracking-widest mt-1">Resumo visual</p>
+                <DialogTitle className="text-2xl font-black font-headline uppercase tracking-tighter">Meu Pedido</DialogTitle>
+                <DialogDescription className="text-[10px] font-black uppercase text-primary tracking-widest mt-1">Resumo visual</DialogDescription>
               </div>
               <Button variant="ghost" size="icon" onClick={() => setCart([])} className="text-destructive"><Trash2 className="h-5 w-5" /></Button>
             </div>
-          </div>
+          </DialogHeader>
           <ScrollArea className="max-h-[40vh] p-8">
             <div className="space-y-6">
               {cart.map(item => (
@@ -348,15 +337,15 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
       {/* MODAL 2: IDENTIFICAÇÃO (MODAL PRINCIPAL) */}
       <Dialog open={showIdModal} onOpenChange={(open) => !isSending && setShowIdModal(open)}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl z-[9999] rounded-[32px] fixed">
-          <div className="bg-primary/5 p-10 text-center space-y-4 border-b border-primary/10">
+          <DialogHeader className="bg-primary/5 p-10 text-center space-y-4 border-b border-primary/10">
             <div className="mx-auto h-16 w-16 rounded-3xl bg-white shadow-xl flex items-center justify-center text-primary">
               <UserCheck className="h-8 w-8" />
             </div>
             <div className="space-y-1">
-              <h1 className="text-2xl font-black font-headline uppercase tracking-tighter">Quem está Pedindo?</h1>
-              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Preencha para enviarmos à cozinha</p>
+              <DialogTitle className="text-2xl font-black font-headline uppercase tracking-tighter text-center">Quem está Pedindo?</DialogTitle>
+              <DialogDescription className="text-[10px] font-black uppercase tracking-widest text-muted-foreground text-center">Preencha para enviarmos à cozinha</DialogDescription>
             </div>
-          </div>
+          </DialogHeader>
           
           <div className="p-8">
             <form onSubmit={executeOrderSubmission} className="space-y-6">
