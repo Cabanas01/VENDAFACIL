@@ -1,6 +1,6 @@
 -- =============================================================================
 -- DOMÍNIO: COMANDAS - VENDAFÁCIL BRASIL
--- VERSÃO: 3.0 (SINCRONIZADA COM FRONTEND)
+-- VERSÃO: 4.0 (FIX: COLUNA CLIENTE_NOME + UUID SYNC)
 -- =============================================================================
 
 -- 0. LIMPEZA DE FUNÇÕES LEGADAS (Assinaturas incompatíveis)
@@ -8,6 +8,7 @@
 DROP FUNCTION IF EXISTS public.abrir_comanda(uuid, text);
 DROP FUNCTION IF EXISTS public.abrir_comanda(uuid, text, text, text, text);
 DROP FUNCTION IF EXISTS public.register_customer_on_table(uuid, text, text);
+DROP FUNCTION IF EXISTS public.register_customer_on_table(uuid, text, text, text);
 DROP FUNCTION IF EXISTS public.fechar_comanda(uuid, text);
 
 -- 1. ESTRUTURA DE TABELAS
@@ -20,7 +21,7 @@ CREATE TABLE IF NOT EXISTS public.comandas (
     numero INTEGER NOT NULL,
     mesa TEXT,
     status TEXT NOT NULL DEFAULT 'aberta' CHECK (status IN ('aberta', 'aguardando_pagamento', 'fechada')),
-    cliente_nome TEXT, -- ADICIONADO PARA RESOLVER ERRO 42703
+    cliente_nome TEXT,
     total NUMERIC(15,2) DEFAULT 0,
     forma_pagamento TEXT CHECK (forma_pagamento IN ('dinheiro', 'pix', 'cartao')),
     created_at TIMESTAMPTZ DEFAULT now()
@@ -86,7 +87,7 @@ EXCEPTION WHEN OTHERS THEN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Função: Abrir Comanda (Assinatura de 5 Parâmetros para bater com o Frontend)
+-- Função: Abrir Comanda (Assinatura Completa)
 CREATE OR REPLACE FUNCTION public.abrir_comanda(
     p_store_id UUID, 
     p_mesa TEXT,
@@ -117,7 +118,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Função: Fechar Comanda (Retorna Record para o Frontend)
+-- Função: Fechar Comanda
 CREATE OR REPLACE FUNCTION public.fechar_comanda(
     p_comanda_id UUID, 
     p_forma_pagamento TEXT

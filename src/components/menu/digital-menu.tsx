@@ -37,6 +37,8 @@ import { isValidUUID } from '@/lib/utils';
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((value || 0) / 100);
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }) {
   const { toast } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
@@ -101,7 +103,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
         p_cliente_cpf: customerData.cpf || null
       });
 
-      if (openError || !comandaId || !isValidUUID(comandaId as string)) {
+      if (openError || !comandaId || !UUID_REGEX.test(comandaId as string)) {
         console.error('[OPEN_COMANDA_ERROR]', openError);
         throw new Error('Falha ao abrir atendimento no servidor.');
       }
@@ -109,9 +111,9 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
       // 3. Registrar Cliente (4 PARAMS)
       await supabase.rpc('register_customer_on_table', {
         p_comanda_id: comandaId,
-        p_cpf: customerData.cpf || null,
         p_name: customerData.name,
-        p_phone: customerData.phone
+        p_phone: customerData.phone,
+        p_cpf: customerData.cpf || null
       });
 
       // 4. Inserir Itens via Sales
