@@ -1,3 +1,4 @@
+
 'use client';
 
 /**
@@ -58,7 +59,6 @@ export default function ComandaDetailsPage() {
   const [isClosing, setIsClosing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Cálculo de total local para maior precisão e rapidez
   const calculatedTotal = useMemo(() => {
     return items.reduce((acc, item) => acc + (item.qty * item.unit_price), 0);
   }, [items]);
@@ -68,7 +68,6 @@ export default function ComandaDetailsPage() {
     setLoading(true);
     
     try {
-      // 1. Buscar a comanda pelo ID da rota (UUID)
       const { data: baseData, error: baseErr } = await supabase
         .from('comandas')
         .select('*')
@@ -80,7 +79,6 @@ export default function ComandaDetailsPage() {
         return;
       }
 
-      // 2. Buscar itens e cliente vinculados
       const [itemsRes, custRes] = await Promise.all([
         supabase.from('comanda_itens').select('*').eq('comanda_id', id).order('created_at', { ascending: false }),
         baseData.customer_id ? supabase.from('customers').select('*').eq('id', baseData.customer_id).maybeSingle() : Promise.resolve({ data: null })
@@ -93,7 +91,7 @@ export default function ComandaDetailsPage() {
         mesa: baseData.mesa,
         status: baseData.status,
         cliente_nome: baseData.cliente_nome,
-        total: 0 // Usaremos o calculado localmente
+        total: 0 
       });
 
       setItems(itemsRes.data || []);
@@ -144,7 +142,6 @@ export default function ComandaDetailsPage() {
         });
       }
 
-      // Transição segura de status
       await supabase
         .from('comandas')
         .update({ status: 'em_preparo' })
@@ -166,7 +163,6 @@ export default function ComandaDetailsPage() {
     if (!comanda) return;
     setIsSubmitting(true);
     try {
-      // REGRA: Garante estado intermediário para evitar erro de constraint
       await supabase
         .from('comandas')
         .update({ status: 'aguardando_pagamento' })
@@ -186,6 +182,14 @@ export default function ComandaDetailsPage() {
     
     setIsSubmitting(true);
     try {
+      // 1. FORÇAR estado intermediário 'aguardando_pagamento' antes da venda
+      // Isso blinda contra erros de integridade no banco de dados
+      await supabase
+        .from('comandas')
+        .update({ status: 'aguardando_pagamento' })
+        .eq('id', comanda.id)
+        .in('status', ['aberta', 'em_preparo', 'pronta']);
+
       const cartItems: CartItem[] = items.map(i => ({
         product_id: i.product_id,
         product_name_snapshot: i.product_name,
@@ -197,24 +201,30 @@ export default function ComandaDetailsPage() {
 
       const normalizedMethod = method === 'dinheiro' ? 'cash' : (method === 'cartao' ? 'card' : method);
       
-      // 1. Processar a Venda no Motor Financeiro
+      // 2. Processar a Venda no Motor Financeiro
       const result = await addSale(cartItems, normalizedMethod, customer?.id || null);
       
-      if (!result.success) throw new Error(result.error);
+      if (!result.success) {
+        throw new Error(result.error || 'Falha ao registrar venda no financeiro.');
+      }
 
-      // 2. Marcar Comanda como Fechada (Somente após sucesso do PDV)
-      await supabase.from('comandas').update({ 
+      // 3. Marcar Comanda como Fechada (Somente após sucesso do PDV)
+      // Usamos .eq('status', 'aguardando_pagamento') como trava final
+      const { error: finalError } = await supabase.from('comandas').update({ 
         status: 'fechada', 
         closed_at: new Date().toISOString() 
       }).eq('id', comanda.id).eq('status', 'aguardando_pagamento');
 
+      if (finalError) throw finalError;
+
       toast({ title: 'Comanda Encerrada!' });
       router.push('/comandas');
     } catch (err: any) {
+      console.error('[FECHAMENTO_FATAL]', err);
       toast({ 
         variant: 'destructive', 
         title: 'Não foi possível fechar a comanda', 
-        description: 'A comanda não está no estado correto para pagamento ou houve erro no financeiro.' 
+        description: 'A comanda não está no estado correto para pagamento ou houve erro no registro da venda.' 
       });
       setIsSubmitting(false);
     }
