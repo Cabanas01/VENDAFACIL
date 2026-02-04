@@ -4,7 +4,7 @@
 /**
  * @fileOverview Painel Cozinha (KDS)
  * 
- * Utiliza sale_items como base de produção conforme o schema real.
+ * Utiliza a view v_painel_cozinha sincronizada com o backend final.
  */
 
 import { useEffect, useState, useCallback } from 'react';
@@ -13,44 +13,32 @@ import { supabase } from '@/lib/supabase/client';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ChefHat, Clock, History, Loader2, MapPin, CheckCircle2 } from 'lucide-react';
-import { parseISO, formatDistanceToNow } from 'date-fns';
+import { ChefHat, Clock, History, Loader2, MapPin, CheckCircle2, Play } from 'lucide-react';
+import { parseISO, formatDistanceToNow, differenceInMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
+import type { PainelProducaoView } from '@/lib/types';
 
 export default function CozinhaPage() {
   const { store } = useAuth();
   const { toast } = useToast();
-  const [pedidos, setPedidos] = useState<any[]>([]);
+  const [pedidos, setPedidos] = useState<PainelProducaoView[]>([]);
   const [loading, setLoading] = useState(true);
+  const [now, setNow] = useState(new Date());
 
   const fetchPedidos = useCallback(async () => {
     if (!store?.id) return;
     try {
-      // Query em sale_items filtrando por destino 'cozinha' e status pendente/preparo
       const { data, error } = await supabase
-        .from('sale_items')
-        .select(`
-          id,
-          product_name_snapshot,
-          quantity,
-          status,
-          created_at,
-          sales!inner (
-            store_id,
-            comandas!inner (
-              numero,
-              mesa
-            )
-          )
-        `)
-        .eq('sales.store_id', store.id)
-        .eq('destino_preparo', 'cozinha')
-        .in('status', ['pendente', 'em_preparo'])
-        .order('created_at', { ascending: true });
+        .from('v_painel_cozinha')
+        .select('*')
+        .eq('store_id', store.id);
 
-      if (!error) setPedidos(data || []);
+      if (error) throw error;
+      setPedidos(data || []);
+    } catch (err: any) {
+      console.error('[KDS_FETCH_ERROR]', err);
     } finally {
       setLoading(false);
     }
@@ -58,66 +46,104 @@ export default function CozinhaPage() {
 
   useEffect(() => {
     fetchPedidos();
-    const interval = setInterval(fetchPedidos, 30000);
-    return () => clearInterval(interval);
+    const interval = setInterval(() => {
+      fetchPedidos();
+      setNow(new Date());
+    }, 30000);
+
+    const channel = supabase
+      .channel('kds_sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sale_items' }, () => fetchPedidos())
+      .subscribe();
+
+    return () => { 
+      supabase.removeChannel(channel);
+      clearInterval(interval);
+    };
   }, [fetchPedidos]);
 
-  const handleConcluir = async (itemId: string) => {
-    const { error } = await supabase.from('sale_items').update({ status: 'pronto' }).eq('id', itemId);
-    if (!error) {
-      toast({ title: 'Item Pronto!' });
+  const handleStatusUpdate = async (itemId: string, newStatus: string) => {
+    try {
+      let error;
+      if (newStatus === 'em_preparo') {
+        const res = await supabase.rpc('iniciar_preparo_item', { p_item_id: itemId });
+        error = res.error;
+      } else {
+        const res = await supabase.rpc('finalizar_preparo_item', { p_item_id: itemId });
+        error = res.error;
+      }
+
+      if (error) throw error;
+      toast({ title: newStatus === 'pronto' ? 'Prato finalizado!' : 'Iniciado!' });
       fetchPedidos();
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Falha na Operação', description: err.message });
     }
   };
 
   if (loading && pedidos.length === 0) return (
     <div className="h-[60vh] flex flex-col items-center justify-center gap-4">
-      <Loader2 className="animate-spin text-primary" />
+      <Loader2 className="animate-spin h-8 w-8 text-primary" />
       <p className="font-black uppercase text-[10px] tracking-widest opacity-50">Sincronizando Cozinha...</p>
     </div>
   );
 
   return (
     <div className="space-y-10 animate-in fade-in duration-500">
-      <PageHeader title="Cozinha" subtitle="Monitor de produção em tempo real.">
-        <Badge variant="outline" className="h-10 px-4 gap-2 font-black uppercase text-xs">
-          <ChefHat className="h-4 w-4 text-primary" /> {pedidos.length} Pedidos
+      <div className="flex items-center justify-between">
+        <PageHeader title="Cozinha (KDS)" subtitle="Produção de alimentos em tempo real." />
+        <Badge variant="outline" className="h-10 px-4 gap-2 font-black uppercase text-xs border-primary/20 bg-primary/5">
+          <ChefHat className="h-4 w-4 text-primary" /> {pedidos.length} Pedidos Pendentes
         </Badge>
-      </PageHeader>
+      </div>
 
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-        {pedidos.map(p => (
-          <Card key={p.id} className="border-none shadow-xl overflow-hidden animate-in zoom-in-95 duration-300">
-            <div className="px-6 py-4 flex justify-between items-center border-b bg-muted/30">
-              <div className="flex flex-col">
-                <span className="text-xl font-black uppercase tracking-tighter">Comanda #{p.sales?.comandas?.numero}</span>
-                <div className="flex items-center gap-1.5 mt-1 text-[10px] font-black uppercase text-primary">
-                  <MapPin className="h-3 w-3" /> {p.sales?.comandas?.mesa || 'Balcão'}
+        {pedidos.map(p => {
+          const elapsed = differenceInMinutes(now, parseISO(p.created_at));
+          const isLate = elapsed >= 15;
+
+          return (
+            <Card key={p.item_id} className={`border-none shadow-xl overflow-hidden animate-in zoom-in-95 duration-300 ${isLate ? 'ring-2 ring-red-500' : ''}`}>
+              <div className={`px-6 py-4 flex justify-between items-center border-b ${isLate ? 'bg-red-500 text-white' : 'bg-muted/30'}`}>
+                <div className="flex flex-col">
+                  <span className="text-xl font-black font-headline tracking-tighter uppercase leading-none">Comanda #{p.comanda_numero}</span>
+                  <div className={`flex items-center gap-1.5 mt-1.5 text-[10px] font-black uppercase ${isLate ? 'text-white/80' : 'text-primary'}`}>
+                    <MapPin className="h-3 w-3" /> {p.mesa || 'Sem mesa'}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 text-[10px] font-black uppercase">
+                  <Clock className="h-3 w-3" /> {elapsed} min
                 </div>
               </div>
-              <div className="flex items-center gap-2 text-[10px] font-black uppercase text-muted-foreground">
-                <Clock className="h-3 w-3" /> {formatDistanceToNow(parseISO(p.created_at), { locale: ptBR })}
-              </div>
-            </div>
-            
-            <CardContent className="p-8 space-y-6">
-              <div className="flex justify-between items-start">
-                <p className="text-3xl font-black leading-tight uppercase tracking-tight">{p.product_name_snapshot}</p>
-                <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center text-4xl font-black text-primary">
-                  {p.quantity}
+              
+              <CardContent className="p-8 space-y-8">
+                <div className="flex justify-between items-start">
+                  <p className="text-3xl font-black leading-tight uppercase tracking-tight">{p.produto}</p>
+                  <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center text-4xl font-black text-primary">
+                    {p.qty}
+                  </div>
                 </div>
-              </div>
-              <Button className="w-full h-14 font-black uppercase tracking-widest text-xs" onClick={() => handleConcluir(p.id)}>
-                <CheckCircle2 className="h-4 w-4 mr-2" /> Concluir Preparo
-              </Button>
-            </CardContent>
-          </Card>
-        ))}
+                
+                <div className="flex gap-3">
+                  {p.status === 'pendente' ? (
+                    <Button variant="outline" className="w-full h-14 font-black uppercase text-xs" onClick={() => handleStatusUpdate(p.item_id, 'em_preparo')}>
+                      <Play className="h-4 w-4 mr-2" /> Iniciar
+                    </Button>
+                  ) : (
+                    <Button className="w-full h-14 font-black uppercase text-xs shadow-lg shadow-primary/20" onClick={() => handleStatusUpdate(p.item_id, 'pronto')}>
+                      <CheckCircle2 className="h-4 w-4 mr-2" /> Concluir
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
 
         {pedidos.length === 0 && (
           <div className="col-span-full py-40 text-center opacity-20 border-4 border-dashed rounded-[40px] border-muted">
             <History className="h-20 w-20 mx-auto" />
-            <p className="text-xl font-black uppercase mt-4 text-foreground">Fila Limpa</p>
+            <p className="text-xl font-black uppercase mt-4 text-foreground">Cozinha em Ordem</p>
           </div>
         )}
       </div>

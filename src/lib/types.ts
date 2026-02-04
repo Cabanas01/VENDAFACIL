@@ -73,6 +73,7 @@ export type Sale = {
   id: string;
   store_id: string;
   customer_id?: string | null;
+  comanda_id?: string | null;
   created_at: string;
   total_cents: number;
   payment_method: 'cash' | 'pix' | 'card';
@@ -88,9 +89,8 @@ export type SaleItem = {
   quantity: number;
   unit_price_cents: number;
   subtotal_cents: number;
-  // Campos para produção
-  status?: string;
-  destino_preparo?: string;
+  status?: 'pendente' | 'em_preparo' | 'pronto';
+  destino_preparo?: 'cozinha' | 'bar' | 'nenhum';
 };
 
 export type CartItem = {
@@ -127,9 +127,9 @@ export type ComandaTotalView = {
   store_id: string;
   numero: number;
   mesa: string | null;
-  status: string;
+  status: 'aberta' | 'aguardando_pagamento' | 'fechada';
   cliente_nome: string | null;
-  total: number;
+  total_cents: number;
 };
 
 export type PainelProducaoView = {
@@ -139,9 +139,8 @@ export type PainelProducaoView = {
   mesa: string | null;
   produto: string;
   qty: number;
-  status: string;
+  status: 'pendente' | 'em_preparo' | 'pronto';
   created_at: string;
-  prep_time_minutes: number;
   store_id: string;
 };
 

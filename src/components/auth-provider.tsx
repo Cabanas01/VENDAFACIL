@@ -2,9 +2,9 @@
 'use client';
 
 /**
- * @fileOverview AuthProvider (CONTRATO DE CONFORMIDADE)
+ * @fileOverview AuthProvider (CONTRATO DE CONFORMIDADE ESTABELECIDO)
  * 
- * Normaliza retornos do Supabase RPC e garante integridade dos dados.
+ * Sincronizado com o schema de banco de dados final que utiliza total_cents.
  */
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -56,7 +56,7 @@ function normalizeAccessStatus(raw: any): StoreAccessStatus {
 
   if (raw === null || raw === undefined) return defaultStatus;
 
-  // Caso retorne boolean direto
+  // No novo schema, o retorno é BOOLEAN direto ou um Record do tipo { acesso_liberado: boolean }
   if (typeof raw === 'boolean') {
     return {
       ...defaultStatus,
@@ -66,7 +66,6 @@ function normalizeAccessStatus(raw: any): StoreAccessStatus {
     };
   }
 
-  // Caso retorne Record ou Array
   const data = Array.isArray(raw) ? raw[0] : raw;
   if (typeof data === 'object') {
     return {
@@ -105,11 +104,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (storeId && UUID_REGEX.test(storeId)) {
-        // 1. Validar Acesso (Resiliente)
+        // 1. Validar Acesso
         const { data: accessData } = await supabase.rpc('get_store_access_status', { p_store_id: storeId });
         setAccessStatus(normalizeAccessStatus(accessData));
 
-        // 2. Carga de Dados (Usa created_at, nunca criada_em)
+        // 2. Carga de Dados (Sincronizado com schema total_cents)
         const [storeRes, prodRes, salesRes, cashRes, custRes] = await Promise.all([
           supabase.from('stores').select('*').eq('id', storeId).single(),
           supabase.from('products').select('*').eq('store_id', storeId).order('name'),

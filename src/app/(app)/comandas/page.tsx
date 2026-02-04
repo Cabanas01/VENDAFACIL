@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
@@ -24,7 +25,7 @@ import { useRouter } from 'next/navigation';
 import { CreateComandaDialog } from '@/components/comandas/create-comanda-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
-import type { ComandaTotalView, TableInfo } from '@/lib/types';
+import type { ComandaTotalView } from '@/lib/types';
 
 const formatCurrency = (val: number) => 
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((val || 0) / 100);
@@ -35,7 +36,6 @@ export default function ComandasPage() {
   const { toast } = useToast();
   
   const [comandas, setComandas] = useState<ComandaTotalView[]>([]);
-  const [tables, setTables] = useState<TableInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState('abertas');
@@ -54,33 +54,24 @@ export default function ComandasPage() {
         .in('status', ['aberta', 'em_preparo', 'pronta', 'aguardando_pagamento'])
         .order('numero', { ascending: true });
 
-      const { data: tablesData, error: tblErr } = await supabase
-        .from('tables')
-        .select('*')
-        .eq('store_id', store.id)
-        .order('number', { ascending: true });
-
-      if (cmdErr) console.warn('Erro ao carregar comandas:', cmdErr.message);
-      if (tblErr) console.warn('Erro ao carregar mesas:', tblErr.message);
-
+      if (cmdErr) throw cmdErr;
       setComandas(comandasData || []);
-      setTables(tablesData || []);
-    } catch (err) {
-      console.error('[FETCH_FATAL]', err);
+    } catch (err: any) {
+      console.error('[FETCH_COMANDAS_ERROR]', err.message);
+      toast({ variant: 'destructive', title: 'Erro de Sincronização', description: 'Não foi possível carregar as comandas.' });
     } finally {
       setLoading(false);
     }
-  }, [store?.id]);
+  }, [store?.id, toast]);
 
   useEffect(() => {
     if (store?.id) {
       fetchData();
 
       const channel = supabase
-        .channel('comandas_global_sync')
+        .channel('comandas_realtime')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'comandas', filter: `store_id=eq.${store.id}` }, () => fetchData(true))
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'comanda_itens' }, () => fetchData(true))
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'tables', filter: `store_id=eq.${store.id}` }, () => fetchData(true))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'sale_items' }, () => fetchData(true))
         .subscribe();
 
       return () => { supabase.removeChannel(channel); };
@@ -95,144 +86,76 @@ export default function ComandasPage() {
     )
   , [comandas, search]);
 
-  const handleManageComanda = (comanda: any) => {
-    const comandaId = comanda.id || comanda.comanda_id;
-    
-    if (!comandaId || comandaId === 'undefined') {
-      toast({ 
-        variant: 'destructive', 
-        title: 'Falha na Identificação', 
-        description: 'UUID da comanda não localizado.' 
-      });
-      return;
-    }
-    
-    router.push(`/comandas/${comandaId}`);
-  };
-
-  const handleCopyLink = (token: string) => {
-    if (!store?.id || !token) return;
-    const url = `${window.location.origin}/m/${store.id}/${token}`;
-    navigator.clipboard.writeText(url);
-    toast({ title: 'Link Copiado!' });
-  };
-
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
-      <PageHeader title="Atendimento" subtitle="Gestão de comandas e mesas.">
+      <PageHeader title="Atendimento" subtitle="Gestão de comandas e mesas em tempo real.">
         <div className="flex gap-2">
           <Button variant="outline" size="icon" onClick={() => fetchData()} disabled={loading} className="h-12 w-12 rounded-xl">
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
-          <Button onClick={() => setIsNewComandaOpen(true)} className="h-12 font-black uppercase text-xs tracking-widest">
-            <Plus className="h-4 w-4 mr-2" /> Nova Comanda
+          <Button onClick={() => setIsNewComandaOpen(true)} className="h-12 font-black uppercase text-xs tracking-widest shadow-lg shadow-primary/20">
+            <Plus className="h-4 w-4 mr-2" /> Abrir Comanda
           </Button>
         </div>
       </PageHeader>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="bg-muted/50 p-1 rounded-xl">
-          <TabsTrigger value="abertas" className="rounded-lg font-black uppercase text-[10px] tracking-widest px-6">Em Aberto</TabsTrigger>
-          <TabsTrigger value="links" className="rounded-lg font-black uppercase text-[10px] tracking-widest px-6">Mesas (QR Code)</TabsTrigger>
-        </TabsList>
+      <div className="flex items-center gap-4 bg-background p-4 rounded-2xl border border-primary/5 shadow-sm">
+        <Search className="h-4 w-4 text-muted-foreground ml-2" />
+        <Input 
+          placeholder="Buscar por número, mesa ou nome do cliente..." 
+          className="border-none shadow-none focus-visible:ring-0 h-10 text-base"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
 
-        <TabsContent value="abertas" className="space-y-6 m-0">
-          <div className="flex items-center gap-4 bg-background p-4 rounded-2xl border border-primary/5 shadow-sm">
-            <Search className="h-4 w-4 text-muted-foreground ml-2" />
-            <Input 
-              placeholder="Buscar por número, mesa ou cliente..." 
-              className="border-none shadow-none focus-visible:ring-0"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {loading ? (
-              Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-48 w-full rounded-2xl" />)
-            ) : filteredComandas.map(comanda => (
-              <Card 
-                key={comanda.id} 
-                className="group cursor-pointer hover:border-primary transition-all shadow-sm border-primary/5 bg-background relative overflow-hidden"
-                onClick={() => handleManageComanda(comanda)}
-              >
-                <div className="absolute top-0 left-0 w-1 h-full bg-primary opacity-0 group-hover:opacity-100 transition-opacity" />
-                <CardHeader className="bg-muted/20 border-b py-4">
-                  <div className="flex justify-between items-start">
-                    <CardTitle className="text-3xl font-black tracking-tighter">#{comanda.numero}</CardTitle>
-                    <Badge variant={comanda.status === 'aguardando_pagamento' ? 'destructive' : 'outline'} className="text-[8px] font-black uppercase bg-background border-primary/20">
-                      {comanda.status?.replace('_', ' ')}
-                    </Badge>
-                  </div>
-                  <div className="flex flex-col gap-1 mt-2">
-                    <div className="flex items-center gap-1.5 text-[10px] font-black uppercase text-primary">
-                      <MapPin className="h-3 w-3" /> {comanda.mesa || 'Balcão'}
-                    </div>
-                    {comanda.cliente_nome && (
-                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground">
-                        <User className="h-3 w-3" /> {comanda.cliente_nome}
-                      </div>
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent className="pt-6 pb-4">
-                  <p className="text-[9px] uppercase font-black text-muted-foreground tracking-widest mb-1">Total</p>
-                  <p className="text-2xl font-black text-foreground tracking-tighter">{formatCurrency(comanda.total)}</p>
-                </CardContent>
-                <CardFooter className="pt-0 pb-4 flex justify-end">
-                  <span className="text-[10px] font-black uppercase text-primary flex items-center gap-1">
-                    Gerenciar <ArrowRight className="h-3 w-3" />
-                  </span>
-                </CardFooter>
-              </Card>
-            ))}
-
-            {!loading && filteredComandas.length === 0 && (
-              <div className="col-span-full py-20 text-center border-2 border-dashed rounded-3xl opacity-30 flex flex-col items-center gap-4">
-                <ClipboardList className="h-12 w-12" />
-                <p className="text-sm font-black uppercase tracking-widest">Nenhuma comanda aberta</p>
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {loading ? (
+          Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-48 w-full rounded-2xl" />)
+        ) : filteredComandas.map(comanda => (
+          <Card 
+            key={comanda.id} 
+            className="group cursor-pointer hover:border-primary transition-all shadow-sm border-primary/5 bg-background relative overflow-hidden active:scale-[0.98]"
+            onClick={() => router.push(`/comandas/${comanda.id}`)}
+          >
+            <div className="absolute top-0 left-0 w-1.5 h-full bg-primary opacity-0 group-hover:opacity-100 transition-opacity" />
+            <CardHeader className="bg-muted/20 border-b py-4">
+              <div className="flex justify-between items-start">
+                <CardTitle className="text-3xl font-black tracking-tighter">#{comanda.numero}</CardTitle>
+                <Badge variant={comanda.status === 'aguardando_pagamento' ? 'destructive' : 'outline'} className="text-[8px] font-black uppercase bg-background border-primary/20">
+                  {comanda.status?.replace('_', ' ')}
+                </Badge>
               </div>
-            )}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="links" className="m-0 space-y-6">
-          <div className="grid gap-4">
-            {tables.map(table => (
-              <Card key={table.id} className="border-none shadow-sm hover:shadow-md transition-all group overflow-hidden bg-white">
-                <CardContent className="p-0">
-                  <div className="flex flex-col sm:flex-row items-center justify-between p-6 gap-4">
-                    <div className="flex items-center gap-6 w-full">
-                      <div className="h-14 w-14 rounded-2xl bg-muted/30 border-2 border-dashed border-primary/20 flex flex-col items-center justify-center shrink-0">
-                        <span className="text-[8px] font-black uppercase opacity-40">Mesa</span>
-                        <span className="text-xl font-black">{table.number}</span>
-                      </div>
-                      <div>
-                        <h4 className="font-black text-sm uppercase tracking-tight">Mesa #{table.number}</h4>
-                        <span className="text-[10px] font-mono text-muted-foreground opacity-60">Atendimento QR Code Ativo</span>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
-                      <Button variant="outline" size="sm" className="h-10 px-4 font-black uppercase text-[9px] tracking-[0.15em]" onClick={() => handleCopyLink(table.public_token)}>
-                        <Copy className="h-3.5 w-3.5 mr-2" /> Copiar Link
-                      </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-10 w-10 text-primary" 
-                        onClick={() => window.open(`/m/${store?.id}/${table.public_token}`, '_blank')}
-                      >
-                        <ExternalLink className="h-4 w-4" />
-                      </Button>
-                    </div>
+              <div className="flex flex-col gap-1 mt-2">
+                <div className="flex items-center gap-1.5 text-[10px] font-black uppercase text-primary">
+                  <MapPin className="h-3 w-3" /> {comanda.mesa || 'Balcão'}
+                </div>
+                {comanda.cliente_nome && (
+                  <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground">
+                    <User className="h-3 w-3" /> {comanda.cliente_nome}
                   </div>
-                </CardContent>
-              </Card>
-            ))}
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="pt-6 pb-4">
+              <p className="text-[9px] uppercase font-black text-muted-foreground tracking-widest mb-1">Total Acumulado</p>
+              <p className="text-2xl font-black text-foreground tracking-tighter">{formatCurrency(comanda.total_cents)}</p>
+            </CardContent>
+            <CardFooter className="pt-0 pb-4 flex justify-end">
+              <span className="text-[10px] font-black uppercase text-primary flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                Gerenciar Atendimento <ArrowRight className="h-3 w-3" />
+              </span>
+            </CardFooter>
+          </Card>
+        ))}
+
+        {!loading && filteredComandas.length === 0 && (
+          <div className="col-span-full py-20 text-center border-2 border-dashed rounded-[40px] opacity-30 flex flex-col items-center gap-4">
+            <ClipboardList className="h-12 w-12" />
+            <p className="text-sm font-black uppercase tracking-widest">Nenhuma comanda aberta nesta visualização</p>
           </div>
-        </TabsContent>
-      </Tabs>
+        )}
+      </div>
 
       <CreateComandaDialog 
         isOpen={isNewComandaOpen} 
