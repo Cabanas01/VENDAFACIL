@@ -1,10 +1,10 @@
+
 'use server';
 
 /**
  * @fileOverview Server Action definitiva para Processamento de Vendas (PDV).
  * 
- * Retorna o objeto completo da venda para permitir impressão imediata no frontend.
- * Adicionado suporte a customer_id para vínculo com comandas e CRM.
+ * Implementa bypass de RLS para Super Admins e mapeia corretamente qty para quantity.
  */
 
 import { createSupabaseServerClient } from '@/lib/supabase/server';
@@ -18,6 +18,7 @@ export async function processSaleAction(
   customerId?: string | null
 ) {
   const supabase = await createSupabaseServerClient();
+  const supabaseAdmin = getSupabaseAdmin();
 
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   
@@ -30,10 +31,22 @@ export async function processSaleAction(
     return { success: false, error: 'Contexto de loja inválido.' };
   }
 
+  // Verificar se o usuário é um administrador global
+  const { data: profile } = await supabase
+    .from('users')
+    .select('is_admin')
+    .eq('id', user.id)
+    .single();
+  
+  const isSuperAdmin = profile?.is_admin === true;
+
+  // Se for super admin, usamos o cliente admin para ignorar RLS e garantir o fechamento.
+  // Caso contrário, usamos o cliente do usuário para respeitar permissões e limites de plano.
+  const activeClient = isSuperAdmin ? supabaseAdmin : supabase;
+
   const totalCents = cart.reduce((sum, item) => sum + item.subtotal_cents, 0);
 
-  // Inserção da venda (RLS validará store_id + store_access + auth.uid)
-  const { data: sale, error: saleError } = await supabase
+  const { data: sale, error: saleError } = await activeClient
     .from('sales')
     .insert({
       store_id: storeId,
@@ -69,19 +82,19 @@ export async function processSaleAction(
       product_id: item.product_id,
       product_name_snapshot: item.product_name_snapshot,
       product_barcode_snapshot: item.product_barcode_snapshot || null,
-      quantity: item.quantity,
+      quantity: item.qty, // Mapeia qty (frontend) para quantity (db)
       unit_price_cents: item.unit_price_cents,
       subtotal_cents: item.subtotal_cents
     }));
 
-    const { error: itemsError } = await supabase.from('sale_items').insert(itemsToInsert);
+    const { error: itemsError } = await activeClient.from('sale_items').insert(itemsToInsert);
     if (itemsError) throw itemsError;
 
-    // Baixa de estoque via RPC
+    // Baixa de estoque via RPC (usando activeClient para garantir privilégios se necessário)
     for (const item of cart) {
-      await supabase.rpc('decrement_stock', {
+      await activeClient.rpc('decrement_stock', {
         p_product_id: item.product_id,
-        p_quantity: item.quantity
+        p_quantity: item.qty // Usa qty vindo do frontend
       });
     }
 
@@ -94,7 +107,6 @@ export async function processSaleAction(
   } catch (err: any) {
     console.error('[SERVER_ACTION] Erro na transação de itens:', err);
     // Rollback manual do registro da venda em caso de falha nos itens
-    const supabaseAdmin = getSupabaseAdmin();
     await supabaseAdmin.from('sales').delete().eq('id', sale.id);
     return { success: false, error: 'Erro ao processar itens da venda. Estorno realizado.' };
   }

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
@@ -122,7 +123,6 @@ export default function ComandaDetailsPage() {
     if (tempItems.length === 0 || isSubmitting || !comanda) return;
     setIsSubmitting(true);
     try {
-      // REGRA: Inserção direta por ID
       for (const i of tempItems) {
         await addComandaItemById({
           comandaId: comanda.id,
@@ -134,11 +134,9 @@ export default function ComandaDetailsPage() {
         });
       }
 
-      // Transição Idempotente para preparo
       await supabase.from('comandas')
         .update({ status: 'em_preparo' })
-        .eq('id', comanda.id)
-        .in('status', ['aberta', 'em_preparo']);
+        .eq('id', comanda.id);
 
       toast({ title: 'Itens Lançados!' });
       setTempItems([]);
@@ -155,13 +153,15 @@ export default function ComandaDetailsPage() {
     if (!comanda) return;
     setIsSubmitting(true);
     try {
-      // Move para aguardando_pagamento ANTES de abrir o modal
+      // REGRA: Força o estado aguardando_pagamento antes de abrir o modal
       await supabase.from('comandas')
         .update({ status: 'aguardando_pagamento' })
         .eq('id', comanda.id)
         .in('status', ['aberta', 'em_preparo', 'pronta', 'aguardando_pagamento']);
       
       setIsClosing(true);
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Erro ao iniciar fechamento' });
     } finally {
       setIsSubmitting(false);
     }
@@ -172,6 +172,12 @@ export default function ComandaDetailsPage() {
     
     setIsSubmitting(true);
     try {
+      // 1. Garantir que o estado é o correto para pagamento (Double Check)
+      await supabase.from('comandas')
+        .update({ status: 'aguardando_pagamento' })
+        .eq('id', comanda.id)
+        .in('status', ['aberta', 'em_preparo', 'pronta', 'aguardando_pagamento']);
+
       const cartItems: CartItem[] = items.map(i => ({
         product_id: i.product_id,
         product_name_snapshot: i.product_name,
@@ -183,14 +189,14 @@ export default function ComandaDetailsPage() {
 
       const normalizedMethod = method === 'dinheiro' ? 'cash' : (method === 'cartao' ? 'card' : method);
       
-      // Motor de Vendas do PDV
+      // 2. Tentar registrar a venda no PDV (AddSale chama processSaleAction no servidor)
       const result = await addSale(cartItems, normalizedMethod, customer?.id || null);
       
       if (!result.success) {
-        throw new Error(result.error || 'Erro de permissão ou plano expirado.');
+        throw new Error(result.error);
       }
 
-      // Encerramento Oficial da Comanda
+      // 3. Encerrar a comanda após o sucesso da venda
       const { error: finalError } = await supabase.from('comandas').update({ 
         status: 'fechada', 
         closed_at: new Date().toISOString() 
@@ -207,6 +213,7 @@ export default function ComandaDetailsPage() {
         title: 'Não foi possível fechar', 
         description: err.message || 'Verifique se a comanda está no estado correto para pagamento.' 
       });
+    } finally {
       setIsSubmitting(false);
     }
   };
