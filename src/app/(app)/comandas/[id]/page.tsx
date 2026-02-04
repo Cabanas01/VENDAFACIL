@@ -3,6 +3,7 @@
 
 /**
  * @fileOverview Detalhe da Comanda - Fluxo de Fechamento e Pagamento.
+ * Corrigido para evitar redirecionamentos automáticos indesejados.
  */
 
 import { useEffect, useState, useCallback } from 'react';
@@ -43,7 +44,7 @@ const formatCurrency = (val: number) =>
 export default function ComandaDetailsPage() {
   const params = useParams();
   const id = params?.id as string;
-  const { products, refreshStatus, store } = useAuth();
+  const { products, refreshStatus, store, storeStatus } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -62,10 +63,15 @@ export default function ComandaDetailsPage() {
   const [isClosingInProgress, setIsClosingInProgress] = useState(false);
 
   const fetchData = useCallback(async () => {
-    if (!id || id === 'undefined' || !store?.id) {
-      if (id === 'undefined') router.replace('/comandas');
+    // Se o ID for inválido, marca como não encontrado
+    if (!id || id === 'undefined') {
+      setNotFound(true);
+      setLoading(false);
       return;
     }
+
+    // Não tenta buscar se o contexto da loja ainda não estiver pronto
+    if (storeStatus === 'loading_auth' || storeStatus === 'loading_status') return;
 
     try {
       const [comandaRes, itemsRes] = await Promise.all([
@@ -75,13 +81,15 @@ export default function ComandaDetailsPage() {
 
       if (!comandaRes.data) {
         setNotFound(true);
+        setLoading(false);
         return;
       }
 
+      // Validação de status (apenas comandas abertas podem ser gerenciadas aqui)
       const status = (comandaRes.data.status || '').toLowerCase();
-      // Só redireciona automaticamente se não estivermos no meio de um fechamento manual
       if (status !== 'aberta' && !isClosingInProgress) {
-        router.replace('/comandas');
+        setNotFound(true);
+        setLoading(false);
         return;
       }
 
@@ -89,6 +97,7 @@ export default function ComandaDetailsPage() {
       setItems(itemsRes.data || []);
       setNotFound(false);
 
+      // Busca dados do cliente se houver vínculo
       const { data: baseComanda } = await supabase.from('comandas').select('customer_id').eq('id', id).single();
       if (baseComanda?.customer_id) {
         const { data: custData } = await supabase.from('customers').select('*').eq('id', baseComanda.customer_id).single();
@@ -96,24 +105,33 @@ export default function ComandaDetailsPage() {
       }
     } catch (err) {
       console.error('[FETCH_ERROR]', err);
+      setNotFound(true);
     } finally {
       setLoading(false);
     }
-  }, [id, store?.id, router, isClosingInProgress]);
+  }, [id, storeStatus, isClosingInProgress]);
 
   useEffect(() => {
-    if (id === 'undefined') {
-      router.replace('/comandas');
-      return;
-    }
-    
     fetchData();
+
+    // Sincronização em Tempo Real
     const channel = supabase.channel(`sync_comanda_${id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'comanda_itens', filter: `comanda_id=eq.${id}` }, () => fetchData())
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'comandas', filter: `id=eq.${id}` }, () => fetchData())
       .subscribe();
+
     return () => { supabase.removeChannel(channel); };
-  }, [id, fetchData, router]);
+  }, [id, fetchData]);
+
+  // Efeito isolado para redirecionamento após carregamento completo
+  useEffect(() => {
+    if (!loading && notFound) {
+      const timer = setTimeout(() => {
+        router.replace('/comandas');
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [loading, notFound, router]);
 
   const addTempItem = (product: Product) => {
     setTempItems(prev => {
@@ -159,9 +177,9 @@ export default function ComandaDetailsPage() {
         created_at: new Date().toISOString(),
         items: items.map(i => ({
           product_name_snapshot: i.product_name,
-          quantity: i.quantidade,
+          quantity: i.quantity,
           unit_price_cents: i.preco_unitario,
-          subtotal_cents: i.quantidade * i.preco_unitario
+          subtotal_cents: i.quantity * i.preco_unitario
         }))
       } as any;
 
@@ -173,10 +191,9 @@ export default function ComandaDetailsPage() {
     if (!comanda || isSubmitting || !store) return;
     
     setIsSubmitting(true);
-    setIsClosingInProgress(true); // Protege contra redirecionamento do realtime
+    setIsClosingInProgress(true);
     
     try {
-      // 1. Executa fechamento no backend
       const { data, error } = await supabase.rpc('fechar_comanda', {
         p_comanda_id: comanda.id,
         p_payment_method: method
@@ -190,17 +207,13 @@ export default function ComandaDetailsPage() {
         throw new Error(res?.message || 'O servidor recusou o fechamento da comanda.');
       }
 
-      // 2. Feedback visual
       toast({ 
         title: 'Comanda Encerrada!', 
         description: `Venda registrada via ${method.toUpperCase()}.` 
       });
       
-      // 3. Ações pós-sucesso
       handlePrint();
       await refreshStatus(); 
-      
-      // 4. Redirecionamento controlado
       router.push('/comandas');
     } catch (err: any) {
       console.error('[CLOSE_ERROR]', err);
@@ -210,27 +223,27 @@ export default function ComandaDetailsPage() {
         description: err.message 
       });
       setIsSubmitting(false);
-      setIsClosingInProgress(false); // Libera para o fluxo normal em caso de erro
+      setIsClosingInProgress(false);
     }
   };
 
-  if (loading && !notFound) return (
+  if (loading) return (
     <div className="h-[60vh] flex flex-col items-center justify-center gap-4">
-      <Loader2 className="animate-spin text-primary" />
-      <p className="font-black uppercase text-[10px] tracking-widest text-muted-foreground">Sincronizando...</p>
+      <Loader2 className="animate-spin h-8 w-8 text-primary" />
+      <p className="font-black uppercase text-[10px] tracking-widest text-muted-foreground animate-pulse">Sincronizando Atendimento...</p>
     </div>
   );
 
-  if (notFound && !comanda) return (
+  if (notFound) return (
     <div className="h-[60vh] flex flex-col items-center justify-center gap-6 text-center px-8">
-      <div className="p-6 bg-primary/5 rounded-full ring-8 ring-primary/5">
-        <AlertCircle className="h-12 w-12 text-primary opacity-40" />
+      <div className="p-6 bg-muted/20 rounded-full ring-8 ring-muted/5">
+        <AlertCircle className="h-12 w-12 text-muted-foreground opacity-40" />
       </div>
       <div className="space-y-2">
-        <h2 className="text-xl font-black uppercase tracking-tight">Comanda em Processamento</h2>
-        <p className="text-sm text-muted-foreground max-w-xs mx-auto font-medium">Aguardando o sistema sincronizar os dados da nova comanda. Por favor, aguarde um momento.</p>
+        <h2 className="text-xl font-black uppercase tracking-tight">Comanda Indisponível</h2>
+        <p className="text-sm text-muted-foreground max-w-xs mx-auto font-medium">Esta comanda pode ter sido encerrada ou não existe mais. Redirecionando...</p>
       </div>
-      <Button variant="outline" onClick={fetchData} className="font-black uppercase text-[10px] tracking-widest px-8">Tentar Novamente</Button>
+      <Button variant="outline" onClick={() => router.push('/comandas')} className="font-black uppercase text-[10px] tracking-widest px-8">Voltar para Lista</Button>
     </div>
   );
 
