@@ -1,3 +1,4 @@
+
 'use client';
 
 /**
@@ -173,7 +174,9 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
       }
 
       // 3. Vincular Cliente
+      // RESOLUÇÃO DO ERRO DA IMAGEM: Passando p_store_id para evitar violação de constraint
       const { error: regError } = await supabase.rpc('register_customer_on_table', {
+        p_store_id: store.id,
         p_comanda_id: targetComandaId,
         p_name: customerData.name,
         p_phone: customerData.phone,
@@ -196,9 +199,19 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
 
     } catch (err: any) {
       console.error('[ORDER_ERROR]', err);
+      
+      let friendlyMessage = "Não foi possível concluir seu pedido agora. Por favor, tente novamente em alguns instantes.";
+      
+      // Mapeamento de erros técnicos para mensagens amigáveis (Conforme pedido de UX)
+      if (err.message && (err.message.includes('store_id') || err.code === '23502')) {
+          friendlyMessage = "Erro de identificação da unidade. Por favor, tente ler o QR Code novamente.";
+      } else if (err.message && err.message.includes('comandas_status_check')) {
+          friendlyMessage = "Esta mesa já possui um atendimento sendo encerrado. Chame o garçom para novos itens.";
+      }
+
       setSubmissionError({
         type: 'error',
-        message: "Ocorreu uma falha ao enviar seu pedido. Por favor, tente novamente."
+        message: friendlyMessage
       });
     } finally {
       setIsSending(false);
@@ -310,7 +323,6 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
         </div>
       )}
 
-      {/* MODAL 1: RESUMO DO PEDIDO */}
       <Dialog open={isCartOpen} onOpenChange={setIsCartOpen}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl rounded-t-[32px] sm:rounded-b-[32px]">
           <DialogHeader className="p-8 border-b bg-muted/10">
@@ -354,7 +366,6 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
         </DialogContent>
       </Dialog>
 
-      {/* MODAL 2: IDENTIFICAÇÃO */}
       <Dialog open={showIdModal} onOpenChange={(open) => !isSending && setShowIdModal(open)}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl z-[9999] rounded-[32px] fixed">
           <DialogHeader className="bg-primary/5 p-10 text-center space-y-4 border-b border-primary/10">
