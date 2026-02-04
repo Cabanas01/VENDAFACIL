@@ -181,6 +181,7 @@ export default function ComandaDetailsPage() {
     
     setIsSubmitting(true);
     try {
+      // 1. Registrar a Venda no PDV (Financeiro)
       const cartItems: CartItem[] = items.map(i => ({
         product_id: i.product_id,
         product_name_snapshot: i.product_name,
@@ -195,10 +196,13 @@ export default function ComandaDetailsPage() {
       
       if (!result.success) throw new Error(result.error);
 
-      await supabase.from('comandas').update({ 
-        status: 'fechada', 
-        closed_at: new Date().toISOString() 
-      }).eq('id', comanda.id).eq('status', 'aguardando_pagamento');
+      // 2. Encerrar a Comanda via RPC (Garantindo nomes de parâmetros corretos)
+      const { error: rpcError } = await supabase.rpc('fechar_comanda', {
+        p_comanda_id: comanda.id,
+        p_forma_pagamento: method
+      });
+
+      if (rpcError) throw rpcError;
 
       toast({ title: 'Venda Concluída!' });
       router.push('/comandas');
@@ -254,7 +258,7 @@ export default function ComandaDetailsPage() {
             <Card className="border-primary bg-primary/5 shadow-2xl">
               <CardHeader className="py-3">
                 <CardTitle className="text-[10px] font-black uppercase text-primary">Lançamento Pendente</CardTitle>
-                <CardDescription className="sr-only">Resumo dos itens que serão adicionados</CardDescription>
+                <CardDescription>Confirme os itens para enviar à produção.</CardDescription>
               </CardHeader>
               <CardContent className="p-4 space-y-4">
                 <div className="space-y-2">
@@ -286,7 +290,7 @@ export default function ComandaDetailsPage() {
             <CardHeader className="flex flex-row justify-between items-center bg-muted/10 border-b py-4 px-6">
               <div className="flex flex-col">
                 <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Consumo Atual</CardTitle>
-                <CardDescription className="sr-only">Lista de todos os itens já lançados nesta comanda</CardDescription>
+                <CardDescription>Itens já lançados neste atendimento.</CardDescription>
               </div>
               <Button size="sm" onClick={() => setIsAdding(true)} className="h-9 px-4 font-black uppercase text-[10px]"><Plus className="h-3 w-3 mr-1.5" /> Adicionar Item</Button>
             </CardHeader>
@@ -321,7 +325,7 @@ export default function ComandaDetailsPage() {
           <Card className="border-primary/20 bg-primary/5 shadow-2xl overflow-hidden sticky top-24">
             <CardHeader className="bg-primary/10 text-center py-6 border-b border-primary/10">
               <CardTitle className="text-xs font-black uppercase tracking-widest text-primary">Encerramento</CardTitle>
-              <CardDescription className="sr-only">Resumo financeiro final da comanda</CardDescription>
+              <CardDescription>Resumo financeiro para fechamento.</CardDescription>
             </CardHeader>
             <CardContent className="p-8 space-y-6">
               <div className="text-center space-y-1 py-6 bg-background rounded-2xl border">
@@ -360,7 +364,7 @@ export default function ComandaDetailsPage() {
         <DialogContent className="sm:max-w-3xl border-none shadow-2xl p-0 overflow-hidden">
           <DialogHeader className="p-6 bg-muted/10 border-b">
             <DialogTitle className="text-xl font-black uppercase tracking-tighter">Adicionar Itens</DialogTitle>
-            <DialogDescription className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Pesquise e selecione itens para a comanda</DialogDescription>
+            <DialogDescription>Pesquise e selecione itens para a comanda.</DialogDescription>
           </DialogHeader>
           <div className="p-6 space-y-6">
             <div className="relative">
