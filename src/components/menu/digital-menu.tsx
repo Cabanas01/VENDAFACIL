@@ -2,10 +2,7 @@
 
 /**
  * @fileOverview Cardápio Digital (Autoatendimento) - Fluxo Contínuo e Identificado.
- * 
- * - Navegação pública.
- * - Identificação e criação de comanda ocorrem no checkout.
- * - Fluxo: Confirmar -> Identificar -> Enviar.
+ * Corrigido erro de sincronização de nomes de colunas (quantidade e preco_unitario).
  */
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -118,16 +115,14 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
     });
   };
 
-  /**
-   * Envio de Pedido - Processo Final
-   */
   const executeOrderSubmission = async (targetCustomerId: string, targetComandaId: string) => {
     setIsSending(true);
     try {
+      // Ajuste crucial: nomes das colunas em português para casar com o schema do banco
       const payload = cart.map(i => ({
         product_id: i.product_id,
-        qty: i.quantity,
-        price: i.unit_price_cents,
+        quantidade: i.quantity,
+        preco_unitario: i.unit_price_cents,
         notes: i.notes || ''
       }));
 
@@ -151,13 +146,9 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
     }
   };
 
-  /**
-   * Gatilho de Checkout
-   */
   const handleCheckoutProcess = async () => {
     if (cart.length === 0 || isSending) return;
 
-    // Se não identificado, abre modal e para por aqui (o modal continuará o fluxo)
     if (!customerId) {
       setShowIdModal(true);
       return;
@@ -165,7 +156,6 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
 
     setIsSending(true);
     try {
-      // Resolver Comanda
       let currentComandaId = comandaId;
       if (!currentComandaId) {
         const { data: comRes, error: comErr } = await supabase.rpc('get_or_create_comanda_by_table', {
@@ -185,16 +175,12 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
     }
   };
 
-  /**
-   * Identificação do Cliente (Modal)
-   */
   const handleIdentifyCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerData.name || !customerData.phone || isIdentifying) return;
 
     setIsIdentifying(true);
     try {
-      // 1. Garantir Comanda
       let currentComandaId = comandaId;
       if (!currentComandaId) {
         const { data: comRes } = await supabase.rpc('get_or_create_comanda_by_table', { p_table_id: table.id });
@@ -205,7 +191,6 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
 
       if (!currentComandaId) throw new Error('Não foi possível abrir o atendimento na mesa.');
 
-      // 2. Registrar Cliente
       const { data: custRes, error: custErr } = await supabase.rpc('register_customer_on_table', {
         p_comanda_id: currentComandaId,
         p_name: customerData.name,
@@ -220,12 +205,10 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
       
       if (!finalCustId) throw new Error('Falha ao gerar identificação.');
 
-      // 3. Persistir e fechar modal
       setCustomerId(finalCustId);
       localStorage.setItem(`vf_cust_${store.id}`, finalCustId);
       setShowIdModal(false);
       
-      // 4. CONTINUAR FLUXO AUTOMATICAMENTE
       await executeOrderSubmission(finalCustId, currentComandaId);
 
     } catch (err: any) {

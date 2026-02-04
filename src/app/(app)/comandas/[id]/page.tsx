@@ -2,7 +2,7 @@
 
 /**
  * @fileOverview Detalhe da Comanda - Fluxo de Fechamento e Pagamento.
- * Corrigido erro de "column comanda_id does not exist" ao realizar fechamento manual.
+ * Corrigido erro de "column qty does not exist" ao realizar lançamento.
  */
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
@@ -131,10 +131,11 @@ export default function ComandaDetailsPage() {
     if (tempItems.length === 0 || isSubmitting) return;
     setIsSubmitting(true);
     try {
+      // Ajuste crucial: nomes das colunas em português para casar com o schema do banco
       const payload = tempItems.map(i => ({
         product_id: i.product.id,
-        qty: i.quantity,
-        price: i.product.price_cents,
+        quantidade: i.quantity,
+        preco_unitario: i.product.price_cents,
         notes: ''
       }));
 
@@ -183,43 +184,36 @@ export default function ComandaDetailsPage() {
     
     setIsSubmitting(true);
     try {
-      // 1. Mapear itens para o formato de venda principal (PDV)
       const cartItems: CartItem[] = items.map(i => ({
         product_id: i.product_id,
         product_name_snapshot: i.product_name,
         quantity: i.quantidade,
         unit_price_cents: i.preco_unitario,
         subtotal_cents: i.quantidade * i.preco_unitario,
-        stock_qty: 999 // Ignora validação de estoque no fechamento pois os itens já saíram
+        stock_qty: 999 
       }));
 
-      // 2. Registrar a venda no histórico oficial através do motor de vendas
       const result = await addSale(cartItems, method, customer?.id || null);
       
       if (!result.success) throw new Error(result.error);
 
-      // 3. Marcar a comanda como fechada no banco de dados (Manual Fallback)
       const { error: updateError } = await supabase
         .from('comandas')
         .update({ status: 'fechada', closed_at: new Date().toISOString() })
         .eq('id', comanda.id);
 
       if (updateError) {
-        console.warn('[CLOSE_STATUS_SYNC_FAIL] Venda salva, mas falha ao atualizar status da comanda.', updateError);
+        console.warn('[CLOSE_STATUS_SYNC_FAIL]', updateError);
       }
 
-      toast({ title: 'Comanda Encerrada!', description: `Venda registrada no histórico com sucesso.` });
-      
-      // Impressão com os dados reais retornados
+      toast({ title: 'Comanda Encerrada!', description: `Venda registrada com sucesso.` });
       handlePrint(result.sale);
-      
       router.push('/comandas');
     } catch (err: any) {
-      console.error('[CLOSE_FATAL]', err);
       toast({ 
         variant: 'destructive', 
         title: 'Erro no Fechamento', 
-        description: err.message || 'Não foi possível enviar a venda para o histórico.' 
+        description: err.message 
       });
       setIsSubmitting(false);
     }
