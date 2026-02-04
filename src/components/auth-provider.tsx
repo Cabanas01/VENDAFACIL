@@ -5,7 +5,6 @@
  * 
  * Responsável por manter os dados da loja em sincronia e normalizar
  * as respostas dos RPCs do Supabase para evitar erros de formato.
- * Adicionado: Validação de UUID para evitar erros 400.
  */
 
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
@@ -53,9 +52,6 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-/**
- * Normaliza o retorno do RPC get_store_access_status
- */
 function normalizeAccessStatus(raw: any): StoreAccessStatus | null {
   const defaultInactive: StoreAccessStatus = {
     acesso_liberado: false,

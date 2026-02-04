@@ -4,6 +4,7 @@
  * @fileOverview Server Action definitiva para Processamento de Vendas (PDV).
  * 
  * Implementa bypass de RLS para Super Admins e tratamento de erros de cache de esquema (PGRST204).
+ * Adicionado: Lógica de Fallback para garantir a venda mesmo com cache de esquema desatualizado.
  */
 
 import { createSupabaseServerClient } from '@/lib/supabase/server';
@@ -22,7 +23,6 @@ export async function processSaleAction(
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   
   if (authError || !user) {
-    console.error('[SERVER_ACTION] Falha de Identidade:', authError);
     return { success: false, error: 'Sessão expirada. Faça login novamente.' };
   }
 
@@ -42,42 +42,41 @@ export async function processSaleAction(
 
   const totalCents = cart.reduce((sum, item) => sum + (item.subtotal_cents || 0), 0);
 
-  // 1. Inserir a Venda
-  const { data: sale, error: saleError } = await activeClient
+  // 1. Inserir a Venda (Tentativa com Payload Completo)
+  const insertPayload: any = {
+    store_id: storeId,
+    customer_id: customerId || null,
+    total_cents: totalCents,
+    payment_method: paymentMethod as any
+  };
+
+  let { data: sale, error: saleError } = await activeClient
     .from('sales')
-    .insert({
-      store_id: storeId,
-      customer_id: customerId || null,
-      total_cents: totalCents,
-      payment_method: paymentMethod as any
-    })
+    .insert(insertPayload)
     .select()
     .single();
 
-  if (saleError) {
-    console.error('[SERVER_ACTION] Erro ao criar venda:', {
-      code: saleError.code,
-      message: saleError.message,
-      storeId,
-      userId: user.id
-    });
-
-    // Tratamento específico para erro de cache de esquema (coluna não encontrada)
-    if (saleError.code === 'PGRST204' || saleError.message.includes('schema cache')) {
-      return { 
-        success: false, 
-        error: 'Erro de sincronização: O banco de dados foi atualizado, mas a API ainda não reconheceu a coluna "customer_id". Por favor, atualize o cache do PostgREST no dashboard do Supabase.',
-        code: 'SCHEMA_CACHE_ERROR'
-      };
-    }
-
-    let friendlyMessage = 'Erro de permissão: Verifique se seu plano está ativo.';
+  // FALLBACK ESTRATÉGICO: Se falhar por cache de esquema (coluna customer_id desconhecida)
+  if (saleError && (saleError.code === 'PGRST204' || saleError.message.includes('customer_id'))) {
+    console.warn(`[SERVER_ACTION] Fallback ativado para Loja ${storeId}: API desatualizada (PGRST204). Ignorando customer_id.`);
     
-    if (saleError.message.includes('trial_sales_limit')) {
-      friendlyMessage = 'Limite de vendas atingido no Plano de Avaliação.';
-    } else if (saleError.code === '42501') {
-      friendlyMessage = 'Acesso Negado: Sua loja pode estar com o plano expirado ou você não tem permissão nesta unidade.';
-    }
+    // Tenta novamente sem a coluna customer_id
+    const { customer_id, ...fallbackPayload } = insertPayload;
+    const retry = await activeClient
+      .from('sales')
+      .insert(fallbackPayload)
+      .select()
+      .single();
+    
+    sale = retry.data;
+    saleError = retry.error;
+  }
+
+  if (saleError) {
+    console.error('[SERVER_ACTION] Erro fatal ao criar venda:', saleError);
+    let friendlyMessage = 'Erro ao processar venda no servidor.';
+    if (saleError.message.includes('trial_sales_limit')) friendlyMessage = 'Limite de vendas atingido no Plano de Avaliação.';
+    if (saleError.code === '42501') friendlyMessage = 'Acesso Negado: Verifique seu plano ou permissões.';
     
     return { success: false, error: friendlyMessage, code: saleError.code };
   }
