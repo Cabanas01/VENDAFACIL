@@ -2,7 +2,7 @@
 
 /**
  * @fileOverview Detalhes da Comanda e Checkout de Pagamento.
- * Refatorado para corresponder fielmente à interface da imagem.
+ * Refatorado para correspondência fiel à interface e integridade de RPCs.
  */
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
@@ -28,13 +28,16 @@ import {
   CircleDollarSign,
   QrCode,
   AlertCircle,
-  X
+  X,
+  Printer
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { isValidUUID } from '@/lib/utils';
 import type { ComandaItem, Product, ComandaTotalView, Customer, CartItem } from '@/lib/types';
 import { addComandaItemById } from '@/lib/add-comanda-item';
+import { printReceipt } from '@/lib/print-receipt';
 
 const formatCurrency = (val: number) => 
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((val || 0) / 100);
@@ -64,7 +67,7 @@ export default function ComandaDetailsPage() {
   }, [items]);
 
   const fetchData = useCallback(async () => {
-    if (!id || !store?.id) return;
+    if (!id || !isValidUUID(id) || !store?.id) return;
     setLoading(true);
     
     try {
@@ -107,7 +110,13 @@ export default function ComandaDetailsPage() {
   }, [id, store?.id]);
 
   useEffect(() => {
+    if (!id || !isValidUUID(id)) {
+      setNotFound(true);
+      setLoading(false);
+      return;
+    }
     fetchData();
+    
     const channel = supabase.channel(`sync_comanda_${id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'comanda_itens', filter: `comanda_id=eq.${id}` }, () => fetchData())
       .subscribe();
@@ -198,11 +207,16 @@ export default function ComandaDetailsPage() {
 
       const normalizedMethod = method === 'dinheiro' ? 'cash' : (method === 'cartao' ? 'card' : method);
       
-      // 1. Tenta faturar
+      // 1. Tenta faturar no PDV
       const result = await addSale(cartItems, normalizedMethod, customer?.id || null);
       if (!result.success) throw new Error(result.error);
 
-      // 2. Tenta encerrar via RPC
+      // 2. Impressão Automática do Cupom
+      if (result.sale) {
+        printReceipt(result.sale, store);
+      }
+
+      // 3. Tenta encerrar na comanda via RPC
       const { error: rpcError } = await supabase.rpc('fechar_comanda', {
         p_comanda_id: comanda.id,
         p_forma_pagamento: normalizedMethod
@@ -210,7 +224,7 @@ export default function ComandaDetailsPage() {
 
       if (rpcError) throw rpcError;
 
-      toast({ title: 'Atendimento Concluído!' });
+      toast({ title: 'Atendimento Concluído!', description: 'Venda faturada e comanda encerrada.' });
       router.push('/comandas');
     } catch (err: any) {
       toast({ 
@@ -226,15 +240,18 @@ export default function ComandaDetailsPage() {
   if (loading && !comanda) return (
     <div className="h-[60vh] flex flex-col items-center justify-center gap-4">
       <Loader2 className="animate-spin h-8 w-8 text-primary" />
-      <p className="font-black uppercase text-[10px] tracking-widest text-muted-foreground animate-pulse">Sincronizando...</p>
+      <p className="font-black uppercase text-[10px] tracking-widest text-muted-foreground animate-pulse">Sincronizando Atendimento...</p>
     </div>
   );
 
   if (notFound) return (
     <div className="h-[60vh] flex flex-col items-center justify-center gap-6 text-center">
       <AlertCircle className="h-12 w-12 text-muted-foreground opacity-40" />
-      <h2 className="text-xl font-black uppercase">Atendimento não localizado</h2>
-      <Button variant="outline" onClick={() => router.push('/comandas')}>Voltar</Button>
+      <div className="space-y-2">
+        <h2 className="text-xl font-black uppercase tracking-tight">Atendimento não localizado</h2>
+        <p className="text-sm text-muted-foreground max-w-xs mx-auto">Esta comanda pode ter sido encerrada ou o link é inválido.</p>
+      </div>
+      <Button variant="outline" onClick={() => router.push('/comandas')} className="font-black uppercase text-xs">Voltar para Lista</Button>
     </div>
   );
 
@@ -242,7 +259,7 @@ export default function ComandaDetailsPage() {
     <div className="max-w-5xl mx-auto space-y-8 pb-32 animate-in fade-in duration-500">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" onClick={() => router.push('/comandas')} className="h-10 p-0 rounded-full w-10">
+          <Button variant="ghost" onClick={() => router.push('/comandas')} className="h-10 p-0 rounded-full w-10 hover:bg-primary/10">
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
@@ -265,15 +282,15 @@ export default function ComandaDetailsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-6">
           {tempItems.length > 0 && (
-            <Card className="border-primary bg-primary/5 shadow-2xl">
+            <Card className="border-primary bg-primary/5 shadow-2xl animate-in zoom-in-95 duration-300">
               <CardHeader className="py-3">
-                <CardTitle className="text-[10px] font-black uppercase text-primary">Lançamento Pendente</CardTitle>
-                <CardDescription>Confirme os itens para enviar à produção.</CardDescription>
+                <CardTitle className="text-[10px] font-black uppercase text-primary tracking-widest">Lançamento Pendente</CardTitle>
+                <CardDescription className="text-[11px] font-medium">Confirme os itens para enviar à produção.</CardDescription>
               </CardHeader>
               <CardContent className="p-4 space-y-4">
                 <div className="space-y-2">
                   {tempItems.map(i => (
-                    <div key={i.product.id} className="flex justify-between items-center font-bold text-sm bg-background p-3 rounded-xl border">
+                    <div key={i.product.id} className="flex justify-between items-center font-bold text-sm bg-background p-3 rounded-xl border border-primary/10">
                       <div className="flex flex-col">
                         <span className="uppercase text-xs font-black">{i.product.name}</span>
                         <span className="text-[10px] text-muted-foreground">{formatCurrency(i.product.price_cents)}/un</span>
@@ -284,12 +301,12 @@ export default function ComandaDetailsPage() {
                           <span className="w-6 text-center text-xs font-black">{i.quantity}</span>
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => addTempItem(i.product)}><Plus className="h-3 w-3" /></Button>
                         </div>
-                        <Button variant="ghost" size="icon" onClick={() => setTempItems(prev => prev.filter(x => x.product.id !== i.product.id))} className="text-destructive"><Trash2 className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => setTempItems(prev => prev.filter(x => x.product.id !== i.product.id))} className="text-destructive hover:bg-destructive/10"><Trash2 className="h-4 w-4" /></Button>
                       </div>
                     </div>
                   ))}
                 </div>
-                <Button className="w-full h-14 font-black uppercase tracking-widest" onClick={confirmOrder} disabled={isSubmitting}>
+                <Button className="w-full h-14 font-black uppercase tracking-widest shadow-lg shadow-primary/20" onClick={confirmOrder} disabled={isSubmitting}>
                   {isSubmitting ? <Loader2 className="animate-spin mr-2 h-5 w-5" /> : <Send className="mr-2 h-4 w-4" />} Confirmar Lançamento
                 </Button>
               </CardContent>
@@ -300,20 +317,20 @@ export default function ComandaDetailsPage() {
             <CardHeader className="flex flex-row justify-between items-center bg-muted/10 border-b py-4 px-6">
               <div className="flex flex-col">
                 <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Consumo Atual</CardTitle>
-                <CardDescription>Itens já lançados neste atendimento.</CardDescription>
+                <CardDescription className="text-[11px] font-medium">Itens já lançados neste atendimento.</CardDescription>
               </div>
-              <Button size="sm" onClick={() => setIsAdding(true)} className="h-9 px-4 font-black uppercase text-[10px]"><Plus className="h-3 w-3 mr-1.5" /> Adicionar Item</Button>
+              <Button size="sm" onClick={() => setIsAdding(true)} className="h-9 px-4 font-black uppercase text-[10px] shadow-sm"><Plus className="h-3 w-3 mr-1.5" /> Adicionar Item</Button>
             </CardHeader>
             <div className="p-0">
               <Table>
                 <TableBody>
                   {items.map(item => (
-                    <TableRow key={item.id} className="border-b border-muted/10">
+                    <TableRow key={item.id} className="border-b border-muted/10 hover:bg-muted/5 transition-colors">
                       <TableCell className="font-bold py-4 px-6 uppercase text-xs">
                         {item.product_name}
                         <div className="flex gap-2 mt-1">
-                          <Badge variant="outline" className="text-[8px] font-black uppercase">{item.destino_preparo}</Badge>
-                          <Badge className="text-[8px] uppercase font-black" variant={item.status === 'pronto' ? 'default' : 'secondary'}>{item.status}</Badge>
+                          <Badge variant="outline" className="text-[8px] font-black uppercase h-4 px-1">{item.destino_preparo}</Badge>
+                          <Badge className="text-[8px] uppercase font-black h-4 px-1" variant={item.status === 'pronto' ? 'default' : 'secondary'}>{item.status}</Badge>
                         </div>
                       </TableCell>
                       <TableCell className="text-center font-black text-xs px-6">x{item.qty}</TableCell>
@@ -322,7 +339,7 @@ export default function ComandaDetailsPage() {
                   ))}
                   {items.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={3} className="text-center py-12 text-muted-foreground text-xs font-bold uppercase opacity-50">Sem consumos registrados</TableCell>
+                      <TableCell colSpan={3} className="text-center py-16 text-muted-foreground text-xs font-bold uppercase opacity-30">Sem consumos registrados</TableCell>
                     </TableRow>
                   )}
                 </TableBody>
@@ -334,58 +351,69 @@ export default function ComandaDetailsPage() {
         <div className="space-y-6">
           <Card className="border-primary/20 bg-primary/5 shadow-2xl overflow-hidden sticky top-24">
             <CardHeader className="bg-primary/10 text-center py-6 border-b border-primary/10">
-              <CardTitle className="text-xs font-black uppercase tracking-widest text-primary">Encerramento</CardTitle>
-              <CardDescription>Resumo financeiro para fechamento.</CardDescription>
+              <CardTitle className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Status Financeiro</CardTitle>
+              <CardDescription className="text-[11px] font-bold uppercase">Resumo para fechamento</CardDescription>
             </CardHeader>
             <CardContent className="p-8 space-y-6">
-              <div className="text-center space-y-1 py-6 bg-background rounded-2xl border">
-                <p className="text-[10px] font-black uppercase text-muted-foreground">Valor Final</p>
+              <div className="text-center space-y-1 py-6 bg-background rounded-2xl border border-primary/10 shadow-inner">
+                <p className="text-[10px] font-black uppercase text-muted-foreground opacity-60">Subtotal a Pagar</p>
                 <p className="text-5xl font-black text-foreground tracking-tighter">{formatCurrency(calculatedTotal)}</p>
               </div>
-              <Button className="w-full h-20 text-lg font-black uppercase tracking-widest shadow-xl shadow-primary/20" onClick={handleStartClosing} disabled={calculatedTotal <= 0 || isSubmitting}>
-                {isSubmitting ? <Loader2 className="h-7 w-7 animate-spin mr-3" /> : <CheckCircle2 className="h-7 w-7 mr-3" />} Fechar Turno
+              <Button 
+                className="w-full h-20 text-lg font-black uppercase tracking-widest shadow-xl shadow-primary/20 transition-all hover:scale-[1.02] active:scale-95" 
+                onClick={handleStartClosing} 
+                disabled={calculatedTotal <= 0 || isSubmitting}
+              >
+                {isSubmitting ? <Loader2 className="h-7 w-7 animate-spin mr-3" /> : <CheckCircle2 className="h-7 w-7 mr-3" />} Fechar Atendimento
               </Button>
+              <p className="text-[9px] font-black text-center uppercase text-muted-foreground opacity-50 px-4">Ao clicar, a comanda será preparada para recebimento no caixa.</p>
             </CardContent>
           </Card>
         </div>
       </div>
 
       <Dialog open={isClosing} onOpenChange={(open) => !isSubmitting && setIsClosing(open)}>
-        <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl rounded-[24px]">
+        <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl rounded-[32px]">
           <div className="absolute right-4 top-4 z-10">
             <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full text-white/50 hover:text-white" onClick={() => setIsClosing(false)} disabled={isSubmitting}>
               <X className="h-4 w-4" />
             </Button>
           </div>
-          <DialogHeader className="bg-[#0f172a] text-white px-6 py-10 text-center border-b border-white/5">
+          <DialogHeader className="bg-[#0f172a] text-white px-6 py-12 text-center border-b border-white/5">
+            <div className="mx-auto h-12 w-12 rounded-2xl bg-primary/20 flex items-center justify-center mb-4">
+              <CircleDollarSign className="h-7 w-7 text-primary" />
+            </div>
             <DialogTitle className="text-3xl font-black font-headline uppercase tracking-tighter text-center text-white">Pagamento</DialogTitle>
-            <DialogDescription className="text-[10px] font-bold uppercase tracking-widest opacity-60 text-center text-white/60">Selecione o meio para faturar e encerrar</DialogDescription>
+            <DialogDescription className="text-[10px] font-bold uppercase tracking-widest opacity-60 text-center text-white/60">Selecione o meio de faturamento final</DialogDescription>
           </DialogHeader>
+          
           <div className="p-8 space-y-4 bg-[#f8fafc]">
             <Button 
               type="button" 
               variant="outline" 
-              className="w-full h-20 justify-start text-sm font-black uppercase tracking-widest gap-6 border-2 hover:border-primary bg-white shadow-sm transition-all active:scale-[0.98]" 
+              className="w-full h-20 justify-start text-sm font-black uppercase tracking-widest gap-6 border-2 hover:border-primary bg-white shadow-sm transition-all active:scale-[0.98] group" 
               onClick={() => handleCloseComandaFinal('dinheiro')} 
               disabled={isSubmitting}
             >
-              <div className="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center shrink-0 shadow-inner">
+              <div className="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center shrink-0 shadow-inner group-hover:bg-green-200 transition-colors">
                 <CircleDollarSign className="h-6 w-6 text-green-600" />
               </div> 
               <span className="text-slate-900">Dinheiro</span>
             </Button>
+            
             <Button 
               type="button" 
               variant="outline" 
-              className="w-full h-20 justify-start text-sm font-black uppercase tracking-widest gap-6 border-2 hover:border-primary bg-white shadow-sm transition-all active:scale-[0.98]" 
+              className="w-full h-20 justify-start text-sm font-black uppercase tracking-widest gap-6 border-2 hover:border-primary bg-white shadow-sm transition-all active:scale-[0.98] group" 
               onClick={() => handleCloseComandaFinal('pix')} 
               disabled={isSubmitting}
             >
-              <div className="h-12 w-12 rounded-full bg-cyan-100 flex items-center justify-center shrink-0 shadow-inner">
+              <div className="h-12 w-12 rounded-full bg-cyan-100 flex items-center justify-center shrink-0 shadow-inner group-hover:bg-cyan-200 transition-colors">
                 <QrCode className="h-6 w-6 text-cyan-600" />
               </div> 
               <span className="text-slate-900">Pix</span>
             </Button>
+            
             <Button 
               type="button" 
               className="w-full h-20 justify-start text-sm font-black uppercase tracking-widest gap-6 shadow-xl bg-accent text-white hover:bg-accent/90 transition-all active:scale-[0.98]" 
@@ -398,32 +426,44 @@ export default function ComandaDetailsPage() {
               <span>Cartão</span>
             </Button>
           </div>
+          
           {isSubmitting && (
-            <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm flex flex-col items-center justify-center z-50 animate-in fade-in">
-              <Loader2 className="h-10 w-10 animate-spin text-white mb-4" />
-              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-white">Processando Faturamento...</p>
+            <div className="absolute inset-0 bg-[#0f172a]/90 backdrop-blur-sm flex flex-col items-center justify-center z-50 animate-in fade-in">
+              <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
+              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-white">Sincronizando Venda...</p>
             </div>
           )}
         </DialogContent>
       </Dialog>
 
       <Dialog open={isAdding} onOpenChange={setIsAdding}>
-        <DialogContent className="sm:max-w-3xl border-none shadow-2xl p-0 overflow-hidden">
+        <DialogContent className="sm:max-w-3xl border-none shadow-2xl p-0 overflow-hidden rounded-[24px]">
           <DialogHeader className="p-6 bg-muted/10 border-b">
-            <DialogTitle className="text-xl font-black uppercase tracking-tighter">Adicionar Itens</DialogTitle>
-            <DialogDescription>Pesquise e selecione itens para a comanda.</DialogDescription>
+            <DialogTitle className="text-xl font-black uppercase tracking-tighter">Lançar Itens</DialogTitle>
+            <DialogDescription className="text-xs font-medium">Selecione os produtos para este atendimento.</DialogDescription>
           </DialogHeader>
           <div className="p-6 space-y-6">
             <div className="relative">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Pesquisar produto..." value={search} onChange={e => setSearch(e.target.value)} className="h-14 pl-11 text-lg font-bold" autoFocus />
+              <Input 
+                placeholder="Pesquisar por nome ou categoria..." 
+                value={search} 
+                onChange={e => setSearch(e.target.value)} 
+                className="h-14 pl-11 text-lg font-bold rounded-xl bg-muted/5 border-muted-foreground/20" 
+                autoFocus 
+              />
             </div>
             <ScrollArea className="h-[50vh] pr-4">
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 {products
-                  .filter(p => p.active && p.name.toLowerCase().includes(search.toLowerCase()))
+                  .filter(p => p.active && (p.name.toLowerCase().includes(search.toLowerCase()) || (p.category || '').toLowerCase().includes(search.toLowerCase())))
                   .map(p => (
-                    <Button key={p.id} variant="outline" className="h-24 flex flex-col items-start gap-1 justify-center px-5 border-2 hover:border-primary transition-all" onClick={() => addTempItem(p)}>
+                    <Button 
+                      key={p.id} 
+                      variant="outline" 
+                      className="h-24 flex flex-col items-start gap-1 justify-center px-5 border-2 hover:border-primary hover:bg-primary/5 transition-all active:scale-95" 
+                      onClick={() => addTempItem(p)}
+                    >
                       <span className="font-black text-[11px] uppercase leading-tight text-left line-clamp-2">{p.name}</span>
                       <span className="text-[10px] font-black text-primary">{formatCurrency(p.price_cents)}</span>
                     </Button>
@@ -432,7 +472,7 @@ export default function ComandaDetailsPage() {
             </ScrollArea>
           </div>
           <DialogFooter className="p-6 bg-muted/30 border-t">
-            <Button className="w-full h-12 font-black uppercase text-xs tracking-widest" onClick={() => setIsAdding(false)}>Fechar Pesquisa</Button>
+            <Button className="w-full h-12 font-black uppercase text-xs tracking-widest" onClick={() => setIsAdding(false)}>Concluir Seleção</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
