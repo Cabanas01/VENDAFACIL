@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS public.comandas (
     numero INTEGER NOT NULL,
     mesa TEXT,
     status TEXT NOT NULL DEFAULT 'aberta' CHECK (status IN ('aberta', 'aguardando_pagamento', 'fechada')),
-    cliente_nome TEXT,
+    cliente_nome TEXT, -- ADICIONADO PARA RESOLVER ERRO 42703
     total NUMERIC(15,2) DEFAULT 0,
     forma_pagamento TEXT CHECK (forma_pagamento IN ('dinheiro', 'pix', 'cartao')),
     created_at TIMESTAMPTZ DEFAULT now()
@@ -78,9 +78,7 @@ BEGIN
     SELECT store_id INTO v_store_id FROM public.comandas WHERE id = p_comanda_id;
     
     INSERT INTO public.customers (store_id, comanda_id, name, phone, cpf)
-    VALUES (v_store_id, p_comanda_id, p_name, p_phone, p_cpf)
-    ON CONFLICT (comanda_id) DO UPDATE 
-    SET name = EXCLUDED.name, phone = EXCLUDED.phone, cpf = EXCLUDED.cpf;
+    VALUES (v_store_id, p_comanda_id, p_name, p_phone, p_cpf);
     
     RETURN TRUE;
 EXCEPTION WHEN OTHERS THEN
@@ -160,7 +158,7 @@ SELECT
     COALESCE(SUM(s.total_cents), 0) AS total_cents
 FROM public.comandas c
 LEFT JOIN public.sales s ON c.id = s.comanda_id
-GROUP BY c.id;
+GROUP BY c.id, c.store_id, c.numero, c.mesa, c.status, c.cliente_nome;
 
 CREATE OR REPLACE VIEW public.v_painel_cozinha AS
 SELECT 

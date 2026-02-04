@@ -1,4 +1,3 @@
-
 'use client';
 
 /**
@@ -13,10 +12,9 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase/client';
-import type { Product, TableInfo, Store, CartItem } from '@/lib/types';
+import type { Product, TableInfo, Store } from '@/lib/types';
 import { 
   Plus, 
-  Minus, 
   ShoppingCart, 
   Search, 
   Loader2,
@@ -24,8 +22,7 @@ import {
   UserCheck,
   CheckCircle2,
   ArrowRight,
-  Trash2,
-  AlertCircle
+  Trash2
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -35,8 +32,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+import { isValidUUID } from '@/lib/utils';
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((value || 0) / 100);
@@ -92,7 +88,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
 
     setIsSending(true);
     try {
-      // 1. Validar Acesso (Boolean)
+      // 1. Validar Acesso
       const { data: isAllowed } = await supabase.rpc('get_store_access_status', { p_store_id: store.id });
       if (isAllowed === false) throw new Error('Seu acesso está restrito. Chame o garçom.');
 
@@ -105,9 +101,12 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
         p_cliente_cpf: customerData.cpf || null
       });
 
-      if (openError || !comandaId || !UUID_REGEX.test(comandaId)) throw new Error('Falha ao abrir atendimento.');
+      if (openError || !comandaId || !isValidUUID(comandaId as string)) {
+        console.error('[OPEN_COMANDA_ERROR]', openError);
+        throw new Error('Falha ao abrir atendimento no servidor.');
+      }
 
-      // 3. Registrar Cliente (4 PARAMS APENAS)
+      // 3. Registrar Cliente (4 PARAMS)
       await supabase.rpc('register_customer_on_table', {
         p_comanda_id: comandaId,
         p_cpf: customerData.cpf || null,
@@ -115,12 +114,12 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
         p_phone: customerData.phone
       });
 
-      // 4. Inserir Itens via Sales (Tratando como venda pendente vinculada à comanda)
+      // 4. Inserir Itens via Sales
       const { data: saleData } = await supabase.from('sales').insert({
         store_id: store.id,
+        comanda_id: comandaId,
         total_cents: cartTotal,
-        payment_method: 'cash', // Default temporário
-        customer_id: null // Opcional aqui
+        payment_method: 'cash'
       }).select().single();
 
       if (saleData) {
@@ -131,7 +130,8 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
           quantity: i.qty,
           unit_price_cents: i.unit_price_cents,
           subtotal_cents: i.subtotal_cents,
-          status: 'pendente'
+          status: 'pendente',
+          destino_preparo: products.find(p => p.id === i.product_id)?.production_target || 'nenhum'
         }));
         await supabase.from('sale_items').insert(itemsToInsert);
       }
@@ -143,6 +143,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
       setTimeout(() => setOrderSuccess(false), 5000);
 
     } catch (err: any) {
+      console.error('[SUBMIT_ORDER_FATAL]', err);
       toast({ variant: 'destructive', title: 'Erro no Pedido', description: err.message });
     } finally {
       setIsSending(false);
