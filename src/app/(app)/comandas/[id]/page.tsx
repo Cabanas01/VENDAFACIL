@@ -39,7 +39,7 @@ const formatCurrency = (val: number) =>
 export default function ComandaDetailsPage() {
   const params = useParams();
   const id = params?.id as string;
-  const { products, store, addSale, refreshStatus } = useAuth();
+  const { products, store, addSale } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -56,7 +56,7 @@ export default function ComandaDetailsPage() {
   const [isClosing, setIsClosing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Cálculo de total local (Source of Truth) para evitar delay de View
+  // Cálculo de total local (Source of Truth)
   const calculatedTotal = useMemo(() => {
     return items.reduce((acc, item) => acc + (item.qty * item.unit_price), 0);
   }, [items]);
@@ -81,7 +81,7 @@ export default function ComandaDetailsPage() {
         mesa: baseRes.data.mesa,
         status: baseRes.data.status,
         cliente_nome: baseRes.data.cliente_nome,
-        total: 0 // Usamos o calculado localmente
+        total: 0 
       });
 
       setItems(itemsRes.data || []);
@@ -101,6 +101,7 @@ export default function ComandaDetailsPage() {
     fetchData();
     const channel = supabase.channel(`sync_comanda_${id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'comanda_itens', filter: `comanda_id=eq.${id}` }, () => fetchData())
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'comandas', filter: `id=eq.${id}` }, () => fetchData())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [id, fetchData]);
@@ -120,7 +121,7 @@ export default function ComandaDetailsPage() {
     if (tempItems.length === 0 || isSubmitting || !store || !comanda) return;
     setIsSubmitting(true);
     try {
-      // 1. Lançar itens via RPC Oficial
+      // 1. Lançar itens via utilitário blindado
       for (const i of tempItems) {
         await addComandaItem({
           storeId: store.id,
@@ -133,11 +134,12 @@ export default function ComandaDetailsPage() {
         });
       }
 
-      // 2. Transicionar status da comanda conforme MAPA OFICIAL
+      // 2. Transicionar status da comanda em query ÚNICA e PROTEGIDA
       await supabase
         .from('comandas')
         .update({ status: 'em_preparo' })
-        .eq('id', comanda.id);
+        .eq('id', comanda.id)
+        .eq('status', 'aberta');
 
       toast({ title: 'Pedido Lançado!' });
       setTempItems([]);
@@ -177,11 +179,9 @@ export default function ComandaDetailsPage() {
         stock_qty: 999 
       }));
 
-      // Processar venda via motor do PDV
       const result = await addSale(cartItems, method, customer?.id || null);
       if (!result.success) throw new Error(result.error);
 
-      // Status final: fechada
       await supabase.from('comandas').update({ 
         status: 'fechada', 
         closed_at: new Date().toISOString() 

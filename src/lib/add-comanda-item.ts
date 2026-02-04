@@ -13,6 +13,7 @@ type AddItemParams = {
 /**
  * Função Única e Oficial para Adicionar Item em Comanda.
  * Resolve a comanda aberta e insere o item com compatibilidade total de colunas.
+ * REGRA: NUNCA atualiza o status da comanda aqui dentro.
  */
 export async function addComandaItem({
   storeId,
