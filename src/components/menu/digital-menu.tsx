@@ -1,12 +1,5 @@
 'use client';
 
-/**
- * @fileOverview Cardápio Digital Público com Fluxo de 3 Etapas (Step-by-Step).
- * Garantia de zero transações no banco até a confirmação final.
- * 
- * Correção: Modais não se sobrepõem. Um fecha para o outro abrir.
- */
-
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import type { Product, TableInfo, Store, CartItem } from '@/lib/types';
@@ -31,10 +24,16 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { addComandaItemByNumero } from '@/lib/add-comanda-item';
+import { addComandaItem } from '@/lib/add-comanda-item';
 
 const formatCurrency = (val: number) => 
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((val || 0) / 100);
+
+enum CheckoutStep {
+  REVIEW = 1,
+  IDENTIFY = 2,
+  CONFIRM = 3
+}
 
 export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }) {
   const { toast } = useToast();
@@ -46,29 +45,27 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
   
-  // Controle de Fluxo (1: Lista, 2: Identificar, 3: Confirmar)
-  const [orderStep, setOrderStep] = useState<1 | 2 | 3>(1);
+  const [step, setStep] = useState<CheckoutStep>(CheckoutStep.REVIEW);
   const [showIdModal, setShowIdModal] = useState(false);
   const [customerData, setCustomerData] = useState({ name: '', phone: '', cpf: '' });
   const [hasIdentification, setHasIdentification] = useState(false);
 
-  const loadProducts = useCallback(async () => {
-    try {
-      const { data } = await supabase
-        .from('products')
-        .select('*')
-        .eq('store_id', store.id)
-        .eq('active', true)
-        .order('category', { ascending: true });
-      setProducts(data || []);
-    } finally {
-      setLoading(false);
-    }
-  }, [store.id]);
-
   useEffect(() => {
+    const loadProducts = async () => {
+      try {
+        const { data } = await supabase
+          .from('products')
+          .select('*')
+          .eq('store_id', store.id)
+          .eq('active', true)
+          .order('category', { ascending: true });
+        setProducts(data || []);
+      } finally {
+        setLoading(false);
+      }
+    };
     loadProducts();
-  }, [loadProducts]);
+  }, [store.id]);
 
   const categories = useMemo(() => Array.from(new Set(products.map(p => p.category || 'Geral'))), [products]);
   const filteredProducts = products.filter(p => 
@@ -105,26 +102,23 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
   };
 
   const handleMainAction = async () => {
-    // 1. Apenas abre o resumo visual
-    if (orderStep === 1) {
+    if (step === CheckoutStep.REVIEW) {
       setIsCartOpen(true);
-      setOrderStep(2);
+      setStep(CheckoutStep.IDENTIFY);
       return;
     }
 
-    // 2. Abre modal de identificação (FECHA O RESUMO PARA NÃO SOBREPOR)
-    if (orderStep === 2) {
+    if (step === CheckoutStep.IDENTIFY) {
       if (!hasIdentification) {
-        setIsCartOpen(false); // REGRA: Fecha o resumo antes
+        setIsCartOpen(false); // Fecha o resumo para não ficar atrás
         setShowIdModal(true);
       } else {
-        setOrderStep(3);
+        setStep(CheckoutStep.CONFIRM);
       }
       return;
     }
 
-    // 3. Execução REAL do pedido
-    if (orderStep === 3) {
+    if (step === CheckoutStep.CONFIRM) {
       await executeOrderSubmission();
     }
   };
@@ -133,72 +127,56 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
     e.preventDefault();
     if (!customerData.name || !customerData.phone) return;
     
-    // REGRA: Apenas salva em memória e reabre o resumo no Passo 3
     setHasIdentification(true);
     setShowIdModal(false);
-    setOrderStep(3);
-    setIsCartOpen(true); // Reabre o resumo para o passo final
-    toast({ title: 'Dados salvos!', description: 'Confirme seu pedido agora.' });
+    setStep(CheckoutStep.CONFIRM);
+    setIsCartOpen(true); // Reabre para confirmação final
+    toast({ title: 'Identificado!', description: 'Agora confirme seu pedido.' });
   };
 
   const executeOrderSubmission = async () => {
-    if (orderStep !== 3 || isSending) return;
+    if (step !== CheckoutStep.CONFIRM || isSending) return;
 
     setIsSending(true);
     try {
-      // 1. Resolve/Cria a Comanda no Banco
-      const comandaId = await addComandaItemByNumero({
-        storeId: store.id,
-        numeroComanda: table.number,
-        productId: cart[0].product_id,
-        productName: cart[0].product_name_snapshot,
-        qty: cart[0].qty,
-        unitPrice: cart[0].unit_price_cents,
-        destino: products.find(p => p.id === cart[0].product_id)?.production_target || 'nenhum'
-      });
+      let comandaId: string | null = null;
 
-      if (!comandaId) throw new Error('Não foi possível inicializar seu atendimento.');
-
-      // 2. Registra o Cliente e Vincula
-      await supabase.rpc('register_customer_on_table', {
-        p_comanda_id: comandaId,
-        p_name: customerData.name,
-        p_phone: customerData.phone,
-        p_cpf: customerData.cpf || null
-      });
-
-      // 3. Lança os itens restantes (se houver mais de 1)
-      if (cart.length > 1) {
-        const remainingItems = cart.slice(1);
-        for (const item of remainingItems) {
-          const product = products.find(p => p.id === item.product_id);
-          await supabase.from('comanda_itens').insert({
-            comanda_id: comandaId,
-            product_id: item.product_id,
-            product_name: item.product_name_snapshot,
-            qty: item.qty,
-            unit_price: item.unit_price_cents,
-            quantidade: item.qty,
-            preco_unitario: item.unit_price_cents,
-            destino_preparo: product?.production_target || 'nenhum',
-            status: 'pendente'
-          });
-        }
+      // Inserção sequencial para garantir integridade
+      for (const item of cart) {
+        const product = products.find(p => p.id === item.product_id);
+        const cid = await addComandaItem({
+          storeId: store.id,
+          numeroComanda: table.number,
+          productId: item.product_id,
+          productName: item.product_name_snapshot,
+          qty: item.qty,
+          unitPrice: item.unit_price_cents,
+          destino: product?.production_target || 'nenhum'
+        });
+        if (!comandaId) comandaId = cid;
       }
 
-      // 4. Muda status para produção
-      await supabase.from('comandas').update({ status: 'em_preparo' }).eq('id', comandaId);
+      if (comandaId) {
+        // Vínculo do cliente e mudança de status atômica
+        await supabase.rpc('register_customer_on_table', {
+          p_comanda_id: comandaId,
+          p_name: customerData.name,
+          p_phone: customerData.phone,
+          p_cpf: customerData.cpf || null
+        });
 
-      // Sucesso Total
+        await supabase.from('comandas').update({ status: 'em_preparo' }).eq('id', comandaId).eq('status', 'aberta');
+      }
+
       setCart([]);
       setIsCartOpen(false);
-      setOrderStep(1);
+      setStep(CheckoutStep.REVIEW);
       setOrderSuccess(true);
       setTimeout(() => setOrderSuccess(false), 5000);
-      toast({ title: 'Pedido Enviado!' });
+      toast({ title: 'Pedido Enviado com Sucesso!' });
 
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Erro ao Enviar', description: err.message });
+      toast({ variant: 'destructive', title: 'Falha no Envio', description: err.message });
     } finally {
       setIsSending(false);
     }
@@ -207,7 +185,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
   if (loading) return (
     <div className="h-screen flex flex-col items-center justify-center bg-white gap-4">
       <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      <p className="font-black text-[10px] uppercase tracking-widest text-muted-foreground animate-pulse">Abrindo Cardápio...</p>
+      <p className="font-black text-[10px] uppercase tracking-widest text-muted-foreground">Abrindo Cardápio...</p>
     </div>
   );
 
@@ -261,9 +239,9 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
                               <span className="text-primary font-black text-lg tracking-tighter">{formatCurrency(product.price_cents)}</span>
                               {cartItem ? (
                                 <div className="flex items-center gap-3 bg-primary text-white rounded-full px-1 py-1 shadow-lg">
-                                  <Button size="icon" variant="ghost" className="h-8 w-8 text-white hover:bg-transparent" onClick={(e) => { e.stopPropagation(); removeFromCart(product.id); }}><Minus className="h-4 w-4" /></Button>
+                                  <Button size="icon" variant="ghost" className="h-8 w-8 text-white" onClick={(e) => { e.stopPropagation(); removeFromCart(product.id); }}><Minus className="h-4 w-4" /></Button>
                                   <span className="text-xs font-black w-4 text-center">{cartItem.qty}</span>
-                                  <Button size="icon" variant="ghost" className="h-8 w-8 text-white hover:bg-transparent" onClick={(e) => { e.stopPropagation(); addToCart(product); }}><Plus className="h-4 w-4" /></Button>
+                                  <Button size="icon" variant="ghost" className="h-8 w-8 text-white" onClick={(e) => { e.stopPropagation(); addToCart(product); }}><Plus className="h-4 w-4" /></Button>
                                 </div>
                               ) : <div className="h-10 w-10 rounded-full bg-slate-50 flex items-center justify-center border text-slate-400"><Plus className="h-5 w-5" /></div>}
                             </div>
@@ -281,11 +259,11 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
 
       {orderSuccess && (
         <div className="fixed top-24 inset-x-6 z-50 animate-in slide-in-from-top-4 duration-500">
-          <div className="bg-green-600 text-white p-4 rounded-2xl shadow-2xl flex items-center gap-4 border-2 border-white/20">
+          <div className="bg-green-600 text-white p-4 rounded-2xl shadow-2xl flex items-center gap-4">
             <CheckCircle2 className="h-6 w-6" />
             <div>
               <p className="text-[10px] font-black uppercase tracking-widest">Pedido Enviado!</p>
-              <p className="text-[10px] font-bold opacity-80 uppercase leading-tight">Já estamos preparando para você.</p>
+              <p className="text-[9px] font-bold opacity-80 uppercase">Aguarde o preparo.</p>
             </div>
           </div>
         </div>
@@ -294,69 +272,62 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
       {cart.length > 0 && !isCartOpen && (
         <div className="fixed bottom-8 inset-x-6 z-50 animate-in slide-in-from-bottom-4 duration-500">
           <Button 
-            className="w-full h-16 rounded-2xl font-black uppercase text-[10px] tracking-[0.25em] shadow-2xl gap-4 flex justify-between px-8 bg-slate-950 text-white hover:bg-slate-900" 
+            className="w-full h-16 rounded-2xl font-black uppercase text-[10px] tracking-[0.25em] shadow-2xl gap-4 flex justify-between px-8 bg-slate-950" 
             onClick={handleMainAction}
           >
-            <div className="flex items-center gap-3"><ShoppingCart className="h-4 w-4" /> <span>Ver Meu Pedido</span></div>
+            <div className="flex items-center gap-3"><ShoppingCart className="h-4 w-4" /> <span>Resumo do Pedido</span></div>
             <span className="text-base tracking-tighter">{formatCurrency(cartTotal)}</span>
           </Button>
         </div>
       )}
 
-      {isCartOpen && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-[100] flex flex-col justify-end">
-          <div className="bg-white rounded-t-[40px] max-h-[90vh] flex flex-col animate-in slide-in-from-bottom-8 duration-500">
-            <div className="p-8 border-b flex items-center justify-between">
-              <div className="space-y-1">
-                <h2 className="text-2xl font-black font-headline uppercase tracking-tighter">Resumo do Pedido</h2>
-                <p className="text-[10px] font-black uppercase text-primary tracking-widest">Confirme os itens selecionados</p>
-              </div>
-              <Button variant="ghost" size="icon" className="h-12 w-12 rounded-full" onClick={() => { setIsCartOpen(false); setOrderStep(1); }}><X className="h-6 w-6" /></Button>
-            </div>
-            <ScrollArea className="flex-1 px-8 py-6">
-              <div className="space-y-8">
-                {cart.map(item => (
-                  <div key={item.product_id} className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <div className="flex-1">
-                        <h5 className="font-black text-sm uppercase tracking-tight">{item.product_name_snapshot}</h5>
-                        <p className="text-[10px] font-bold text-muted-foreground uppercase">{formatCurrency(item.unit_price_cents)}/un</p>
-                      </div>
-                      <div className="flex items-center bg-slate-50 rounded-xl h-10 p-1 border">
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeFromCart(item.product_id)}><Minus className="h-3.5 w-3.5" /></Button>
-                        <span className="w-8 text-center text-xs font-black">{item.qty}</span>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => addToCart(products.find(p => p.id === item.product_id)!)}><Plus className="h-3.5 w-3.5" /></Button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
-            <div className="p-8 bg-slate-50 border-t space-y-6">
-              <div className="flex justify-between items-end px-2">
-                <span className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Total do Pedido</span>
-                <span className="text-4xl font-black tracking-tighter text-slate-950">{formatCurrency(cartTotal)}</span>
-              </div>
-              <Button 
-                className="w-full h-20 text-sm font-black uppercase tracking-[0.2em] shadow-2xl rounded-[24px]" 
-                onClick={handleMainAction} 
-                disabled={isSending}
-              >
-                {isSending ? (
-                  <Loader2 className="h-6 w-6 animate-spin mr-3" />
-                ) : orderStep === 2 ? (
-                  <><UserCheck className="h-5 w-5 mr-3" /> Identificar-se para Pedir</>
-                ) : (
-                  <><Send className="h-5 w-5 mr-3" /> Confirmar e Enviar Pedido</>
-                )}
-              </Button>
-            </div>
+      <Dialog open={isCartOpen} onOpenChange={(open) => { setIsCartOpen(open); if(!open) setStep(CheckoutStep.REVIEW); }}>
+        <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl rounded-t-[32px] sm:rounded-b-[32px]">
+          <div className="p-8 border-b bg-muted/10">
+            <h2 className="text-2xl font-black font-headline uppercase tracking-tighter">Seu Pedido</h2>
+            <p className="text-[10px] font-black uppercase text-primary tracking-widest">Mesa {table.number}</p>
           </div>
-        </div>
-      )}
+          <ScrollArea className="max-h-[40vh] p-8">
+            <div className="space-y-6">
+              {cart.map(item => (
+                <div key={item.product_id} className="flex justify-between items-center">
+                  <div>
+                    <h5 className="font-black text-sm uppercase tracking-tight">{item.product_name_snapshot}</h5>
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase">{formatCurrency(item.unit_price_cents)}/un</p>
+                  </div>
+                  <div className="flex items-center bg-slate-50 rounded-xl h-10 p-1 border">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeFromCart(item.product_id)}><Minus className="h-3.5 w-3.5" /></Button>
+                    <span className="w-8 text-center text-xs font-black">{item.qty}</span>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => addToCart(products.find(p => p.id === item.product_id)!)}><Plus className="h-3.5 w-3.5" /></Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
+          <div className="p-8 bg-slate-50 border-t space-y-6">
+            <div className="flex justify-between items-end px-2">
+              <span className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Total</span>
+              <span className="text-4xl font-black tracking-tighter text-slate-950">{formatCurrency(cartTotal)}</span>
+            </div>
+            <Button 
+              className="w-full h-20 text-sm font-black uppercase tracking-[0.2em] shadow-2xl rounded-[24px]" 
+              onClick={handleMainAction} 
+              disabled={isSending}
+            >
+              {isSending ? (
+                <Loader2 className="h-6 w-6 animate-spin mr-3" />
+              ) : step === CheckoutStep.IDENTIFY ? (
+                <><UserCheck className="h-5 w-5 mr-3" /> Identificar-se para Pedir</>
+              ) : (
+                <><Send className="h-5 w-5 mr-3" /> Confirmar e Enviar Pedido</>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showIdModal} onOpenChange={(open) => !isSending && setShowIdModal(open)}>
-        <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl rounded-[32px] z-[200]">
+        <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl rounded-[32px] z-[9999]">
           <div className="bg-primary/5 p-10 text-center space-y-4 border-b border-primary/10">
             <div className="mx-auto h-16 w-16 rounded-3xl bg-white shadow-xl flex items-center justify-center text-primary">
               <UserCheck className="h-8 w-8" />
@@ -375,7 +346,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
                     placeholder="Como devemos te chamar?" 
                     value={customerData.name} 
                     onChange={e => setCustomerData({...customerData, name: e.target.value})} 
-                    className="h-14 font-bold rounded-2xl bg-slate-50 border-none shadow-inner" 
+                    className="h-14 font-bold rounded-2xl bg-slate-50 border-none" 
                     required 
                   />
                 </div>
@@ -385,7 +356,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
                     placeholder="(00) 00000-0000" 
                     value={customerData.phone} 
                     onChange={e => setCustomerData({...customerData, phone: e.target.value})} 
-                    className="h-14 font-bold rounded-2xl bg-slate-50 border-none shadow-inner" 
+                    className="h-14 font-bold rounded-2xl bg-slate-50 border-none" 
                     required 
                   />
                 </div>
@@ -395,7 +366,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
                 className="w-full h-16 rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl shadow-primary/20" 
                 disabled={isSending}
               >
-                <CheckCircle2 className="h-5 w-5 mr-2" /> Salvar e Ver Resumo
+                Continuar <ChevronRight className="h-5 w-5 ml-2" />
               </Button>
             </form>
           </div>

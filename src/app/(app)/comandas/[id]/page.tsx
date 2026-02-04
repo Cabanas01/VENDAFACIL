@@ -1,11 +1,4 @@
-
 'use client';
-
-/**
- * @fileOverview Gerenciamento de Comanda (Painel Admin)
- * 
- * Implementa fluxo de fechamento seguro com transição de estados obrigatória.
- */
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -64,7 +57,7 @@ export default function ComandaDetailsPage() {
   }, [items]);
 
   const fetchData = useCallback(async () => {
-    if (!id) return;
+    if (!id || !store?.id) return;
     setLoading(true);
     
     try {
@@ -72,9 +65,11 @@ export default function ComandaDetailsPage() {
         .from('comandas')
         .select('*')
         .eq('id', id)
+        .eq('store_id', store.id)
         .maybeSingle();
 
       if (baseErr || !baseData) {
+        console.error('[FETCH_BASE_ERROR]', baseErr);
         setNotFound(true);
         return;
       }
@@ -103,16 +98,13 @@ export default function ComandaDetailsPage() {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, store?.id]);
 
   useEffect(() => {
     fetchData();
-    
     const channel = supabase.channel(`sync_comanda_${id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'comanda_itens', filter: `comanda_id=eq.${id}` }, () => fetchData())
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'comandas', filter: `id=eq.${id}` }, () => fetchData())
       .subscribe();
-      
     return () => { supabase.removeChannel(channel); };
   }, [id, fetchData]);
 
@@ -124,7 +116,6 @@ export default function ComandaDetailsPage() {
       }
       return [...prev, { product, quantity: 1 }];
     });
-    toast({ title: 'Adicionado à prévia', description: product.name });
   };
 
   const confirmOrder = async () => {
@@ -142,13 +133,9 @@ export default function ComandaDetailsPage() {
         });
       }
 
-      await supabase
-        .from('comandas')
-        .update({ status: 'em_preparo' })
-        .eq('id', comanda.id)
-        .in('status', ['aberta', 'em_preparo']);
+      await supabase.from('comandas').update({ status: 'em_preparo' }).eq('id', comanda.id).in('status', ['aberta', 'em_preparo']);
 
-      toast({ title: 'Pedido Lançado!' });
+      toast({ title: 'Itens Lançados!' });
       setTempItems([]);
       setIsAdding(false);
       await fetchData();
@@ -163,15 +150,8 @@ export default function ComandaDetailsPage() {
     if (!comanda) return;
     setIsSubmitting(true);
     try {
-      await supabase
-        .from('comandas')
-        .update({ status: 'aguardando_pagamento' })
-        .eq('id', comanda.id)
-        .in('status', ['aberta', 'em_preparo', 'pronta']);
-        
+      await supabase.from('comandas').update({ status: 'aguardando_pagamento' }).eq('id', comanda.id).in('status', ['aberta', 'em_preparo', 'pronta']);
       setIsClosing(true);
-    } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Erro', description: err.message });
     } finally {
       setIsSubmitting(false);
     }
@@ -182,13 +162,11 @@ export default function ComandaDetailsPage() {
     
     setIsSubmitting(true);
     try {
-      // 1. FORÇAR estado intermediário 'aguardando_pagamento' antes da venda
-      // Isso blinda contra erros de integridade no banco de dados
-      await supabase
-        .from('comandas')
-        .update({ status: 'aguardando_pagamento' })
-        .eq('id', comanda.id)
-        .in('status', ['aberta', 'em_preparo', 'pronta']);
+      // REGRA: Comanda precisa estar em 'aguardando_pagamento'
+      if (comanda.status !== 'aguardando_pagamento') {
+        const { error: stateError } = await supabase.from('comandas').update({ status: 'aguardando_pagamento' }).eq('id', comanda.id);
+        if (stateError) throw new Error('Falha ao preparar comanda para pagamento.');
+      }
 
       const cartItems: CartItem[] = items.map(i => ({
         product_id: i.product_id,
@@ -201,15 +179,12 @@ export default function ComandaDetailsPage() {
 
       const normalizedMethod = method === 'dinheiro' ? 'cash' : (method === 'cartao' ? 'card' : method);
       
-      // 2. Processar a Venda no Motor Financeiro
       const result = await addSale(cartItems, normalizedMethod, customer?.id || null);
       
       if (!result.success) {
-        throw new Error(result.error || 'Falha ao registrar venda no financeiro.');
+        throw new Error(result.error || 'Erro no motor financeiro.');
       }
 
-      // 3. Marcar Comanda como Fechada (Somente após sucesso do PDV)
-      // Usamos .eq('status', 'aguardando_pagamento') como trava final
       const { error: finalError } = await supabase.from('comandas').update({ 
         status: 'fechada', 
         closed_at: new Date().toISOString() 
@@ -217,14 +192,14 @@ export default function ComandaDetailsPage() {
 
       if (finalError) throw finalError;
 
-      toast({ title: 'Comanda Encerrada!' });
+      toast({ title: 'Atendimento Encerrado!' });
       router.push('/comandas');
     } catch (err: any) {
-      console.error('[FECHAMENTO_FATAL]', err);
+      console.error('[FECHAMENTO_ERROR]', err);
       toast({ 
         variant: 'destructive', 
-        title: 'Não foi possível fechar a comanda', 
-        description: 'A comanda não está no estado correto para pagamento ou houve erro no registro da venda.' 
+        title: 'Falha no Encerramento', 
+        description: 'Verifique se a comanda está pronta para pagamento.' 
       });
       setIsSubmitting(false);
     }

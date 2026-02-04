@@ -11,8 +11,8 @@ type AddItemParams = {
 };
 
 /**
- * Função unificada para adicionar item via número de comanda (Digital Menu).
- * Resolve a comanda aberta no banco de dados antes da inserção.
+ * Resolve a comanda aberta pelo número (Mesa) e insere o item.
+ * Utilizado principalmente pelo Cardápio Digital (Autoatendimento).
  */
 export async function addComandaItem({
   storeId,
@@ -39,14 +39,15 @@ export async function addComandaItem({
     throw comandaError || new Error('Comanda inválida');
   }
 
+  // Insert padronizado com campos de compatibilidade
   const { error } = await supabase.from('comanda_itens').insert({
     comanda_id: comandaId,
     product_id: productId,
     product_name: productName,
     qty,
     unit_price: unitPrice,
-    quantidade: qty,           // compatibilidade
-    preco_unitario: unitPrice, // compatibilidade
+    quantidade: qty,           
+    preco_unitario: unitPrice, 
     destino_preparo: destino,
     status: 'pendente',
   });
@@ -57,8 +58,8 @@ export async function addComandaItem({
 }
 
 /**
- * Helper para o Painel Administrativo.
- * Insere itens diretamente usando o UUID da comanda.
+ * Insere item diretamente usando o ID da comanda.
+ * Utilizado pelo Painel Administrativo.
  */
 export async function addComandaItemById({
   comandaId,
