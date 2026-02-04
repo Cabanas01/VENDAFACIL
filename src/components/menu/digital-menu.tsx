@@ -37,6 +37,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { addComandaItem } from '@/lib/add-comanda-item';
 import { cn } from '@/lib/utils';
 
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((value || 0) / 100);
+
 export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }) {
   const { toast } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
