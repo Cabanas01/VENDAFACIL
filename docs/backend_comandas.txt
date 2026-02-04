@@ -1,81 +1,61 @@
 -- =============================================================================
--- DOMÍNIO: INFRAESTRUTURA COMPLETA - VENDAFÁCIL BRASIL
--- VERSÃO: 6.3 (Correção de Tipos de View e Sincronização Final)
+-- DOMÍNIO: INFRAESTRUTURA DE COMANDAS E PRODUÇÃO - VENDAFÁCIL BRASIL
+-- VERSÃO: 7.0 (Sincronização Total Backend/Frontend)
 -- =============================================================================
 
--- 0. LIMPEZA DE VIEWS (Resolve erro 42P16: cannot change data type of view column)
+-- 1. LIMPEZA DE SEGURANÇA (VIEWS E FUNÇÕES)
 -- -----------------------------------------------------------------------------
 DROP VIEW IF EXISTS public.v_painel_cozinha CASCADE;
 DROP VIEW IF EXISTS public.v_painel_bar CASCADE;
 DROP VIEW IF EXISTS public.v_comandas_totais CASCADE;
 
--- 0.1. DROPS DE FUNÇÕES (Evita erro 42P13)
--- -----------------------------------------------------------------------------
-DROP FUNCTION IF EXISTS public.iniciar_preparo_item(uuid);
-DROP FUNCTION IF EXISTS public.finalizar_preparo_item(uuid);
-DROP FUNCTION IF EXISTS public.decrement_stock(uuid, integer);
 DROP FUNCTION IF EXISTS public.abrir_comanda(uuid, text, text, text, text);
 DROP FUNCTION IF EXISTS public.fechar_comanda(uuid, text);
-DROP FUNCTION IF EXISTS public.get_user_bootstrap_status();
-DROP FUNCTION IF EXISTS public.get_store_access_status(uuid);
-DROP FUNCTION IF EXISTS public.admin_grant_store_access(uuid, text, integer, text, boolean);
+DROP FUNCTION IF EXISTS public.adicionar_item_comanda(uuid, uuid, integer);
+DROP FUNCTION IF EXISTS public.criar_venda_da_comanda(uuid);
+DROP FUNCTION IF EXISTS public.iniciar_preparo_item(uuid);
+DROP FUNCTION IF EXISTS public.finalizar_preparo_item(uuid);
 
--- 1. GARANTIA DE ESTRUTURA (TABELAS E COLUNAS)
+-- 2. AJUSTES ESTRUTURAIS (TABELAS)
 -- -----------------------------------------------------------------------------
 
--- Tabela: Comandas (Cabeçalho de Atendimento)
-CREATE TABLE IF NOT EXISTS public.comandas (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    store_id UUID NOT NULL REFERENCES public.stores(id) ON DELETE CASCADE,
-    numero INTEGER NOT NULL,
-    mesa TEXT,
-    status TEXT NOT NULL DEFAULT 'aberta' CHECK (status IN ('aberta', 'aguardando_pagamento', 'fechada')),
-    total_cents INTEGER DEFAULT 0,
-    forma_pagamento TEXT CHECK (forma_pagamento IN ('dinheiro', 'pix', 'cartao')),
-    cliente_nome TEXT,
-    created_at TIMESTAMPTZ DEFAULT now()
-);
+-- Ajuste na Tabela Comandas (Flexibilidade de Pagamento)
+ALTER TABLE public.comandas DROP CONSTRAINT IF EXISTS comandas_status_check;
+ALTER TABLE public.comandas ADD CONSTRAINT comandas_status_check 
+    CHECK (status IN ('aberta', 'em_preparo', 'pronta', 'aguardando_pagamento', 'fechada'));
 
--- Garantir colunas se a tabela já existia
-ALTER TABLE public.comandas ADD COLUMN IF NOT EXISTS cliente_nome TEXT;
-ALTER TABLE public.comandas ADD COLUMN IF NOT EXISTS total_cents INTEGER DEFAULT 0;
+ALTER TABLE public.comandas DROP CONSTRAINT IF EXISTS comandas_forma_pagamento_check;
+ALTER TABLE public.comandas ADD CONSTRAINT comandas_forma_pagamento_check 
+    CHECK (forma_pagamento IN ('dinheiro', 'pix', 'cartao', 'cash', 'card', 'qr_code'));
 
--- Tabela: Itens da Venda (Produção KDS/BDS)
+-- Ajuste na Tabela Sale Items (Vínculo Direto com Comanda para KDS/BDS)
+ALTER TABLE public.sale_items ADD COLUMN IF NOT EXISTS comanda_id UUID REFERENCES public.comandas(id) ON DELETE CASCADE;
 ALTER TABLE public.sale_items ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pendente' CHECK (status IN ('pendente', 'em_preparo', 'pronto', 'entregue'));
 ALTER TABLE public.sale_items ADD COLUMN IF NOT EXISTS destino_preparo TEXT DEFAULT 'nenhum' CHECK (destino_preparo IN ('cozinha', 'bar', 'nenhum'));
 
--- 2. FUNÇÕES DE OPERAÇÃO COMERCIAL (RPCs)
+-- 3. FUNÇÕES RPC (LÓGICA OPERACIONAL)
 -- -----------------------------------------------------------------------------
 
 -- Função: Abrir Comanda
 CREATE OR REPLACE FUNCTION public.abrir_comanda(
     p_store_id UUID, 
     p_mesa TEXT,
-    p_cliente_nome TEXT DEFAULT NULL,
-    p_cliente_telefone TEXT DEFAULT NULL,
-    p_cliente_cpf TEXT DEFAULT NULL
-)
-RETURNS UUID AS $$
+    p_cliente_nome TEXT DEFAULT NULL
+) RETURNS UUID AS $$
 DECLARE
     v_numero INTEGER;
     v_comanda_id UUID;
 BEGIN
-    -- Busca comanda aberta para a mesma mesa na mesma loja
-    SELECT id INTO v_comanda_id 
-    FROM public.comandas 
-    WHERE store_id = p_store_id 
-      AND mesa = p_mesa 
-      AND status != 'fechada' 
-    LIMIT 1;
+    -- Verifica se já existe comanda aberta para esta mesa
+    SELECT id INTO v_comanda_id FROM public.comandas 
+    WHERE store_id = p_store_id AND mesa = p_mesa AND status != 'fechada' LIMIT 1;
 
     IF v_comanda_id IS NOT NULL THEN
         RETURN v_comanda_id;
     END IF;
 
-    -- Se não existe, cria uma nova
-    SELECT COALESCE(MAX(numero), 0) + 1 INTO v_numero 
-    FROM public.comandas 
-    WHERE store_id = p_store_id;
+    -- Gera próximo número sequencial da loja
+    SELECT COALESCE(MAX(numero), 0) + 1 INTO v_numero FROM public.comandas WHERE store_id = p_store_id;
 
     INSERT INTO public.comandas (store_id, numero, mesa, status, cliente_nome)
     VALUES (p_store_id, v_numero, p_mesa, 'aberta', p_cliente_nome)
@@ -85,154 +65,89 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Função: Fechar Comanda (Pagamento)
+-- Função: Adicionar Item à Comanda (Garante vínculo transacional)
+CREATE OR REPLACE FUNCTION public.adicionar_item_comanda(
+    p_comanda_id UUID,
+    p_product_id UUID,
+    p_quantity INTEGER
+) RETURNS VOID AS $$
+DECLARE
+    v_sale_id UUID;
+    v_store_id UUID;
+    v_prod_name TEXT;
+    v_prod_price INTEGER;
+    v_prod_target TEXT;
+BEGIN
+    -- Coleta dados do produto
+    SELECT store_id, name, price_cents, production_target INTO v_store_id, v_prod_name, v_prod_price, v_prod_target 
+    FROM public.products WHERE id = p_product_id;
+
+    -- Localiza ou cria uma 'venda' (agrupador) para esta comanda
+    SELECT id INTO v_sale_id FROM public.sales WHERE comanda_id = p_comanda_id AND payment_method = 'cash' LIMIT 1;
+    
+    IF v_sale_id IS NULL THEN
+        INSERT INTO public.sales (store_id, comanda_id, total_cents, payment_method)
+        VALUES (v_store_id, p_comanda_id, 0, 'cash')
+        RETURNING id INTO v_sale_id;
+    END IF;
+
+    -- Insere o item vinculado à comanda e à venda
+    INSERT INTO public.sale_items (
+        sale_id, comanda_id, product_id, product_name_snapshot, 
+        quantity, unit_price_cents, subtotal_cents, status, destino_preparo
+    ) VALUES (
+        v_sale_id, p_comanda_id, p_product_id, v_prod_name, 
+        p_quantity, v_prod_price, (v_prod_price * p_quantity), 'pendente', v_prod_target
+    );
+
+    -- Baixa estoque
+    PERFORM public.decrement_stock(p_product_id, p_quantity);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Função: Fechar Comanda (Pagamento e Finalização)
 CREATE OR REPLACE FUNCTION public.fechar_comanda(
     p_comanda_id UUID, 
     p_forma_pagamento TEXT
-) RETURNS TABLE (id UUID, status TEXT, forma_pagamento TEXT) AS $$
+) RETURNS JSONB AS $$
 BEGIN
-    RETURN QUERY
+    -- 1. Atualiza Cabeçalho
     UPDATE public.comandas 
-    SET status = 'fechada',
-        forma_pagamento = p_forma_pagamento
-    WHERE public.comandas.id = p_comanda_id
-    RETURNING public.comandas.id, public.comandas.status, public.comandas.forma_pagamento;
+    SET status = 'fechada', forma_pagamento = p_forma_pagamento
+    WHERE id = p_comanda_id;
 
-    -- Sincroniza o método de pagamento nas vendas vinculadas
+    -- 2. Sincroniza Vendas Vinculadas
     UPDATE public.sales 
     SET payment_method = CASE 
-        WHEN p_forma_pagamento = 'dinheiro' THEN 'cash'::public.sales.payment_method
-        WHEN p_forma_pagamento = 'pix' THEN 'pix'::public.sales.payment_method
-        WHEN p_forma_pagamento = 'cartao' THEN 'card'::public.sales.payment_method
-        ELSE 'cash'::public.sales.payment_method
+        WHEN p_forma_pagamento IN ('dinheiro', 'cash') THEN 'cash'::public.sales.payment_method
+        WHEN p_forma_pagamento IN ('cartao', 'card') THEN 'card'::public.sales.payment_method
+        ELSE 'pix'::public.sales.payment_method
     END
     WHERE comanda_id = p_comanda_id;
+
+    -- 3. Finaliza Itens no KDS/BDS (Garante que saiam do painel)
+    UPDATE public.sale_items 
+    SET status = 'pronto' 
+    WHERE comanda_id = p_comanda_id AND status != 'pronto';
+
+    RETURN jsonb_build_object('success', true);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Função: Baixa de Estoque
-CREATE OR REPLACE FUNCTION public.decrement_stock(p_product_id UUID, p_quantity INTEGER)
-RETURNS VOID AS $$
+-- Funções de Produção
+CREATE OR REPLACE FUNCTION public.iniciar_preparo_item(p_item_id UUID) RETURNS VOID AS $$
 BEGIN
-    UPDATE public.products
-    SET stock_qty = stock_qty - p_quantity
-    WHERE id = p_product_id;
+    UPDATE public.sale_items SET status = 'em_preparo' WHERE id = p_item_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 3. FUNÇÕES DE PRODUÇÃO (KDS / BDS)
--- -----------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION public.iniciar_preparo_item(p_item_id UUID)
-RETURNS VOID AS $$
+CREATE OR REPLACE FUNCTION public.finalizar_preparo_item(p_item_id UUID) RETURNS VOID AS $$
 BEGIN
-    UPDATE public.sale_items
-    SET status = 'em_preparo'
-    WHERE id = p_item_id;
+    UPDATE public.sale_items SET status = 'pronto' WHERE id = p_item_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-CREATE OR REPLACE FUNCTION public.finalizar_preparo_item(p_item_id UUID)
-RETURNS VOID AS $$
-BEGIN
-    UPDATE public.sale_items
-    SET status = 'pronto'
-    WHERE id = p_item_id;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- 4. FUNÇÕES DE GOVERNANÇA E ACESSO
--- -----------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION public.get_user_bootstrap_status()
-RETURNS JSONB AS $$
-DECLARE
-    v_user_id UUID := auth.uid();
-    v_has_store BOOLEAN;
-    v_is_member BOOLEAN;
-    v_is_admin BOOLEAN;
-BEGIN
-    SELECT EXISTS (SELECT 1 FROM public.stores WHERE user_id = v_user_id) INTO v_has_store;
-    SELECT EXISTS (SELECT 1 FROM public.store_members WHERE user_id = v_user_id) INTO v_is_member;
-    SELECT is_admin FROM public.users WHERE id = v_user_id INTO v_is_admin;
-
-    RETURN jsonb_build_object(
-        'has_store', v_has_store,
-        'is_member', v_is_member,
-        'is_admin', COALESCE(v_is_admin, false)
-    );
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
-CREATE OR REPLACE FUNCTION public.get_store_access_status(p_store_id UUID)
-RETURNS JSONB AS $$
-DECLARE
-    v_access RECORD;
-BEGIN
-    SELECT * INTO v_access FROM public.store_access WHERE store_id = p_store_id LIMIT 1;
-
-    IF v_access IS NULL THEN
-        RETURN jsonb_build_object(
-            'acesso_liberado', false,
-            'plano_nome', 'Sem Plano',
-            'mensagem', 'Escolha um plano para começar.'
-        );
-    END IF;
-
-    RETURN jsonb_build_object(
-        'acesso_liberado', (v_access.status_acesso = 'ativo' AND v_access.data_fim_acesso > now()),
-        'data_fim_acesso', v_access.data_fim_acesso,
-        'plano_nome', v_access.plano_nome,
-        'plano_tipo', v_access.plano_tipo,
-        'mensagem', CASE 
-            WHEN v_access.data_fim_acesso < now() THEN 'Seu plano expirou.'
-            ELSE 'Acesso liberado.'
-        END
-    );
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
-CREATE OR REPLACE FUNCTION public.admin_grant_store_access(
-    p_store_id UUID, 
-    p_plano_tipo TEXT, 
-    p_duracao_dias INTEGER,
-    p_origem TEXT,
-    p_renovavel BOOLEAN
-) RETURNS VOID AS $$
-BEGIN
-    IF NOT (SELECT is_admin FROM public.users WHERE id = auth.uid()) THEN
-        RAISE EXCEPTION 'not admin';
-    END IF;
-
-    INSERT INTO public.store_access (
-        store_id, 
-        plano_tipo, 
-        plano_nome, 
-        data_fim_acesso, 
-        status_acesso, 
-        origem, 
-        renovavel
-    )
-    VALUES (
-        p_store_id, 
-        p_plano_tipo, 
-        initcap(p_plano_tipo), 
-        now() + (p_duracao_dias || ' days')::interval, 
-        'ativo', 
-        p_origem, 
-        p_renovavel
-    )
-    ON CONFLICT (store_id) DO UPDATE SET
-        plano_tipo = EXCLUDED.plano_tipo,
-        plano_nome = EXCLUDED.plano_nome,
-        data_fim_acesso = EXCLUDED.data_fim_acesso,
-        status_acesso = 'ativo',
-        origem = EXCLUDED.origem,
-        renovavel = EXCLUDED.renovavel;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- 5. VIEWS DE MONITORAMENTO (Recriadas com CASCADE para evitar erro 42P16)
+-- 4. VIEWS DE MONITORAMENTO
 -- -----------------------------------------------------------------------------
 
 CREATE VIEW public.v_comandas_totais AS
@@ -243,9 +158,9 @@ SELECT
     c.mesa,
     c.status,
     c.cliente_nome,
-    COALESCE(SUM(s.total_cents), 0)::INTEGER AS total_cents
+    COALESCE(SUM(si.subtotal_cents), 0)::INTEGER AS total_cents
 FROM public.comandas c
-LEFT JOIN public.sales s ON c.id = s.comanda_id
+LEFT JOIN public.sale_items si ON c.id = si.comanda_id
 GROUP BY c.id, c.store_id, c.numero, c.mesa, c.status, c.cliente_nome;
 
 CREATE VIEW public.v_painel_cozinha AS
@@ -260,9 +175,10 @@ SELECT
     si.created_at,
     c.store_id
 FROM public.sale_items si
-JOIN public.sales s ON si.sale_id = s.id
-JOIN public.comandas c ON s.comanda_id = c.id
-WHERE si.destino_preparo = 'cozinha' AND si.status != 'pronto' AND c.status != 'fechada';
+JOIN public.comandas c ON si.comanda_id = c.id
+WHERE si.destino_preparo = 'cozinha' 
+  AND si.status != 'pronto' 
+  AND c.status != 'fechada';
 
 CREATE VIEW public.v_painel_bar AS
 SELECT 
@@ -276,22 +192,19 @@ SELECT
     si.created_at,
     c.store_id
 FROM public.sale_items si
-JOIN public.sales s ON si.sale_id = s.id
-JOIN public.comandas c ON s.comanda_id = c.id
-WHERE si.destino_preparo = 'bar' AND si.status != 'pronto' AND c.status != 'fechada';
+JOIN public.comandas c ON si.comanda_id = c.id
+WHERE si.destino_preparo = 'bar' 
+  AND si.status != 'pronto' 
+  AND c.status != 'fechada';
 
--- 6. PERMISSÕES FINAIS
+-- 5. PERMISSÕES
 -- -----------------------------------------------------------------------------
+GRANT EXECUTE ON FUNCTION public.abrir_comanda TO authenticated;
+GRANT EXECUTE ON FUNCTION public.adicionar_item_comanda TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION public.fechar_comanda TO authenticated;
+GRANT EXECUTE ON FUNCTION public.iniciar_preparo_item TO authenticated;
+GRANT EXECUTE ON FUNCTION public.finalizar_preparo_item TO authenticated;
 
-GRANT EXECUTE ON FUNCTION public.abrir_comanda(uuid, text, text, text, text) TO anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.fechar_comanda(uuid, text) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.decrement_stock(uuid, integer) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.iniciar_preparo_item(uuid) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.finalizar_preparo_item(uuid) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.get_user_bootstrap_status() TO authenticated;
-GRANT EXECUTE ON FUNCTION public.get_store_access_status(uuid) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.admin_grant_store_access(uuid, text, integer, text, boolean) TO authenticated;
-
+GRANT SELECT ON public.v_comandas_totais TO authenticated;
 GRANT SELECT ON public.v_painel_cozinha TO authenticated;
 GRANT SELECT ON public.v_painel_bar TO authenticated;
-GRANT SELECT ON public.v_comandas_totais TO authenticated;
