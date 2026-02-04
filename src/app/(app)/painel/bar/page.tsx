@@ -1,9 +1,5 @@
-'use client';
 
-/**
- * @fileOverview Painel de Bar (BDS) - Versão Sincronizada por Item.
- * Consome exclusivamente a view v_painel_bar.
- */
+'use client';
 
 import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/components/auth-provider';
@@ -48,16 +44,7 @@ export default function BarPage() {
 
     const channel = supabase
       .channel('bds_sync')
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'comanda_itens' 
-      }, () => fetchPedidos())
-      .on('postgres_changes', { 
-        event: 'UPDATE', 
-        schema: 'public', 
-        table: 'comandas'
-      }, () => fetchPedidos())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'comanda_itens' }, () => fetchPedidos())
       .subscribe();
 
     return () => { 
@@ -81,7 +68,6 @@ export default function BarPage() {
     try {
       const { error } = await supabase.rpc('concluir_item', { p_item_id: itemId });
       if (error) throw error;
-      
       setPedidos(prev => prev.filter(p => p.item_id !== itemId));
       toast({ title: 'Drink pronto!' });
     } catch (err: any) {
@@ -129,13 +115,10 @@ export default function BarPage() {
                   </div>
                 </div>
                 <div className={`flex flex-col items-end gap-1 font-black uppercase text-[10px] ${isLate ? 'text-red-600' : 'text-muted-foreground'}`}>
-                  <div className="flex items-center gap-1.5">
-                    <Clock className="h-3 w-3" /> {elapsed} min
-                  </div>
+                  <div className="flex items-center gap-1.5"><Clock className="h-3 w-3" /> {elapsed} min</div>
                   {isLate && <Badge className="bg-red-600 text-[8px] h-4 px-1 gap-1 border-none shadow-lg shadow-red-200">ATRASADO</Badge>}
                 </div>
               </div>
-              
               <CardContent className="p-8 space-y-8">
                 <div className="flex justify-between items-start">
                   <div className="space-y-1">
@@ -143,34 +126,22 @@ export default function BarPage() {
                     <Badge variant="secondary" className="text-[10px] font-black uppercase tracking-widest">{p.status?.replace('_', ' ')}</Badge>
                   </div>
                   <div className={`h-16 w-16 rounded-2xl flex items-center justify-center border transition-colors ${isLate ? 'bg-red-600 text-white border-red-700 shadow-lg' : 'bg-cyan-50 text-cyan-600 border-cyan-100'}`}>
-                    <span className="text-4xl font-black">{p.quantidade}</span>
+                    <span className="text-4xl font-black">{p.qty}</span>
                   </div>
                 </div>
-
                 <div className="flex gap-3">
                   {p.status === 'pendente' ? (
-                    <Button className="flex-1 h-14 font-black uppercase tracking-widest text-xs" variant="outline" onClick={() => handleIniciar(p.item_id)}>
-                      <Play className="h-4 w-4 mr-2" /> Iniciar
-                    </Button>
+                    <Button className="flex-1 h-14 font-black uppercase tracking-widest text-xs" variant="outline" onClick={() => handleIniciar(p.item_id)}><Play className="h-4 w-4 mr-2" /> Iniciar</Button>
                   ) : (
-                    <Button 
-                      className={`flex-1 h-14 font-black uppercase tracking-widest text-xs transition-all ${isLate ? 'bg-red-600 hover:bg-red-700 shadow-xl shadow-red-300' : 'bg-cyan-600 hover:bg-cyan-700 shadow-lg shadow-cyan-100'}`} 
-                      onClick={() => handleConcluir(p.item_id)}
-                    >
-                      <CheckCircle2 className="h-4 w-4 mr-2" /> Concluir
-                    </Button>
+                    <Button className={`flex-1 h-14 font-black uppercase tracking-widest text-xs transition-all ${isLate ? 'bg-red-600 hover:bg-red-700 shadow-xl shadow-red-300' : 'bg-cyan-600 hover:bg-cyan-700 shadow-lg shadow-cyan-100'}`} onClick={() => handleConcluir(p.item_id)}><CheckCircle2 className="h-4 w-4 mr-2" /> Concluir</Button>
                   )}
                 </div>
               </CardContent>
             </Card>
           );
         })}
-
         {pedidos.length === 0 && (
-          <div className="col-span-full py-40 text-center opacity-20 border-4 border-dashed rounded-[40px]">
-            <History className="h-20 w-20 mx-auto text-cyan-600" />
-            <p className="text-xl font-black uppercase mt-4 text-foreground">Bar em Ordem</p>
-          </div>
+          <div className="col-span-full py-40 text-center opacity-20 border-4 border-dashed rounded-[40px]"><History className="h-20 w-20 mx-auto text-cyan-600" /><p className="text-xl font-black uppercase mt-4 text-foreground">Bar em Ordem</p></div>
         )}
       </div>
     </div>

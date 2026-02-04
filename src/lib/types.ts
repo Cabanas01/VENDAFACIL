@@ -91,7 +91,7 @@ export type SaleItem = {
   product_id: string;
   product_name_snapshot: string;
   product_barcode_snapshot?: string | null;
-  quantity: number;
+  qty: number;
   unit_price_cents: number;
   subtotal_cents: number;
 };
@@ -100,7 +100,7 @@ export type CartItem = {
   product_id: string;
   product_name_snapshot: string;
   product_barcode_snapshot?: string | null;
-  quantity: number;
+  qty: number;
   unit_price_cents: number;
   subtotal_cents: number;
   stock_qty: number;
@@ -131,8 +131,8 @@ export type ComandaItem = {
   comanda_id: string;
   product_id: string;
   product_name: string;
-  quantidade: number;
-  preco_unitario: number;
+  qty: number;
+  unit_price: number;
   status: 'pendente' | 'em_preparo' | 'pronto';
   destino_preparo: string;
   created_at: string;
@@ -141,7 +141,7 @@ export type ComandaItem = {
 };
 
 export type ComandaTotalView = {
-  id: string; // ID da comanda
+  id: string;
   store_id: string;
   numero: number;
   mesa: string | null;
@@ -156,7 +156,7 @@ export type PainelProducaoView = {
   comanda_numero: number;
   mesa: string | null;
   produto: string;
-  quantidade: number;
+  qty: number;
   status: string;
   created_at: string;
   prep_time_minutes: number;

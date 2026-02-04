@@ -1,9 +1,5 @@
-'use client';
 
-/**
- * @fileOverview Detalhe da Comanda - Fluxo de Fechamento e Pagamento.
- * Corrigido erro de "column qty does not exist" ao realizar lançamento.
- */
+'use client';
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -35,6 +31,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Input } from '@/components/ui/input';
 import type { ComandaItem, Product, ComandaTotalView, Customer, CartItem } from '@/lib/types';
 import { printReceipt } from '@/lib/print-receipt';
+import { addComandaItem } from '@/lib/add-comanda-item';
 
 const formatCurrency = (val: number) => 
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((val || 0) / 100);
@@ -42,7 +39,7 @@ const formatCurrency = (val: number) =>
 export default function ComandaDetailsPage() {
   const params = useParams();
   const id = params?.id as string;
-  const { products, refreshStatus, store, addSale } = useAuth();
+  const { products, store, addSale, refreshStatus } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -59,25 +56,23 @@ export default function ComandaDetailsPage() {
   const [isClosing, setIsClosing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Total calculado em tempo real via qty e unit_price
   const calculatedTotal = useMemo(() => {
-    return items.reduce((acc, item) => acc + (item.quantidade * item.preco_unitario), 0);
+    return items.reduce((acc, item) => acc + (item.qty * item.unit_price), 0);
   }, [items]);
 
   const fetchData = useCallback(async () => {
-    if (!id || id === 'undefined') {
+    if (!id) {
       setNotFound(true);
       setLoading(false);
       return;
     }
 
     try {
-      const [comandaRes, baseRes, itemsRes] = await Promise.all([
-        supabase.from('v_comandas_totais').select('*').eq('id', id).maybeSingle(),
+      const [baseRes, itemsRes] = await Promise.all([
         supabase.from('comandas').select('*').eq('id', id).maybeSingle(),
         supabase.from('comanda_itens').select('*').eq('comanda_id', id).order('created_at', { ascending: false })
       ]);
-
-      if (baseRes.error) throw baseRes.error;
 
       if (!baseRes.data) {
         setNotFound(true);
@@ -85,13 +80,13 @@ export default function ComandaDetailsPage() {
       }
 
       setComanda({
-        ...comandaRes.data,
         id: baseRes.data.id,
+        store_id: baseRes.data.store_id,
         numero: baseRes.data.numero,
         mesa: baseRes.data.mesa,
         status: baseRes.data.status,
         cliente_nome: baseRes.data.cliente_nome,
-        total: comandaRes.data?.total || 0
+        total: 0 // Será substituído pelo calculatedTotal na UI
       });
 
       setItems(itemsRes.data || []);
@@ -110,12 +105,9 @@ export default function ComandaDetailsPage() {
 
   useEffect(() => {
     fetchData();
-
     const channel = supabase.channel(`sync_comanda_${id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'comanda_itens', filter: `comanda_id=eq.${id}` }, () => fetchData())
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'comandas', filter: `id=eq.${id}` }, () => fetchData())
       .subscribe();
-
     return () => { supabase.removeChannel(channel); };
   }, [id, fetchData]);
 
@@ -128,25 +120,22 @@ export default function ComandaDetailsPage() {
   };
 
   const confirmOrder = async () => {
-    if (tempItems.length === 0 || isSubmitting) return;
+    if (tempItems.length === 0 || isSubmitting || !store || !comanda) return;
     setIsSubmitting(true);
     try {
-      // Ajuste crucial: nomes das colunas em português para casar com o schema do banco
-      const payload = tempItems.map(i => ({
-        product_id: i.product.id,
-        quantidade: i.quantity,
-        preco_unitario: i.product.price_cents,
-        notes: ''
-      }));
+      for (const i of tempItems) {
+        await addComandaItem({
+          storeId: store.id,
+          numeroComanda: comanda.numero,
+          productId: i.product.id,
+          productName: i.product.name,
+          qty: i.quantity,
+          unitPrice: i.product.price_cents,
+          destino: i.product.production_target || 'nenhum'
+        });
+      }
 
-      const { error } = await supabase.rpc('add_itens_from_table_link', {
-        p_comanda_id: id,
-        p_items: payload
-      });
-
-      if (error) throw error;
-
-      toast({ title: 'Pedido Lançado!', description: 'Itens adicionados com sucesso.' });
+      toast({ title: 'Pedido Lançado!' });
       setTempItems([]);
       setIsAdding(false);
       await fetchData();
@@ -165,9 +154,9 @@ export default function ComandaDetailsPage() {
         created_at: new Date().toISOString(),
         items: items.map(i => ({
           product_name_snapshot: i.product_name,
-          quantity: i.quantidade,
-          unit_price_cents: i.preco_unitario,
-          subtotal_cents: i.quantidade * i.preco_unitario
+          qty: i.qty,
+          unit_price_cents: i.unit_price,
+          subtotal_cents: i.qty * i.unit_price
         }))
       };
       
@@ -187,34 +176,22 @@ export default function ComandaDetailsPage() {
       const cartItems: CartItem[] = items.map(i => ({
         product_id: i.product_id,
         product_name_snapshot: i.product_name,
-        quantity: i.quantidade,
-        unit_price_cents: i.preco_unitario,
-        subtotal_cents: i.quantidade * i.preco_unitario,
+        qty: i.qty,
+        unit_price_cents: i.unit_price,
+        subtotal_cents: i.qty * i.unit_price,
         stock_qty: 999 
       }));
 
       const result = await addSale(cartItems, method, customer?.id || null);
-      
       if (!result.success) throw new Error(result.error);
 
-      const { error: updateError } = await supabase
-        .from('comandas')
-        .update({ status: 'fechada', closed_at: new Date().toISOString() })
-        .eq('id', comanda.id);
+      await supabase.from('comandas').update({ status: 'fechada', closed_at: new Date().toISOString() }).eq('id', comanda.id);
 
-      if (updateError) {
-        console.warn('[CLOSE_STATUS_SYNC_FAIL]', updateError);
-      }
-
-      toast({ title: 'Comanda Encerrada!', description: `Venda registrada com sucesso.` });
+      toast({ title: 'Comanda Encerrada!' });
       handlePrint(result.sale);
       router.push('/comandas');
     } catch (err: any) {
-      toast({ 
-        variant: 'destructive', 
-        title: 'Erro no Fechamento', 
-        description: err.message 
-      });
+      toast({ variant: 'destructive', title: 'Erro no Fechamento', description: err.message });
       setIsSubmitting(false);
     }
   };
@@ -228,14 +205,9 @@ export default function ComandaDetailsPage() {
 
   if (notFound) return (
     <div className="h-[60vh] flex flex-col items-center justify-center gap-6 text-center px-8">
-      <div className="p-6 bg-muted/20 rounded-full ring-8 ring-muted/5">
-        <AlertCircle className="h-12 w-12 text-muted-foreground opacity-40" />
-      </div>
-      <div className="space-y-2">
-        <h2 className="text-xl font-black uppercase tracking-tight">Comanda Indisponível</h2>
-        <p className="text-sm text-muted-foreground max-w-xs mx-auto font-medium">Verifique se o ID está correto ou se a comanda já foi fechada.</p>
-      </div>
-      <Button variant="outline" onClick={() => router.push('/comandas')} className="font-black uppercase text-[10px] tracking-widest px-8">Voltar para Lista</Button>
+      <AlertCircle className="h-12 w-12 text-muted-foreground opacity-40" />
+      <h2 className="text-xl font-black uppercase tracking-tight">Comanda Indisponível</h2>
+      <Button variant="outline" onClick={() => router.push('/comandas')}>Voltar para Lista</Button>
     </div>
   );
 
@@ -249,7 +221,7 @@ export default function ComandaDetailsPage() {
           <div>
             <h1 className="text-4xl font-black font-headline tracking-tighter uppercase leading-none">Comanda #{comanda?.numero}</h1>
             <div className="flex items-center gap-3 mt-2">
-              <Badge variant="outline" className="bg-primary/5 text-primary border-primary/10 font-black text-[10px] uppercase">STATUS: {comanda?.status?.toUpperCase() || 'ABERTA'}</Badge>
+              <Badge variant="outline" className="bg-primary/5 text-primary border-primary/10 font-black text-[10px] uppercase">STATUS: {comanda?.status?.toUpperCase()}</Badge>
               <span className="text-[10px] font-black uppercase text-muted-foreground flex items-center gap-1.5"><MapPin className="h-3 w-3" /> {comanda?.mesa || 'Balcão'}</span>
             </div>
           </div>
@@ -281,8 +253,8 @@ export default function ComandaDetailsPage() {
           </Card>
 
           {tempItems.length > 0 && (
-            <Card className="border-primary bg-primary/5 shadow-2xl animate-in slide-in-from-top-2 duration-500 ring-2 ring-primary/20">
-              <CardHeader className="py-3 border-b border-primary/10"><CardTitle className="text-[10px] font-black uppercase text-primary flex items-center gap-2"><Plus className="h-3 w-3" /> Itens para Lançar</CardTitle></CardHeader>
+            <Card className="border-primary bg-primary/5 shadow-2xl animate-in slide-in-from-top-2 duration-500">
+              <CardHeader className="py-3"><CardTitle className="text-[10px] font-black uppercase text-primary">Itens para Lançar</CardTitle></CardHeader>
               <CardContent className="p-4 space-y-4">
                 <div className="space-y-2">
                   {tempItems.map(i => (
@@ -292,7 +264,7 @@ export default function ComandaDetailsPage() {
                     </div>
                   ))}
                 </div>
-                <Button className="w-full h-14 font-black uppercase tracking-widest shadow-xl shadow-primary/20" onClick={confirmOrder} disabled={isSubmitting}>
+                <Button className="w-full h-14 font-black uppercase tracking-widest" onClick={confirmOrder} disabled={isSubmitting}>
                   {isSubmitting ? <Loader2 className="animate-spin mr-2 h-5 w-5" /> : <Send className="mr-2 h-4 w-4" />} Confirmar Lançamento
                 </Button>
               </CardContent>
@@ -302,7 +274,7 @@ export default function ComandaDetailsPage() {
           <Card className="border-none shadow-sm overflow-hidden">
             <CardHeader className="flex flex-row justify-between items-center bg-muted/10 border-b py-4 px-6">
               <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Consumo Registrado</CardTitle>
-              <Button size="sm" onClick={() => setIsAdding(true)} className="h-9 px-4 font-black uppercase text-[10px] tracking-widest shadow-lg shadow-primary/10"><Plus className="h-3 w-3 mr-1.5" /> Lançar Item</Button>
+              <Button size="sm" onClick={() => setIsAdding(true)} className="h-9 px-4 font-black uppercase text-[10px] tracking-widest"><Plus className="h-3 w-3 mr-1.5" /> Lançar Item</Button>
             </CardHeader>
             <div className="p-0">
               <Table>
@@ -316,8 +288,8 @@ export default function ComandaDetailsPage() {
                           <Badge className="text-[8px] h-4 px-1.5 uppercase font-black" variant={item.status === 'pronto' ? 'default' : 'secondary'}>{item.status}</Badge>
                         </div>
                       </TableCell>
-                      <TableCell className="text-center font-black text-xs px-6">x{item.quantidade}</TableCell>
-                      <TableCell className="text-right font-black text-primary px-6">{formatCurrency(item.quantidade * item.preco_unitario)}</TableCell>
+                      <TableCell className="text-center font-black text-xs px-6">x{item.qty}</TableCell>
+                      <TableCell className="text-right font-black text-primary px-6">{formatCurrency(item.qty * item.unit_price)}</TableCell>
                     </TableRow>
                   ))}
                   {items.length === 0 && (
@@ -355,47 +327,14 @@ export default function ComandaDetailsPage() {
           </div>
           
           <div className="p-6 space-y-3">
-            <Button 
-              type="button"
-              variant="outline" 
-              className="w-full h-16 justify-start text-sm font-black uppercase tracking-widest gap-4 border-2 bg-background hover:border-green-500 hover:bg-green-50 transition-all" 
-              onClick={() => handleCloseComanda('dinheiro')}
-              disabled={isSubmitting}
-            >
-              <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center shrink-0">
-                <CircleDollarSign className="h-6 w-6 text-green-600" />
-              </div> 
-              Dinheiro
+            <Button type="button" variant="outline" className="w-full h-16 justify-start text-sm font-black uppercase tracking-widest gap-4 border-2 bg-background hover:border-green-500 hover:bg-green-50 transition-all" onClick={() => handleCloseComanda('dinheiro')} disabled={isSubmitting}>
+              <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center shrink-0"><CircleDollarSign className="h-6 w-6 text-green-600" /></div> Dinheiro
             </Button>
-            <Button 
-              type="button"
-              variant="outline" 
-              className="w-full h-16 justify-start text-sm font-black uppercase tracking-widest gap-4 border-2 bg-background hover:border-cyan-500 hover:bg-cyan-50 transition-all" 
-              onClick={() => handleCloseComanda('pix')}
-              disabled={isSubmitting}
-            >
-              <div className="h-10 w-10 rounded-full bg-cyan-100 flex items-center justify-center shrink-0">
-                <QrCode className="h-6 w-6 text-cyan-600" />
-              </div> 
-              PIX
+            <Button type="button" variant="outline" className="w-full h-16 justify-start text-sm font-black uppercase tracking-widest gap-4 border-2 bg-background hover:border-cyan-500 hover:bg-cyan-50 transition-all" onClick={() => handleCloseComanda('pix')} disabled={isSubmitting}>
+              <div className="h-10 w-10 rounded-full bg-cyan-100 flex items-center justify-center shrink-0"><QrCode className="h-6 w-6 text-cyan-600" /></div> PIX
             </Button>
-            <Button 
-              type="button"
-              variant="outline" 
-              className="w-full h-16 justify-start text-sm font-black uppercase tracking-widest gap-4 border-2 bg-background hover:border-blue-500 hover:bg-blue-50 transition-all" 
-              onClick={() => handleCloseComanda('cartao')}
-              disabled={isSubmitting}
-            >
-              <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
-                <CreditCard className="h-6 w-6 text-blue-600" />
-              </div> 
-              Cartão
-            </Button>
-          </div>
-
-          <div className="p-4 bg-muted/10 text-center">
-            <Button type="button" variant="ghost" onClick={() => setIsClosing(false)} className="text-[10px] font-black uppercase tracking-widest opacity-50 hover:opacity-100" disabled={isSubmitting}>
-              Cancelar
+            <Button type="button" variant="outline" className="w-full h-16 justify-start text-sm font-black uppercase tracking-widest gap-4 border-2 bg-background hover:border-blue-500 hover:bg-blue-50 transition-all" onClick={() => handleCloseComanda('cartao')} disabled={isSubmitting}>
+              <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center shrink-0"><CreditCard className="h-6 w-6 text-blue-600" /></div> Cartão
             </Button>
           </div>
         </DialogContent>

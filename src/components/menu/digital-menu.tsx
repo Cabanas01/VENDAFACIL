@@ -1,9 +1,5 @@
-'use client';
 
-/**
- * @fileOverview Cardápio Digital (Autoatendimento) - Fluxo Contínuo e Identificado.
- * Corrigido erro de sincronização de nomes de colunas (quantidade e preco_unitario).
- */
+'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/client';
@@ -28,6 +24,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { addComandaItem } from '@/lib/add-comanda-item';
 
 const formatCurrency = (val: number) => 
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((val || 0) / 100);
@@ -42,8 +39,8 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
   
-  // Controle de Identidade
   const [comandaId, setComandaId] = useState<string | null>(null);
+  const [comandaNumero, setComandaNumero] = useState<number | null>(null);
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [showIdModal, setShowIdModal] = useState(false);
   const [customerData, setCustomerData] = useState({ name: '', phone: '', cpf: '' });
@@ -57,7 +54,6 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
         .eq('store_id', store.id)
         .eq('active', true)
         .order('category', { ascending: true });
-      
       setProducts(data || []);
     } finally {
       setLoading(false);
@@ -70,77 +66,59 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
     if (savedId) setCustomerId(savedId);
   }, [loadProducts, store.id]);
 
-  const categories = useMemo(() => {
-    return Array.from(new Set(products.map(p => p.category || 'Geral')));
-  }, [products]);
-
-  const filteredProducts = products.filter(p => 
-    p.name.toLowerCase().includes(search.toLowerCase()) || 
-    p.category?.toLowerCase().includes(search.toLowerCase())
-  );
-
+  const categories = useMemo(() => Array.from(new Set(products.map(p => p.category || 'Geral'))), [products]);
+  const filteredProducts = products.filter(p => p.name.toLowerCase().includes(search.toLowerCase()) || p.category?.toLowerCase().includes(search.toLowerCase()));
   const cartTotal = cart.reduce((acc, item) => acc + item.subtotal_cents, 0);
 
   const addToCart = (product: Product) => {
     setCart(prev => {
       const existing = prev.find(i => i.product_id === product.id);
-      if (existing) {
-        return prev.map(i => i.product_id === product.id 
-          ? { ...i, quantity: i.quantity + 1, subtotal_cents: (i.quantity + 1) * i.unit_price_cents } 
-          : i
-        );
-      }
-      return [...prev, {
-        product_id: product.id,
-        product_name_snapshot: product.name,
-        quantity: 1,
-        unit_price_cents: product.price_cents,
-        subtotal_cents: product.price_cents,
-        stock_qty: product.stock_qty,
-        notes: ''
-      }];
+      if (existing) return prev.map(i => i.product_id === product.id ? { ...i, qty: i.qty + 1, subtotal_cents: (i.qty + 1) * i.unit_price_cents } : i);
+      return [...prev, { product_id: product.id, product_name_snapshot: product.name, qty: 1, unit_price_cents: product.price_cents, subtotal_cents: product.price_cents, stock_qty: product.stock_qty, notes: '' }];
     });
   };
 
   const removeFromCart = (productId: string) => {
     setCart(prev => {
       const existing = prev.find(i => i.product_id === productId);
-      if (existing && existing.quantity > 1) {
-        return prev.map(i => i.product_id === productId 
-          ? { ...i, quantity: i.quantity - 1, subtotal_cents: (i.quantity - 1) * i.unit_price_cents } 
-          : i
-        );
-      }
+      if (existing && existing.qty > 1) return prev.map(i => i.product_id === productId ? { ...i, qty: i.qty - 1, subtotal_cents: (i.qty - 1) * i.unit_price_cents } : i);
       return prev.filter(i => i.product_id !== productId);
     });
   };
 
-  const executeOrderSubmission = async (targetCustomerId: string, targetComandaId: string) => {
+  const executeOrderSubmission = async (targetCustomerId: string) => {
     setIsSending(true);
     try {
-      // Ajuste crucial: nomes das colunas em português para casar com o schema do banco
-      const payload = cart.map(i => ({
-        product_id: i.product_id,
-        quantidade: i.quantity,
-        preco_unitario: i.unit_price_cents,
-        notes: i.notes || ''
-      }));
+      // 1. Garantir que temos o número da comanda para a mesa
+      const { data: comRes, error: comErr } = await supabase.rpc('get_or_create_comanda_by_table', { p_table_id: table.id });
+      if (comErr) throw comErr;
+      
+      const rawCom = Array.isArray(comRes) ? comRes[0] : comRes;
+      const numComanda = rawCom?.numero || rawCom?.comanda_numero;
+      
+      if (!numComanda) throw new Error('Falha ao localizar atendimento na mesa.');
 
-      const { error: orderErr } = await supabase.rpc('add_itens_from_table_link', {
-        p_comanda_id: targetComandaId,
-        p_items: payload
-      });
-
-      if (orderErr) throw orderErr;
+      // 2. Lançar itens um a um usando o utilitário oficial
+      for (const item of cart) {
+        const product = products.find(p => p.id === item.product_id);
+        await addComandaItem({
+          storeId: store.id,
+          numeroComanda: numComanda,
+          productId: item.product_id,
+          productName: item.product_name_snapshot,
+          qty: item.qty,
+          unitPrice: item.unit_price_cents,
+          destino: product?.production_target || 'nenhum'
+        });
+      }
 
       setCart([]);
       setIsCartOpen(false);
       setOrderSuccess(true);
       setTimeout(() => setOrderSuccess(false), 5000);
-      toast({ title: 'Pedido Enviado!', description: 'Sua solicitação está sendo preparada.' });
-
+      toast({ title: 'Pedido Enviado!' });
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Erro ao enviar pedido', description: err.message });
+      toast({ variant: 'destructive', title: 'Erro no Pedido', description: err.message });
     } finally {
       setIsSending(false);
     }
@@ -148,69 +126,34 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
 
   const handleCheckoutProcess = async () => {
     if (cart.length === 0 || isSending) return;
-
-    if (!customerId) {
-      setShowIdModal(true);
-      return;
-    }
-
-    setIsSending(true);
-    try {
-      let currentComandaId = comandaId;
-      if (!currentComandaId) {
-        const { data: comRes, error: comErr } = await supabase.rpc('get_or_create_comanda_by_table', {
-          p_table_id: table.id
-        });
-        if (comErr) throw comErr;
-        const rawCom = Array.isArray(comRes) ? comRes[0] : comRes;
-        currentComandaId = typeof rawCom === 'string' ? rawCom : (rawCom?.comanda_id || rawCom?.id);
-        if (!currentComandaId) throw new Error('Falha ao abrir atendimento.');
-        setComandaId(currentComandaId);
-      }
-
-      await executeOrderSubmission(customerId, currentComandaId);
-    } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Erro de Sincronização', description: err.message });
-      setIsSending(false);
-    }
+    if (!customerId) { setShowIdModal(true); return; }
+    await executeOrderSubmission(customerId);
   };
 
   const handleIdentifyCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerData.name || !customerData.phone || isIdentifying) return;
-
     setIsIdentifying(true);
     try {
-      let currentComandaId = comandaId;
-      if (!currentComandaId) {
-        const { data: comRes } = await supabase.rpc('get_or_create_comanda_by_table', { p_table_id: table.id });
-        const rawCom = Array.isArray(comRes) ? comRes[0] : comRes;
-        currentComandaId = typeof rawCom === 'string' ? rawCom : (rawCom?.comanda_id || rawCom?.id);
-        setComandaId(currentComandaId);
-      }
-
-      if (!currentComandaId) throw new Error('Não foi possível abrir o atendimento na mesa.');
+      const { data: comRes } = await supabase.rpc('get_or_create_comanda_by_table', { p_table_id: table.id });
+      const rawCom = Array.isArray(comRes) ? comRes[0] : comRes;
+      const finalComId = rawCom?.comanda_id || rawCom?.id;
 
       const { data: custRes, error: custErr } = await supabase.rpc('register_customer_on_table', {
-        p_comanda_id: currentComandaId,
+        p_comanda_id: finalComId,
         p_name: customerData.name,
         p_phone: customerData.phone,
         p_cpf: customerData.cpf || null
       });
 
       if (custErr) throw custErr;
-
       const rawCust = Array.isArray(custRes) ? custRes[0] : custRes;
-      const finalCustId = typeof rawCust === 'string' ? rawCust : (rawCust?.customer_id || rawCust?.id);
-      
-      if (!finalCustId) throw new Error('Falha ao gerar identificação.');
+      const finalCustId = rawCust?.customer_id || rawCust?.id;
 
       setCustomerId(finalCustId);
       localStorage.setItem(`vf_cust_${store.id}`, finalCustId);
       setShowIdModal(false);
-      
-      await executeOrderSubmission(finalCustId, currentComandaId);
-
+      await executeOrderSubmission(finalCustId);
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Falha na Identificação', description: err.message });
     } finally {
@@ -218,44 +161,33 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
     }
   };
 
-  if (loading) return (
-    <div className="h-screen flex flex-col items-center justify-center bg-white gap-4">
-      <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      <p className="font-black uppercase text-[10px] tracking-widest text-muted-foreground">Carregando Cardápio...</p>
-    </div>
-  );
+  if (loading) return <div className="h-screen flex flex-col items-center justify-center bg-white gap-4"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="font-black text-[10px] uppercase tracking-widest">Sincronizando...</p></div>;
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-32">
-      <header className="bg-white/80 backdrop-blur-md border-b sticky top-0 z-40 px-6 py-4 shadow-sm flex items-center justify-between">
+      <header className="bg-white border-b sticky top-0 z-40 px-6 py-4 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-3">
           <Avatar className="h-10 w-10 rounded-xl border border-primary/10 shadow-inner">
             <AvatarFallback className="bg-primary text-white font-black text-xs">{store.name?.substring(0,2).toUpperCase()}</AvatarFallback>
           </Avatar>
           <div className="flex flex-col">
-            <h1 className="text-sm font-black font-headline uppercase tracking-tighter leading-none">{store.name}</h1>
+            <h1 className="text-sm font-black uppercase tracking-tighter leading-none">{store.name}</h1>
             <span className="text-[10px] font-black uppercase text-primary tracking-widest mt-1">Mesa #{table.number}</span>
           </div>
         </div>
-        <Badge variant="outline" className="text-[8px] font-black uppercase text-green-600 bg-green-50 border-green-100">Digital</Badge>
+        <Badge variant="outline" className="text-[8px] font-black uppercase text-green-600 bg-green-50">Digital</Badge>
       </header>
 
       <div className="p-6 space-y-6">
-        <div className="relative group">
+        <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input 
-            placeholder="O que vamos pedir?" 
-            value={search} 
-            onChange={(e) => setSearch(e.target.value)} 
-            className="h-14 pl-12 rounded-2xl border-none shadow-xl shadow-slate-200/50 text-base"
-          />
+          <Input placeholder="Buscar no cardápio..." value={search} onChange={(e) => setSearch(e.target.value)} className="h-14 pl-12 rounded-2xl border-none shadow-xl shadow-slate-200/50" />
         </div>
 
         <div className="space-y-12">
           {categories.map(cat => {
             const catProducts = filteredProducts.filter(p => (p.category || 'Geral') === cat);
             if (catProducts.length === 0) return null;
-
             return (
               <section key={cat} className="space-y-4">
                 <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 pl-1">{cat}</h3>
@@ -263,32 +195,22 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
                   {catProducts.map(product => {
                     const cartItem = cart.find(i => i.product_id === product.id);
                     return (
-                      <Card 
-                        key={product.id} 
-                        className="border-none shadow-sm active:scale-[0.98] overflow-hidden bg-white"
-                        onClick={() => addToCart(product)}
-                      >
-                        <CardContent className="p-0 flex h-28">
-                          <div className="flex-1 p-4 flex flex-col justify-between">
+                      <Card key={product.id} className="border-none shadow-sm active:scale-[0.98] overflow-hidden bg-white" onClick={() => addToCart(product)}>
+                        <CardContent className="p-4 flex h-28">
+                          <div className="flex-1 flex flex-col justify-between">
                             <div className="space-y-1">
                               <h4 className="font-black text-sm uppercase tracking-tight line-clamp-1">{product.name}</h4>
-                              <div className="flex items-center gap-1.5 text-[9px] font-bold text-muted-foreground uppercase">
-                                <Clock className="h-2.5 w-2.5" /> {product.prep_time_minutes || 15} min
-                              </div>
+                              <div className="flex items-center gap-1.5 text-[9px] font-bold text-muted-foreground uppercase"><Clock className="h-2.5 w-2.5" /> {product.prep_time_minutes || 15} min</div>
                             </div>
                             <div className="flex items-center justify-between">
                               <span className="text-primary font-black text-lg tracking-tighter">{formatCurrency(product.price_cents)}</span>
                               {cartItem ? (
                                 <div className="flex items-center gap-3 bg-primary text-white rounded-full px-1 py-1 shadow-lg">
-                                  <Button size="icon" variant="ghost" className="h-8 w-8 rounded-full text-white" onClick={(e) => { e.stopPropagation(); removeFromCart(product.id); }}><Minus className="h-4 w-4" /></Button>
-                                  <span className="text-xs font-black w-4 text-center">{cartItem.quantity}</span>
-                                  <Button size="icon" variant="ghost" className="h-8 w-8 rounded-full text-white" onClick={(e) => { e.stopPropagation(); addToCart(product); }}><Plus className="h-4 w-4" /></Button>
+                                  <Button size="icon" variant="ghost" className="h-8 w-8 text-white" onClick={(e) => { e.stopPropagation(); removeFromCart(product.id); }}><Minus className="h-4 w-4" /></Button>
+                                  <span className="text-xs font-black w-4 text-center">{cartItem.qty}</span>
+                                  <Button size="icon" variant="ghost" className="h-8 w-8 text-white" onClick={(e) => { e.stopPropagation(); addToCart(product); }}><Plus className="h-4 w-4" /></Button>
                                 </div>
-                              ) : (
-                                <div className="h-10 w-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 border shadow-sm">
-                                  <Plus className="h-5 w-5" />
-                                </div>
-                              )}
+                              ) : <div className="h-10 w-10 rounded-full bg-slate-50 flex items-center justify-center border text-slate-400"><Plus className="h-5 w-5" /></div>}
                             </div>
                           </div>
                         </CardContent>
@@ -303,7 +225,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
       </div>
 
       {orderSuccess && (
-        <div className="fixed top-24 inset-x-6 z-50 animate-in slide-in-from-top-4 duration-500">
+        <div className="fixed top-24 inset-x-6 z-50 animate-in slide-in-from-top-4">
           <div className="bg-green-600 text-white p-4 rounded-2xl shadow-2xl flex items-center gap-4 border border-green-500">
             <CheckCircle2 className="h-6 w-6" />
             <div>
@@ -315,15 +237,9 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
       )}
 
       {cart.length > 0 && !isCartOpen && (
-        <div className="fixed bottom-8 inset-x-6 z-50 animate-in slide-in-from-bottom-4 duration-500">
-          <Button 
-            className="w-full h-16 rounded-2xl font-black uppercase text-[10px] tracking-[0.25em] shadow-2xl gap-4 flex justify-between px-8"
-            onClick={() => setIsCartOpen(true)}
-          >
-            <div className="flex items-center gap-3">
-              <ShoppingCart className="h-4 w-4" />
-              <span>Meu Carrinho</span>
-            </div>
+        <div className="fixed bottom-8 inset-x-6 z-50 animate-in slide-in-from-bottom-4">
+          <Button className="w-full h-16 rounded-2xl font-black uppercase text-[10px] tracking-[0.25em] shadow-2xl gap-4 flex justify-between px-8" onClick={() => setIsCartOpen(true)}>
+            <div className="flex items-center gap-3"><ShoppingCart className="h-4 w-4" /> <span>Meu Carrinho</span></div>
             <span className="text-base tracking-tighter">{formatCurrency(cartTotal)}</span>
           </Button>
         </div>
@@ -331,7 +247,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
 
       {isCartOpen && (
         <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-[100] flex flex-col justify-end">
-          <div className="bg-white rounded-t-[40px] max-h-[90vh] flex flex-col animate-in slide-in-from-bottom-8 duration-500">
+          <div className="bg-white rounded-t-[40px] max-h-[90vh] flex flex-col animate-in slide-in-from-bottom-8">
             <div className="p-8 border-b flex items-center justify-between">
               <div className="space-y-1">
                 <h2 className="text-2xl font-black font-headline uppercase tracking-tighter">Meu Pedido</h2>
@@ -339,43 +255,26 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
               </div>
               <Button variant="ghost" size="icon" className="h-12 w-12 rounded-full" onClick={() => setIsCartOpen(false)}><X className="h-6 w-6" /></Button>
             </div>
-
             <ScrollArea className="flex-1 px-8 py-6">
               <div className="space-y-8">
                 {cart.map(item => (
                   <div key={item.product_id} className="space-y-3">
                     <div className="flex justify-between items-center">
-                      <div className="flex-1">
-                        <h5 className="font-black text-sm uppercase tracking-tight">{item.product_name_snapshot}</h5>
-                        <p className="text-[10px] font-bold text-muted-foreground uppercase">{formatCurrency(item.unit_price_cents)}/un</p>
-                      </div>
+                      <div className="flex-1"><h5 className="font-black text-sm uppercase tracking-tight">{item.product_name_snapshot}</h5><p className="text-[10px] font-bold text-muted-foreground uppercase">{formatCurrency(item.unit_price_cents)}/un</p></div>
                       <div className="flex items-center bg-slate-50 rounded-xl h-10 p-1 border">
                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeFromCart(item.product_id)}><Minus className="h-3.5 w-3.5" /></Button>
-                        <span className="w-8 text-center text-xs font-black">{item.quantity}</span>
+                        <span className="w-8 text-center text-xs font-black">{item.qty}</span>
                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => addToCart(products.find(p => p.id === item.product_id)!)}><Plus className="h-3.5 w-3.5" /></Button>
                       </div>
                     </div>
-                    <Input 
-                      placeholder="Obs? (Ex: sem gelo)" 
-                      value={item.notes}
-                      onChange={(e) => setCart(prev => prev.map(i => i.product_id === item.product_id ? { ...i, notes: e.target.value } : i))}
-                      className="h-10 text-[11px] font-bold border-dashed bg-slate-50/50"
-                    />
+                    <Input placeholder="Alguma observação?" value={item.notes} onChange={(e) => setCart(prev => prev.map(i => i.product_id === item.product_id ? { ...i, notes: e.target.value } : i))} className="h-10 text-[11px] font-bold border-dashed bg-slate-50/50" />
                   </div>
                 ))}
               </div>
             </ScrollArea>
-
             <div className="p-8 bg-slate-50 border-t space-y-6">
-              <div className="flex justify-between items-end px-2">
-                <span className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Total</span>
-                <span className="text-4xl font-black tracking-tighter text-primary">{formatCurrency(cartTotal)}</span>
-              </div>
-              <Button 
-                className="w-full h-20 text-sm font-black uppercase tracking-[0.2em] shadow-2xl rounded-[24px]"
-                onClick={handleCheckoutProcess}
-                disabled={isSending}
-              >
+              <div className="flex justify-between items-end px-2"><span className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Total</span><span className="text-4xl font-black tracking-tighter text-primary">{formatCurrency(cartTotal)}</span></div>
+              <Button className="w-full h-20 text-sm font-black uppercase tracking-[0.2em] shadow-2xl rounded-[24px]" onClick={handleCheckoutProcess} disabled={isSending}>
                 {isSending ? <Loader2 className="h-6 w-6 animate-spin mr-3" /> : <><Send className="h-5 w-5 mr-3" /> Confirmar e Enviar Pedido</>}
               </Button>
             </div>
@@ -386,35 +285,16 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
       <Dialog open={showIdModal} onOpenChange={(open) => !isIdentifying && !isSending && setShowIdModal(open)}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl rounded-[32px]">
           <div className="bg-primary/5 p-10 text-center space-y-4 border-b border-primary/10">
-            <div className="mx-auto h-16 w-16 rounded-3xl bg-white shadow-xl flex items-center justify-center text-primary ring-8 ring-primary/5">
-              <UserCheck className="h-8 w-8" />
-            </div>
-            <div className="space-y-1">
-              <h1 className="text-2xl font-black font-headline uppercase tracking-tighter">Identificação</h1>
-              <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest px-8">
-                Informe seus dados para vincularmos o pedido à sua mesa.
-              </p>
-            </div>
+            <div className="mx-auto h-16 w-16 rounded-3xl bg-white shadow-xl flex items-center justify-center text-primary"><UserCheck className="h-8 w-8" /></div>
+            <div className="space-y-1"><h1 className="text-2xl font-black font-headline uppercase tracking-tighter">Identificação</h1><p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Informe seus dados para vincularmos o pedido.</p></div>
           </div>
           <div className="p-8">
             <form onSubmit={handleIdentifyCustomer} className="space-y-6">
               <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Nome Completo</label>
-                  <Input placeholder="Como devemos te chamar?" value={customerData.name} onChange={e => setCustomerData({...customerData, name: e.target.value})} className="h-14 font-bold border-muted-foreground/20 rounded-2xl" required />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">WhatsApp / Celular</label>
-                  <Input placeholder="(00) 00000-0000" value={customerData.phone} onChange={e => setCustomerData({...customerData, phone: e.target.value})} className="h-14 font-bold border-muted-foreground/20 rounded-2xl" required />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">CPF (Opcional)</label>
-                  <Input placeholder="000.000.000-00" value={customerData.cpf} onChange={e => setCustomerData({...customerData, cpf: e.target.value})} className="h-14 font-bold border-muted-foreground/20 rounded-2xl" />
-                </div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Nome Completo</label><Input placeholder="Como devemos te chamar?" value={customerData.name} onChange={e => setCustomerData({...customerData, name: e.target.value})} className="h-14 font-bold border-muted-foreground/20 rounded-2xl" required /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">WhatsApp</label><Input placeholder="(00) 00000-0000" value={customerData.phone} onChange={e => setCustomerData({...customerData, phone: e.target.value})} className="h-14 font-bold border-muted-foreground/20 rounded-2xl" required /></div>
               </div>
-              <Button type="submit" className="w-full h-16 rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl shadow-primary/20" disabled={isIdentifying || isSending}>
-                {isIdentifying ? <Loader2 className="animate-spin h-5 w-5" /> : 'Finalizar Pedido'}
-              </Button>
+              <Button type="submit" className="w-full h-16 rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl shadow-primary/20" disabled={isIdentifying || isSending}>{isIdentifying ? <Loader2 className="animate-spin h-5 w-5" /> : 'Finalizar Identificação'}</Button>
             </form>
           </div>
         </DialogContent>

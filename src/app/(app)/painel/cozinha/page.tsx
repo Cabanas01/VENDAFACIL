@@ -1,9 +1,5 @@
-'use client';
 
-/**
- * @fileOverview Painel de Cozinha (KDS) - Versão Sincronizada por Item.
- * Consome exclusivamente a view v_painel_cozinha.
- */
+'use client';
 
 import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/components/auth-provider';
@@ -46,19 +42,9 @@ export default function CozinhaPage() {
     fetchPedidos();
     const clockInterval = setInterval(() => setNow(new Date()), 30000);
 
-    // Escuta mudanças na tabela base para atualizar a VIEW
     const channel = supabase
       .channel('kds_sync')
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'comanda_itens' 
-      }, () => fetchPedidos())
-      .on('postgres_changes', { 
-        event: 'UPDATE', 
-        schema: 'public', 
-        table: 'comandas'
-      }, () => fetchPedidos())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'comanda_itens' }, () => fetchPedidos())
       .subscribe();
 
     return () => { 
@@ -82,8 +68,6 @@ export default function CozinhaPage() {
     try {
       const { error } = await supabase.rpc('concluir_item', { p_item_id: itemId });
       if (error) throw error;
-      
-      // Atualização otimista local para remover da fila imediatamente
       setPedidos(prev => prev.filter(p => p.item_id !== itemId));
       toast({ title: 'Item concluído!' });
     } catch (err: any) {
@@ -131,13 +115,10 @@ export default function CozinhaPage() {
                   </div>
                 </div>
                 <div className={`flex flex-col items-end gap-1 font-black uppercase text-[10px] ${isLate ? 'text-red-600' : 'text-muted-foreground'}`}>
-                  <div className="flex items-center gap-1.5">
-                    <Clock className="h-3 w-3" /> {elapsed} min
-                  </div>
+                  <div className="flex items-center gap-1.5"><Clock className="h-3 w-3" /> {elapsed} min</div>
                   {isLate && <Badge className="bg-red-600 text-[8px] h-4 px-1 gap-1 border-none shadow-lg shadow-red-200">ATRASADO</Badge>}
                 </div>
               </div>
-              
               <CardContent className="p-8 space-y-6">
                 <div className="flex justify-between items-start">
                   <div className="space-y-1">
@@ -145,34 +126,22 @@ export default function CozinhaPage() {
                     <Badge variant="secondary" className="text-[10px] font-black uppercase tracking-widest">{p.status?.replace('_', ' ')}</Badge>
                   </div>
                   <div className={`h-16 w-16 rounded-2xl flex items-center justify-center border transition-colors ${isLate ? 'bg-red-600 text-white border-red-700 shadow-lg' : 'bg-primary/10 text-primary border-primary/10'}`}>
-                    <span className="text-4xl font-black">{p.quantidade}</span>
+                    <span className="text-4xl font-black">{p.qty}</span>
                   </div>
                 </div>
-
                 <div className="flex gap-3">
                   {p.status === 'pendente' ? (
-                    <Button className="flex-1 h-14 font-black uppercase tracking-widest text-xs" variant="secondary" onClick={() => handleIniciar(p.item_id)}>
-                      <Play className="h-4 w-4 mr-2" /> Começar
-                    </Button>
+                    <Button className="flex-1 h-14 font-black uppercase tracking-widest text-xs" variant="secondary" onClick={() => handleIniciar(p.item_id)}><Play className="h-4 w-4 mr-2" /> Começar</Button>
                   ) : (
-                    <Button 
-                      className={`flex-1 h-14 font-black uppercase tracking-widest text-xs ${isLate ? 'bg-red-600 hover:bg-red-700 shadow-xl shadow-red-300' : 'shadow-lg shadow-primary/10'}`} 
-                      onClick={() => handleConcluir(p.item_id)}
-                    >
-                      <CheckCircle2 className="h-4 w-4 mr-2" /> Concluir
-                    </Button>
+                    <Button className={`flex-1 h-14 font-black uppercase tracking-widest text-xs ${isLate ? 'bg-red-600 hover:bg-red-700 shadow-xl shadow-red-300' : 'shadow-lg shadow-primary/10'}`} onClick={() => handleConcluir(p.item_id)}><CheckCircle2 className="h-4 w-4 mr-2" /> Concluir</Button>
                   )}
                 </div>
               </CardContent>
             </Card>
           );
         })}
-
         {pedidos.length === 0 && (
-          <div className="col-span-full py-40 text-center opacity-20 border-4 border-dashed rounded-[40px]">
-            <History className="h-20 w-20 mx-auto text-foreground" />
-            <p className="text-xl font-black uppercase mt-4 text-foreground">Fila de Cozinha Vazia</p>
-          </div>
+          <div className="col-span-full py-40 text-center opacity-20 border-4 border-dashed rounded-[40px]"><History className="h-20 w-20 mx-auto" /><p className="text-xl font-black uppercase mt-4">Fila de Cozinha Vazia</p></div>
         )}
       </div>
     </div>
