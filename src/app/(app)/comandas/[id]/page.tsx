@@ -56,40 +56,48 @@ export default function ComandaDetailsPage() {
   const [isClosing, setIsClosing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Cálculo de total local (Source of Truth)
+  // Cálculo de total local para maior precisão e rapidez
   const calculatedTotal = useMemo(() => {
     return items.reduce((acc, item) => acc + (item.qty * item.unit_price), 0);
   }, [items]);
 
   const fetchData = useCallback(async () => {
     if (!id) return;
+    setLoading(true);
+    
     try {
-      const [baseRes, itemsRes] = await Promise.all([
-        supabase.from('comandas').select('*').eq('id', id).maybeSingle(),
-        supabase.from('comanda_itens').select('*').eq('comanda_id', id).order('created_at', { ascending: false })
-      ]);
+      // 1. Buscar a comanda pelo ID da rota (RLS garantirá acesso)
+      const { data: baseData, error: baseErr } = await supabase
+        .from('comandas')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
 
-      if (!baseRes.data) {
+      if (baseErr || !baseData) {
         setNotFound(true);
         return;
       }
 
+      // 2. Buscar itens e cliente vinculados
+      const [itemsRes, custRes] = await Promise.all([
+        supabase.from('comanda_itens').select('*').eq('comanda_id', id).order('created_at', { ascending: false }),
+        baseData.customer_id ? supabase.from('customers').select('*').eq('id', baseData.customer_id).maybeSingle() : Promise.resolve({ data: null })
+      ]);
+
       setComanda({
-        id: baseRes.data.id,
-        store_id: baseRes.data.store_id,
-        numero: baseRes.data.numero,
-        mesa: baseRes.data.mesa,
-        status: baseRes.data.status,
-        cliente_nome: baseRes.data.cliente_nome,
-        total: 0 
+        id: baseData.id,
+        store_id: baseData.store_id,
+        numero: baseData.numero,
+        mesa: baseData.mesa,
+        status: baseData.status,
+        cliente_nome: baseData.cliente_nome,
+        total: 0 // Usaremos o calculado
       });
 
       setItems(itemsRes.data || []);
-      
-      if (baseRes.data.customer_id) {
-        const { data: custData } = await supabase.from('customers').select('*').eq('id', baseRes.data.customer_id).single();
-        setCustomer(custData);
-      }
+      setCustomer(custRes.data || null);
+      setNotFound(false);
+
     } catch (err) {
       console.error('[FETCH_ERROR]', err);
     } finally {
@@ -99,10 +107,13 @@ export default function ComandaDetailsPage() {
 
   useEffect(() => {
     fetchData();
+    
+    // Listener em tempo real para atualizações na comanda atual
     const channel = supabase.channel(`sync_comanda_${id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'comanda_itens', filter: `comanda_id=eq.${id}` }, () => fetchData())
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'comandas', filter: `id=eq.${id}` }, () => fetchData())
       .subscribe();
+      
     return () => { supabase.removeChannel(channel); };
   }, [id, fetchData]);
 
@@ -121,7 +132,6 @@ export default function ComandaDetailsPage() {
     if (tempItems.length === 0 || isSubmitting || !comanda) return;
     setIsSubmitting(true);
     try {
-      // 1. Lançar itens via UUID direto (Helper Administrativo)
       for (const i of tempItems) {
         await addComandaItemById({
           comandaId: comanda.id,
@@ -133,7 +143,6 @@ export default function ComandaDetailsPage() {
         });
       }
 
-      // 2. Transicionar status da comanda de forma resiliente
       await supabase
         .from('comandas')
         .update({ status: 'em_preparo' })
@@ -178,7 +187,9 @@ export default function ComandaDetailsPage() {
         stock_qty: 999 
       }));
 
-      const result = await addSale(cartItems, method, customer?.id || null);
+      const normalizedMethod = method === 'dinheiro' ? 'cash' : (method === 'cartao' ? 'card' : method);
+      const result = await addSale(cartItems, normalizedMethod, customer?.id || null);
+      
       if (!result.success) throw new Error(result.error);
 
       await supabase.from('comandas').update({ 
@@ -194,7 +205,7 @@ export default function ComandaDetailsPage() {
     }
   };
 
-  if (loading) return (
+  if (loading && !comanda) return (
     <div className="h-[60vh] flex flex-col items-center justify-center gap-4">
       <Loader2 className="animate-spin h-8 w-8 text-primary" />
       <p className="font-black uppercase text-[10px] tracking-widest text-muted-foreground animate-pulse">Sincronizando...</p>

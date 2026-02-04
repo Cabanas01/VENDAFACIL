@@ -21,7 +21,7 @@ export async function addComandaItemByNumero({
   unitPrice: number;
   destino: 'cozinha' | 'bar' | 'nenhum';
 }) {
-  const { data: comandaId, error: comandaError } = await supabase.rpc(
+  const { data, error: comandaError } = await supabase.rpc(
     'get_or_create_open_comanda',
     {
       p_store_id: storeId,
@@ -29,8 +29,16 @@ export async function addComandaItemByNumero({
     }
   );
 
-  if (comandaError || !comandaId) {
-    throw comandaError || new Error('Falha ao resolver comanda');
+  if (comandaError) {
+    console.error('[RPC_COMANDA_ERROR]', comandaError);
+    throw new Error('Não foi possível inicializar sua comanda.');
+  }
+
+  // A RPC pode retornar o ID direto ou um objeto com o ID
+  const comandaId = typeof data === 'string' ? data : (data?.comanda_id || data?.id);
+
+  if (!comandaId) {
+    throw new Error('Falha ao identificar atendimento ativo.');
   }
 
   const { error } = await supabase.from('comanda_itens').insert({

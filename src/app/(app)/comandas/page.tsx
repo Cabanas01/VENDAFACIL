@@ -1,10 +1,4 @@
-
 'use client';
-
-/**
- * @fileOverview Gestão de Atendimento e Autoatendimento (QR Code).
- * Ajustado para usar o mapa oficial de status: aberta, em_preparo, pronta, aguardando_pagamento, fechada.
- */
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useAuth } from '@/components/auth-provider';
@@ -17,24 +11,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Plus, 
   Search, 
-  Loader2, 
   ArrowRight,
   ClipboardList,
   MapPin,
   User,
-  QrCode,
   Copy,
   ExternalLink,
-  Trash2,
-  Sparkles,
-  Link2,
-  HelpCircle,
   RefreshCw
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useRouter } from 'next/navigation';
 import { CreateComandaDialog } from '@/components/comandas/create-comanda-dialog';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { ComandaTotalView, TableInfo } from '@/lib/types';
@@ -54,33 +41,30 @@ export default function ComandasPage() {
   const [activeTab, setActiveTab] = useState('abertas');
   
   const [isNewComandaOpen, setIsNewComandaOpen] = useState(false);
-  const [isNewTableOpen, setIsNewTableOpen] = useState(false);
-  const [newTableNumber, setNewTableNumber] = useState('');
-  const [isCreatingTable, setIsCreatingTable] = useState(false);
 
   const fetchData = useCallback(async (silent = false) => {
     if (!store?.id) return;
     if (!silent) setLoading(true);
 
     try {
-      // Filtramos por comandas que NÃO estão fechadas nem canceladas
-      const comandasQuery = supabase
+      const { data: comandasData, error: cmdErr } = await supabase
         .from('v_comandas_totais')
         .select('*')
         .eq('store_id', store.id)
         .in('status', ['aberta', 'em_preparo', 'pronta', 'aguardando_pagamento'])
         .order('numero', { ascending: true });
 
-      const tablesQuery = supabase
+      const { data: tablesData, error: tblErr } = await supabase
         .from('tables')
         .select('*')
         .eq('store_id', store.id)
         .order('number', { ascending: true });
 
-      const [comandasRes, tablesRes] = await Promise.all([comandasQuery, tablesQuery]);
+      if (cmdErr) console.warn('Erro ao carregar comandas:', cmdErr.message);
+      if (tblErr) console.warn('Erro ao carregar mesas:', tblErr.message);
 
-      setComandas(comandasRes.data || []);
-      setTables(tablesRes.data || []);
+      setComandas(comandasData || []);
+      setTables(tablesData || []);
     } catch (err) {
       console.error('[FETCH_FATAL]', err);
     } finally {
@@ -111,32 +95,20 @@ export default function ComandasPage() {
     )
   , [comandas, search]);
 
-  const handleManageComanda = (comanda: ComandaTotalView) => {
-    if (!comanda.id) return;
-    router.push(`/comandas/${comanda.id}`);
-  };
-
-  const handleCreateTable = async () => {
-    if (!store?.id || !newTableNumber || isCreatingTable) return;
-    setIsCreatingTable(true);
-
-    try {
-      const { error } = await supabase.rpc('create_table', {
-        p_store_id: store.id,
-        p_number: parseInt(newTableNumber)
+  const handleManageComanda = (comanda: any) => {
+    // Garantir que usamos o UUID (id ou comanda_id da view)
+    const comandaId = comanda.id || comanda.comanda_id;
+    
+    if (!comandaId) {
+      toast({ 
+        variant: 'destructive', 
+        title: 'Identificador não localizado', 
+        description: 'Não foi possível carregar o ID desta comanda.' 
       });
-
-      if (error) throw error;
-
-      toast({ title: 'Mesa Ativada!' });
-      setNewTableNumber('');
-      setIsNewTableOpen(false);
-      fetchData();
-    } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Erro ao cadastrar', description: err.message });
-    } finally {
-      setIsCreatingTable(false);
+      return;
     }
+    
+    router.push(`/comandas/${comandaId}`);
   };
 
   const handleCopyLink = (token: string) => {
@@ -169,7 +141,7 @@ export default function ComandasPage() {
           <div className="flex items-center gap-4 bg-background p-4 rounded-2xl border border-primary/5 shadow-sm">
             <Search className="h-4 w-4 text-muted-foreground ml-2" />
             <Input 
-              placeholder="Buscar..." 
+              placeholder="Buscar por número, mesa ou cliente..." 
               className="border-none shadow-none focus-visible:ring-0"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -238,7 +210,7 @@ export default function ComandasPage() {
                       </div>
                       <div>
                         <h4 className="font-black text-sm uppercase tracking-tight">Mesa #{table.number}</h4>
-                        <span className="text-[10px] font-mono text-muted-foreground opacity-60">Digital Ativo</span>
+                        <span className="text-[10px] font-mono text-muted-foreground opacity-60">Atendimento QR Code Ativo</span>
                       </div>
                     </div>
                     
@@ -259,6 +231,11 @@ export default function ComandasPage() {
                 </CardContent>
               </Card>
             ))}
+            {tables.length === 0 && !loading && (
+              <div className="py-20 text-center border-2 border-dashed rounded-3xl opacity-30">
+                <p className="text-xs font-black uppercase tracking-widest">Nenhuma mesa cadastrada no sistema</p>
+              </div>
+            )}
           </div>
         </TabsContent>
       </Tabs>

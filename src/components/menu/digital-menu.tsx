@@ -99,12 +99,12 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
     });
   };
 
-  const executeOrderSubmission = async (resolvedCustId?: string) => {
+  const executeOrderSubmission = async (resolvedCustId: string) => {
     setIsSending(true);
     try {
       let resolvedComandaId: string | null = null;
 
-      // 1. Lançar itens via número de mesa (Helper Público)
+      // 1. Lançar itens via número de mesa
       for (const item of cart) {
         const product = products.find(p => p.id === item.product_id);
         const cid = await addComandaItemByNumero({
@@ -119,7 +119,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
         if (!resolvedComandaId) resolvedComandaId = cid;
       }
 
-      // 2. Transicionar status da comanda
+      // 2. Transicionar status da comanda para preparo
       if (resolvedComandaId) {
         await supabase
           .from('comandas')
@@ -142,22 +142,33 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
 
   const handleCheckoutProcess = async () => {
     if (cart.length === 0 || isSending) return;
+    
+    // Se não houver cliente identificado, abre o modal. 
+    // O fluxo continuará após o sucesso da identificação.
     if (!customerId) { 
       setShowIdModal(true); 
       return; 
     }
+    
     await executeOrderSubmission(customerId);
   };
 
   const handleIdentifyCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerData.name || !customerData.phone || isIdentifying) return;
+    
     setIsIdentifying(true);
     try {
-      const { data: comRes } = await supabase.rpc('get_or_create_comanda_by_table', { p_table_id: table.id });
+      // 1. Garantir que existe uma comanda aberta para esta mesa
+      const { data: comRes, error: comErr } = await supabase.rpc('get_or_create_comanda_by_table', { p_table_id: table.id });
+      if (comErr) throw comErr;
+      
       const rawCom = Array.isArray(comRes) ? comRes[0] : comRes;
       const finalComId = rawCom?.comanda_id || rawCom?.id;
 
+      if (!finalComId) throw new Error('Não foi possível gerar seu atendimento.');
+
+      // 2. Registrar cliente vinculado à comanda
       const { data: custRes, error: custErr } = await supabase.rpc('register_customer_on_table', {
         p_comanda_id: finalComId,
         p_name: customerData.name,
@@ -166,14 +177,20 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
       });
 
       if (custErr) throw custErr;
+      
       const rawCust = Array.isArray(custRes) ? custRes[0] : custRes;
       const finalCustId = rawCust?.customer_id || rawCust?.id;
 
+      if (!finalCustId) throw new Error('Erro ao salvar identificação.');
+
+      // 3. Persistir localmente e seguir fluxo
       setCustomerId(finalCustId);
       localStorage.setItem(`vf_cust_${store.id}`, finalCustId);
       setShowIdModal(false);
       
+      // CONTINUAÇÃO AUTOMÁTICA DO PEDIDO
       await executeOrderSubmission(finalCustId);
+      
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Falha na Identificação', description: err.message });
     } finally {
@@ -313,7 +330,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
                 <Input placeholder="Seu Nome" value={customerData.name} onChange={e => setCustomerData({...customerData, name: e.target.value})} className="h-14 font-bold rounded-2xl" required />
                 <Input placeholder="WhatsApp" value={customerData.phone} onChange={e => setCustomerData({...customerData, phone: e.target.value})} className="h-14 font-bold rounded-2xl" required />
               </div>
-              <Button type="submit" className="w-full h-16 rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl shadow-primary/20" disabled={isIdentifying || isSending}>{isIdentifying ? <Loader2 className="animate-spin h-5 w-5" /> : 'Finalizar Identificação'}</Button>
+              <Button type="submit" className="w-full h-16 rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl shadow-primary/20" disabled={isIdentifying || isSending}>{isIdentifying ? <Loader2 className="animate-spin h-5 w-5" /> : 'Finalizar e Enviar Pedido'}</Button>
             </form>
           </div>
         </DialogContent>
