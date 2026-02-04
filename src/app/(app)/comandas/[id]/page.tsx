@@ -328,7 +328,7 @@ export default function ComandaDetailsPage() {
               </ScrollArea>
               <div className="p-8 bg-white border-t space-y-6">
                 <div className="flex justify-between items-end">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">SUBTOTAL</span>
+                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">SUBTOTAL</span>
                   <span className="text-3xl font-black text-primary tracking-tighter">
                     {formatCurrency(localCart.reduce((acc, i) => acc + i.subtotal_cents, 0))}
                   </span>
