@@ -13,6 +13,8 @@ type AddItemParams = {
 /**
  * Resolve a comanda aberta pelo número (Mesa) e insere o item.
  * Utilizado pelo Cardápio Digital (Autoatendimento).
+ * 
+ * REGRA: NUNCA atualiza o status da comanda aqui dentro.
  */
 export async function addComandaItem({
   storeId,
@@ -90,5 +92,4 @@ export async function addComandaItemById({
   if (error) throw error;
 }
 
-// Exportação de compatibilidade para evitar erros de "not a function"
 export { addComandaItem as addComandaItemByNumero };

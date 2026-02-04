@@ -69,7 +69,6 @@ export default function ComandaDetailsPage() {
         .maybeSingle();
 
       if (baseErr || !baseData) {
-        console.error('[FETCH_BASE_ERROR]', baseErr);
         setNotFound(true);
         return;
       }
@@ -126,7 +125,7 @@ export default function ComandaDetailsPage() {
         await addComandaItemById({
           comandaId: comanda.id,
           productId: i.product.id,
-          product_name: i.product.name,
+          productName: i.product.name,
           qty: i.quantity,
           unit_price: i.product.price_cents,
           destino: i.product.production_target || 'nenhum'
@@ -135,8 +134,7 @@ export default function ComandaDetailsPage() {
 
       await supabase.from('comandas')
         .update({ status: 'em_preparo' })
-        .eq('id', comanda.id)
-        .in('status', ['aberta', 'em_preparo']);
+        .eq('id', comanda.id);
 
       toast({ title: 'Itens Lançados!' });
       setTempItems([]);
@@ -172,7 +170,7 @@ export default function ComandaDetailsPage() {
     
     setIsSubmitting(true);
     try {
-      // 1. Double check de integridade no servidor
+      // 1. Double check de integridade
       await supabase.from('comandas')
         .update({ status: 'aguardando_pagamento' })
         .eq('id', comanda.id);
@@ -188,7 +186,7 @@ export default function ComandaDetailsPage() {
 
       const normalizedMethod = method === 'dinheiro' ? 'cash' : (method === 'cartao' ? 'card' : method);
       
-      // 2. Processar Venda (PDV) - Usando Server Action com bypass de admin se necessário
+      // 2. Processar Venda (PDV)
       const result = await addSale(cartItems, normalizedMethod, customer?.id || null);
       
       if (!result.success) {
@@ -209,8 +207,8 @@ export default function ComandaDetailsPage() {
       console.error('[FECHAMENTO_ERROR]', err);
       toast({ 
         variant: 'destructive', 
-        title: 'Não foi possível fechar', 
-        description: err.message || 'Erro de permissão ou estado da comanda inválido.' 
+        title: 'Não foi possível fechar a comanda', 
+        description: 'A comanda não está no estado correto para receber pagamento.' 
       });
     } finally {
       setIsSubmitting(false);

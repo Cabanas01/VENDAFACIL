@@ -1,5 +1,14 @@
 'use client';
 
+/**
+ * @fileOverview Cardápio Digital (Autoatendimento)
+ * 
+ * Implementa o Fluxo Oficial de 3 Etapas:
+ * 1. Ver Resumo (Confirmação Visual)
+ * 2. Identificar-se (Cadastro em Memória)
+ * 3. Confirmar e Enviar (Escrita no Banco)
+ */
+
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import type { Product, TableInfo, Store, CartItem } from '@/lib/types';
@@ -29,12 +38,6 @@ import { addComandaItem } from '@/lib/add-comanda-item';
 const formatCurrency = (val: number) => 
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((val || 0) / 100);
 
-enum CheckoutStep {
-  REVIEW = 1,
-  IDENTIFY = 2,
-  CONFIRM = 3
-}
-
 export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }) {
   const { toast } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
@@ -45,10 +48,10 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
   
-  const [step, setStep] = useState<CheckoutStep>(CheckoutStep.REVIEW);
+  // Controle de Fluxo (1: Resumo, 2: Identificação, 3: Confirmação)
+  const [orderStep, setOrderStep] = useState<1 | 2 | 3>(1);
   const [showIdModal, setShowIdModal] = useState(false);
   const [customerData, setCustomerData] = useState({ name: '', phone: '', cpf: '' });
-  const [hasIdentification, setHasIdentification] = useState(false);
 
   useEffect(() => {
     const loadProducts = async () => {
@@ -102,22 +105,22 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
   };
 
   const handleMainAction = async () => {
-    // 1. Apenas abre o resumo (sem tocar no banco)
-    if (step === CheckoutStep.REVIEW) {
+    // Passo 1: Abre Resumo
+    if (orderStep === 1) {
       setIsCartOpen(true);
-      setStep(CheckoutStep.IDENTIFY);
+      setOrderStep(2);
       return;
     }
 
-    // 2. Dispara o Modal de Identificação
-    if (step === CheckoutStep.IDENTIFY) {
-      setIsCartOpen(false); // REGRA: Fecha o resumo para abrir o ID modal como principal
+    // Passo 2: Fecha Resumo e Abre Identificação
+    if (orderStep === 2) {
+      setIsCartOpen(false);
       setShowIdModal(true);
       return;
     }
 
-    // 3. Envio Real do Pedido
-    if (step === CheckoutStep.CONFIRM) {
+    // Passo 3: Envio Real (Após identificação completa)
+    if (orderStep === 3) {
       await executeOrderSubmission();
     }
   };
@@ -126,21 +129,21 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
     e.preventDefault();
     if (!customerData.name || !customerData.phone) return;
     
-    setHasIdentification(true);
+    // Salva em memória e avança para o passo final
     setShowIdModal(false);
-    setStep(CheckoutStep.CONFIRM);
-    setIsCartOpen(true); // Reabre para confirmação final (Passo 3)
+    setOrderStep(3);
+    setIsCartOpen(true); // Reabre o resumo para o clique final
     toast({ title: 'Identificado!', description: 'Agora confirme seu pedido.' });
   };
 
   const executeOrderSubmission = async () => {
-    if (step !== CheckoutStep.CONFIRM || isSending) return;
+    if (orderStep !== 3 || isSending) return;
 
     setIsSending(true);
     try {
       let comandaId: string | null = null;
 
-      // Inserção sequencial atômica
+      // 1. Resolver Comanda e Inserir Itens
       for (const item of cart) {
         const product = products.find(p => p.id === item.product_id);
         const cid = await addComandaItem({
@@ -156,7 +159,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
       }
 
       if (comandaId) {
-        // Vínculo do cliente e mudança de status
+        // 2. Registrar Cliente no Atendimento
         await supabase.rpc('register_customer_on_table', {
           p_comanda_id: comandaId,
           p_name: customerData.name,
@@ -164,19 +167,28 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
           p_cpf: customerData.cpf || null
         });
 
-        // Transição segura para preparo
-        await supabase.from('comandas').update({ status: 'em_preparo' }).eq('id', comandaId);
+        // 3. Mudar Status para Preparo (Início do fluxo de produção)
+        await supabase.from('comandas')
+          .update({ status: 'em_preparo' })
+          .eq('id', comandaId)
+          .eq('status', 'aberta'); // Garante que não sobrescreve estados avançados
       }
 
+      // RESET TOTAL
       setCart([]);
       setIsCartOpen(false);
-      setStep(CheckoutStep.REVIEW);
+      setOrderStep(1);
       setOrderSuccess(true);
       setTimeout(() => setOrderSuccess(false), 5000);
-      toast({ title: 'Pedido Enviado!' });
+      toast({ title: 'Pedido Enviado com Sucesso!' });
 
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Falha no Envio', description: err.message });
+      console.error('[SUBMISSION_ERROR]', err);
+      toast({ 
+        variant: 'destructive', 
+        title: 'Falha no Envio', 
+        description: err.message || 'Erro de integridade no banco de dados.' 
+      });
     } finally {
       setIsSending(false);
     }
@@ -277,17 +289,18 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
           >
             <div className="flex items-center gap-3">
               <ShoppingCart className="h-4 w-4" /> 
-              <span>{step === CheckoutStep.CONFIRM ? 'Confirmar Envio' : 'Resumo do Pedido'}</span>
+              <span>{orderStep === 1 ? 'Ver Pedido' : orderStep === 2 ? 'Identificar-se' : 'Confirmar e Enviar'}</span>
             </div>
             <span className="text-base tracking-tighter">{formatCurrency(cartTotal)}</span>
           </Button>
         </div>
       )}
 
-      <Dialog open={isCartOpen} onOpenChange={(open) => { setIsCartOpen(open); if(!open) setStep(CheckoutStep.REVIEW); }}>
+      {/* MODAL 1: RESUMO DO PEDIDO */}
+      <Dialog open={isCartOpen} onOpenChange={(open) => { setIsCartOpen(open); if(!open) setOrderStep(1); }}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl rounded-t-[32px] sm:rounded-b-[32px]">
           <div className="p-8 border-b bg-muted/10">
-            <h2 className="text-2xl font-black font-headline uppercase tracking-tighter">Seu Pedido</h2>
+            <h2 className="text-2xl font-black font-headline uppercase tracking-tighter">Meu Pedido</h2>
             <p className="text-[10px] font-black uppercase text-primary tracking-widest">Mesa {table.number}</p>
           </div>
           <ScrollArea className="max-h-[40vh] p-8">
@@ -319,16 +332,17 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
             >
               {isSending ? (
                 <Loader2 className="h-6 w-6 animate-spin mr-3" />
-              ) : step === CheckoutStep.IDENTIFY ? (
-                <><UserCheck className="h-5 w-5 mr-3" /> Identificar-se para Pedir</>
+              ) : orderStep === 2 ? (
+                'Identificar-se para Pedir'
               ) : (
-                <><Send className="h-5 w-5 mr-3" /> Confirmar e Enviar Pedido</>
+                'Confirmar e Enviar Pedido'
               )}
             </Button>
           </div>
         </DialogContent>
       </Dialog>
 
+      {/* MODAL 2: IDENTIFICAÇÃO (Z-INDEX SUPERIOR) */}
       <Dialog open={showIdModal} onOpenChange={(open) => !isSending && setShowIdModal(open)}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl rounded-[32px] z-[9999]">
           <div className="bg-primary/5 p-10 text-center space-y-4 border-b border-primary/10">
