@@ -3,6 +3,8 @@
 /**
  * @fileOverview Cardápio Digital Público com Fluxo de 3 Etapas (Step-by-Step).
  * Garantia de zero transações no banco até a confirmação final.
+ * 
+ * Correção: Modais não se sobrepõem. Um fecha para o outro abrir.
  */
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -29,7 +31,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { addComandaItemById } from '@/lib/add-comanda-item';
+import { addComandaItemByNumero } from '@/lib/add-comanda-item';
 
 const formatCurrency = (val: number) => 
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((val || 0) / 100);
@@ -44,7 +46,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
   
-  // Controle de Fluxo (1: Lista, 2: Resumo, 3: Confirmar)
+  // Controle de Fluxo (1: Lista, 2: Identificar, 3: Confirmar)
   const [orderStep, setOrderStep] = useState<1 | 2 | 3>(1);
   const [showIdModal, setShowIdModal] = useState(false);
   const [customerData, setCustomerData] = useState({ name: '', phone: '', cpf: '' });
@@ -110,9 +112,10 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
       return;
     }
 
-    // 2. Abre modal de identificação se não houver dados
+    // 2. Abre modal de identificação (FECHA O RESUMO PARA NÃO SOBREPOR)
     if (orderStep === 2) {
       if (!hasIdentification) {
+        setIsCartOpen(false); // REGRA: Fecha o resumo antes
         setShowIdModal(true);
       } else {
         setOrderStep(3);
@@ -130,11 +133,12 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
     e.preventDefault();
     if (!customerData.name || !customerData.phone) return;
     
-    // REGRA: Apenas salva em memória e avança para a confirmação
+    // REGRA: Apenas salva em memória e reabre o resumo no Passo 3
     setHasIdentification(true);
     setShowIdModal(false);
     setOrderStep(3);
-    toast({ title: 'Dados salvos!', description: 'Agora confirme seu pedido.' });
+    setIsCartOpen(true); // Reabre o resumo para o passo final
+    toast({ title: 'Dados salvos!', description: 'Confirme seu pedido agora.' });
   };
 
   const executeOrderSubmission = async () => {
@@ -143,35 +147,43 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
     setIsSending(true);
     try {
       // 1. Resolve/Cria a Comanda no Banco
-      const { data: comRes, error: comErr } = await supabase.rpc('get_or_create_comanda_by_table', { 
-        p_table_id: table.id 
+      const comandaId = await addComandaItemByNumero({
+        storeId: store.id,
+        numeroComanda: table.number,
+        productId: cart[0].product_id,
+        productName: cart[0].product_name_snapshot,
+        qty: cart[0].qty,
+        unitPrice: cart[0].unit_price_cents,
+        destino: products.find(p => p.id === cart[0].product_id)?.production_target || 'nenhum'
       });
-      if (comErr) throw comErr;
-      
-      const rawCom = Array.isArray(comRes) ? comRes[0] : comRes;
-      const comandaId = rawCom?.comanda_id || rawCom?.id;
+
       if (!comandaId) throw new Error('Não foi possível inicializar seu atendimento.');
 
-      // 2. Registra o Cliente no Banco (Vinculado à Comanda)
-      const { error: custErr } = await supabase.rpc('register_customer_on_table', {
+      // 2. Registra o Cliente e Vincula
+      await supabase.rpc('register_customer_on_table', {
         p_comanda_id: comandaId,
         p_name: customerData.name,
         p_phone: customerData.phone,
         p_cpf: customerData.cpf || null
       });
-      if (custErr) console.warn('Erro ao vincular cliente:', custErr.message);
 
-      // 3. Lança os itens
-      for (const item of cart) {
-        const product = products.find(p => p.id === item.product_id);
-        await addComandaItemById({
-          comandaId,
-          productId: item.product_id,
-          productName: item.product_name_snapshot,
-          qty: item.qty,
-          unitPrice: item.unit_price_cents,
-          destino: product?.production_target || 'nenhum'
-        });
+      // 3. Lança os itens restantes (se houver mais de 1)
+      if (cart.length > 1) {
+        const remainingItems = cart.slice(1);
+        for (const item of remainingItems) {
+          const product = products.find(p => p.id === item.product_id);
+          await supabase.from('comanda_itens').insert({
+            comanda_id: comandaId,
+            product_id: item.product_id,
+            product_name: item.product_name_snapshot,
+            qty: item.qty,
+            unit_price: item.unit_price_cents,
+            quantidade: item.qty,
+            preco_unitario: item.unit_price_cents,
+            destino_preparo: product?.production_target || 'nenhum',
+            status: 'pendente'
+          });
+        }
       }
 
       // 4. Muda status para produção
@@ -183,10 +195,10 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
       setOrderStep(1);
       setOrderSuccess(true);
       setTimeout(() => setOrderSuccess(false), 5000);
-      toast({ title: 'Pedido Enviado com Sucesso!' });
+      toast({ title: 'Pedido Enviado!' });
 
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Erro ao Enviar Pedido', description: err.message });
+      toast({ variant: 'destructive', title: 'Erro ao Enviar', description: err.message });
     } finally {
       setIsSending(false);
     }
@@ -195,7 +207,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
   if (loading) return (
     <div className="h-screen flex flex-col items-center justify-center bg-white gap-4">
       <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      <p className="font-black text-[10px] uppercase tracking-widest">Carregando Cardápio...</p>
+      <p className="font-black text-[10px] uppercase tracking-widest text-muted-foreground animate-pulse">Abrindo Cardápio...</p>
     </div>
   );
 
@@ -220,7 +232,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input 
-            placeholder="O que vamos pedir agora?" 
+            placeholder="O que vamos pedir hoje?" 
             value={search} 
             onChange={(e) => setSearch(e.target.value)} 
             className="h-14 pl-12 rounded-2xl border-none shadow-xl bg-white" 
@@ -273,7 +285,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
             <CheckCircle2 className="h-6 w-6" />
             <div>
               <p className="text-[10px] font-black uppercase tracking-widest">Pedido Enviado!</p>
-              <p className="text-[10px] font-bold opacity-80 uppercase leading-tight">Já estamos preparando tudo para você.</p>
+              <p className="text-[10px] font-bold opacity-80 uppercase leading-tight">Já estamos preparando para você.</p>
             </div>
           </div>
         </div>
@@ -297,7 +309,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
             <div className="p-8 border-b flex items-center justify-between">
               <div className="space-y-1">
                 <h2 className="text-2xl font-black font-headline uppercase tracking-tighter">Resumo do Pedido</h2>
-                <p className="text-[10px] font-black uppercase text-primary tracking-widest">Confirme os itens abaixo</p>
+                <p className="text-[10px] font-black uppercase text-primary tracking-widest">Confirme os itens selecionados</p>
               </div>
               <Button variant="ghost" size="icon" className="h-12 w-12 rounded-full" onClick={() => { setIsCartOpen(false); setOrderStep(1); }}><X className="h-6 w-6" /></Button>
             </div>
@@ -322,7 +334,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
             </ScrollArea>
             <div className="p-8 bg-slate-50 border-t space-y-6">
               <div className="flex justify-between items-end px-2">
-                <span className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Total Acumulado</span>
+                <span className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Total do Pedido</span>
                 <span className="text-4xl font-black tracking-tighter text-slate-950">{formatCurrency(cartTotal)}</span>
               </div>
               <Button 
@@ -344,14 +356,14 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
       )}
 
       <Dialog open={showIdModal} onOpenChange={(open) => !isSending && setShowIdModal(open)}>
-        <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl rounded-[32px]">
+        <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl rounded-[32px] z-[200]">
           <div className="bg-primary/5 p-10 text-center space-y-4 border-b border-primary/10">
             <div className="mx-auto h-16 w-16 rounded-3xl bg-white shadow-xl flex items-center justify-center text-primary">
               <UserCheck className="h-8 w-8" />
             </div>
             <div className="space-y-1">
-              <h1 className="text-2xl font-black font-headline uppercase tracking-tighter">Identificação</h1>
-              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Informe seus dados para o atendimento</p>
+              <h1 className="text-2xl font-black font-headline uppercase tracking-tighter">Sua Identificação</h1>
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Informe seus dados para prosseguir</p>
             </div>
           </div>
           <div className="p-8">
@@ -383,7 +395,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
                 className="w-full h-16 rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl shadow-primary/20" 
                 disabled={isSending}
               >
-                <CheckCircle2 className="h-5 w-5 mr-2" /> Salvar e Continuar
+                <CheckCircle2 className="h-5 w-5 mr-2" /> Salvar e Ver Resumo
               </Button>
             </form>
           </div>

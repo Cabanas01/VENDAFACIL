@@ -2,6 +2,8 @@
 
 /**
  * @fileOverview Gerenciamento de Comanda (Painel Admin)
+ * 
+ * Implementa fluxo de fechamento seguro com transição de estados obrigatória.
  */
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
@@ -142,11 +144,12 @@ export default function ComandaDetailsPage() {
         });
       }
 
-      // SOLUÇÃO DEFINITIVA: Remove .eq('status', 'aberta') para evitar erro de constraint se já estiver em preparo
+      // Transição segura de status
       await supabase
         .from('comandas')
         .update({ status: 'em_preparo' })
-        .eq('id', comanda.id);
+        .eq('id', comanda.id)
+        .in('status', ['aberta', 'em_preparo']);
 
       toast({ title: 'Pedido Lançado!' });
       setTempItems([]);
@@ -163,7 +166,13 @@ export default function ComandaDetailsPage() {
     if (!comanda) return;
     setIsSubmitting(true);
     try {
-      await supabase.from('comandas').update({ status: 'aguardando_pagamento' }).eq('id', comanda.id);
+      // REGRA: Garante estado intermediário para evitar erro de constraint
+      await supabase
+        .from('comandas')
+        .update({ status: 'aguardando_pagamento' })
+        .eq('id', comanda.id)
+        .in('status', ['aberta', 'em_preparo', 'pronta']);
+        
       setIsClosing(true);
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Erro', description: err.message });
@@ -193,16 +202,20 @@ export default function ComandaDetailsPage() {
       
       if (!result.success) throw new Error(result.error);
 
-      // 2. Marcar Comanda como Fechada após sucesso do pagamento
+      // 2. Marcar Comanda como Fechada (Somente após sucesso do PDV)
       await supabase.from('comandas').update({ 
         status: 'fechada', 
         closed_at: new Date().toISOString() 
-      }).eq('id', comanda.id);
+      }).eq('id', comanda.id).eq('status', 'aguardando_pagamento');
 
       toast({ title: 'Comanda Encerrada!' });
       router.push('/comandas');
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Erro no Fechamento', description: err.message });
+      toast({ 
+        variant: 'destructive', 
+        title: 'Não foi possível fechar a comanda', 
+        description: 'A comanda não está no estado correto para pagamento ou houve erro no financeiro.' 
+      });
       setIsSubmitting(false);
     }
   };
