@@ -2,6 +2,7 @@
 
 /**
  * @fileOverview Cardápio Digital Público com Fluxo de 3 Etapas (Step-by-Step).
+ * Garantia de zero transações no banco até a confirmação final.
  */
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -28,7 +29,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { addComandaItem } from '@/lib/add-comanda-item';
+import { addComandaItemById } from '@/lib/add-comanda-item';
 
 const formatCurrency = (val: number) => 
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((val || 0) / 100);
@@ -43,12 +44,11 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
   
-  // Controle de Fluxo Final (Definitivo)
+  // Controle de Fluxo (1: Lista, 2: Resumo, 3: Confirmar)
   const [orderStep, setOrderStep] = useState<1 | 2 | 3>(1);
-  const [customerId, setCustomerId] = useState<string | null>(null);
   const [showIdModal, setShowIdModal] = useState(false);
   const [customerData, setCustomerData] = useState({ name: '', phone: '', cpf: '' });
-  const [isIdentifying, setIsIdentifying] = useState(false);
+  const [hasIdentification, setHasIdentification] = useState(false);
 
   const loadProducts = useCallback(async () => {
     try {
@@ -103,14 +103,16 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
   };
 
   const handleMainAction = async () => {
+    // 1. Apenas abre o resumo visual
     if (orderStep === 1) {
       setIsCartOpen(true);
       setOrderStep(2);
       return;
     }
 
+    // 2. Abre modal de identificação se não houver dados
     if (orderStep === 2) {
-      if (!customerId) {
+      if (!hasIdentification) {
         setShowIdModal(true);
       } else {
         setOrderStep(3);
@@ -118,48 +120,21 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
       return;
     }
 
+    // 3. Execução REAL do pedido
     if (orderStep === 3) {
       await executeOrderSubmission();
     }
   };
 
-  const handleIdentifyCustomer = async (e: React.FormEvent) => {
+  const handleIdentifyCustomer = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customerData.name || !customerData.phone || isIdentifying) return;
+    if (!customerData.name || !customerData.phone) return;
     
-    setIsIdentifying(true);
-    try {
-      const { data: comRes, error: comErr } = await supabase.rpc('get_or_create_comanda_by_table', { p_table_id: table.id });
-      if (comErr) throw comErr;
-      
-      const rawCom = Array.isArray(comRes) ? comRes[0] : comRes;
-      const finalComId = rawCom?.comanda_id || rawCom?.id;
-
-      if (!finalComId) throw new Error('Não foi possível inicializar seu atendimento.');
-
-      const { data: custRes, error: custErr } = await supabase.rpc('register_customer_on_table', {
-        p_comanda_id: finalComId,
-        p_name: customerData.name,
-        p_phone: customerData.phone,
-        p_cpf: customerData.cpf || null
-      });
-
-      if (custErr) throw custErr;
-      
-      const rawCust = Array.isArray(custRes) ? custRes[0] : custRes;
-      const finalCustId = rawCust?.customer_id || rawCust?.id;
-
-      if (!finalCustId) throw new Error('Erro ao salvar identificação.');
-
-      setCustomerId(finalCustId);
-      setShowIdModal(false);
-      setOrderStep(3);
-      toast({ title: 'Identificado!' });
-    } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Falha na Identificação', description: err.message });
-    } finally {
-      setIsIdentifying(false);
-    }
+    // REGRA: Apenas salva em memória e avança para a confirmação
+    setHasIdentification(true);
+    setShowIdModal(false);
+    setOrderStep(3);
+    toast({ title: 'Dados salvos!', description: 'Agora confirme seu pedido.' });
   };
 
   const executeOrderSubmission = async () => {
@@ -167,38 +142,51 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
 
     setIsSending(true);
     try {
-      let comandaId: string | null = null;
+      // 1. Resolve/Cria a Comanda no Banco
+      const { data: comRes, error: comErr } = await supabase.rpc('get_or_create_comanda_by_table', { 
+        p_table_id: table.id 
+      });
+      if (comErr) throw comErr;
+      
+      const rawCom = Array.isArray(comRes) ? comRes[0] : comRes;
+      const comandaId = rawCom?.comanda_id || rawCom?.id;
+      if (!comandaId) throw new Error('Não foi possível inicializar seu atendimento.');
 
+      // 2. Registra o Cliente no Banco (Vinculado à Comanda)
+      const { error: custErr } = await supabase.rpc('register_customer_on_table', {
+        p_comanda_id: comandaId,
+        p_name: customerData.name,
+        p_phone: customerData.phone,
+        p_cpf: customerData.cpf || null
+      });
+      if (custErr) console.warn('Erro ao vincular cliente:', custErr.message);
+
+      // 3. Lança os itens
       for (const item of cart) {
         const product = products.find(p => p.id === item.product_id);
-        const cid = await addComandaItem({
-          storeId: store.id,
-          numeroComanda: table.number,
+        await addComandaItemById({
+          comandaId,
           productId: item.product_id,
           productName: item.product_name_snapshot,
           qty: item.qty,
           unitPrice: item.unit_price_cents,
           destino: product?.production_target || 'nenhum'
         });
-        if (!comandaId) comandaId = cid;
       }
 
-      // SOLUÇÃO DEFINITIVA: Remove .eq('status', 'aberta') para evitar erro de constraint
-      if (comandaId) {
-        await supabase
-          .from('comandas')
-          .update({ status: 'em_preparo' })
-          .eq('id', comandaId);
-      }
+      // 4. Muda status para produção
+      await supabase.from('comandas').update({ status: 'em_preparo' }).eq('id', comandaId);
 
+      // Sucesso Total
       setCart([]);
       setIsCartOpen(false);
       setOrderStep(1);
       setOrderSuccess(true);
       setTimeout(() => setOrderSuccess(false), 5000);
-      toast({ title: 'Pedido Enviado!' });
+      toast({ title: 'Pedido Enviado com Sucesso!' });
+
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Erro no Pedido', description: err.message });
+      toast({ variant: 'destructive', title: 'Erro ao Enviar Pedido', description: err.message });
     } finally {
       setIsSending(false);
     }
@@ -355,14 +343,14 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
         </div>
       )}
 
-      <Dialog open={showIdModal} onOpenChange={(open) => !isIdentifying && !isSending && setShowIdModal(open)}>
+      <Dialog open={showIdModal} onOpenChange={(open) => !isSending && setShowIdModal(open)}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl rounded-[32px]">
           <div className="bg-primary/5 p-10 text-center space-y-4 border-b border-primary/10">
             <div className="mx-auto h-16 w-16 rounded-3xl bg-white shadow-xl flex items-center justify-center text-primary">
               <UserCheck className="h-8 w-8" />
             </div>
             <div className="space-y-1">
-              <h1 className="text-2xl font-black font-headline uppercase tracking-tighter">Quase lá!</h1>
+              <h1 className="text-2xl font-black font-headline uppercase tracking-tighter">Identificação</h1>
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Informe seus dados para o atendimento</p>
             </div>
           </div>
@@ -393,9 +381,9 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
               <Button 
                 type="submit" 
                 className="w-full h-16 rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl shadow-primary/20" 
-                disabled={isIdentifying || isSending}
+                disabled={isSending}
               >
-                {isIdentifying ? <Loader2 className="animate-spin h-5 w-5 mr-2" /> : <><CheckCircle2 className="h-5 w-5 mr-2" /> Salvar e Continuar</>}
+                <CheckCircle2 className="h-5 w-5 mr-2" /> Salvar e Continuar
               </Button>
             </form>
           </div>
