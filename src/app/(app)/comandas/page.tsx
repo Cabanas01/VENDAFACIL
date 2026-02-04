@@ -3,6 +3,7 @@
 
 /**
  * @fileOverview Gestão de Atendimento e Autoatendimento (QR Code).
+ * Corrigido para garantir redirecionamento via UUID real da comanda.
  */
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
@@ -59,13 +60,13 @@ export default function ComandasPage() {
       const [comandasRes, tablesRes] = await Promise.all([
         supabase
           .from('v_comandas_totais')
-          .select('*')
+          .select('id, store_id, numero, mesa, status, total, cliente_nome')
           .eq('store_id', store.id)
           .eq('status', 'aberta')
           .order('numero', { ascending: true }),
         supabase
           .from('tables')
-          .select('*')
+          .select('id, store_id, number, status, public_token')
           .eq('store_id', store.id)
           .order('number', { ascending: true })
       ]);
@@ -96,11 +97,23 @@ export default function ComandasPage() {
 
   const filteredComandas = useMemo(() => 
     comandas.filter(c => 
-      c.numero.toString().includes(search) || 
+      c.numero?.toString().includes(search) || 
       (c.mesa || '').toLowerCase().includes(search.toLowerCase()) ||
       (c.cliente_nome || '').toLowerCase().includes(search.toLowerCase())
     )
   , [comandas, search]);
+
+  const handleManageComanda = (comanda: ComandaTotalView) => {
+    if (!comanda.id) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro de Identificação',
+        description: 'Não foi possível localizar o código interno desta comanda.'
+      });
+      return;
+    }
+    router.push(`/comandas/${comanda.id}`);
+  };
 
   const handleCreateTable = async () => {
     if (!store?.id || !newTableNumber || isCreatingTable) return;
@@ -122,28 +135,6 @@ export default function ComandasPage() {
       toast({ variant: 'destructive', title: 'Erro ao cadastrar', description: err.message });
     } finally {
       setIsCreatingTable(false);
-    }
-  };
-
-  const handleQuickGenerateLink = async (mesaNome: string) => {
-    if (!store?.id || !mesaNome) return;
-    const numStr = mesaNome.replace(/\D/g, '');
-    if (!numStr) {
-      toast({ variant: 'destructive', title: 'Mesa Inválida', description: 'O nome da mesa deve conter um número.' });
-      return;
-    }
-
-    try {
-      const { error } = await supabase.rpc('create_table', {
-        p_store_id: store.id,
-        p_number: parseInt(numStr)
-      });
-
-      if (error) throw error;
-      toast({ title: 'Link Gerado!', description: `Mesa ${numStr} agora possui acesso digital.` });
-      await fetchData();
-    } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Erro ao gerar link', description: err.message });
     }
   };
 
@@ -211,7 +202,7 @@ export default function ComandasPage() {
                 <Card 
                   key={comanda.id} 
                   className="group cursor-pointer hover:border-primary transition-all shadow-sm border-primary/5 bg-background relative overflow-hidden"
-                  onClick={() => router.push(`/comandas/${comanda.id}`)}
+                  onClick={() => handleManageComanda(comanda)}
                 >
                   <div className="absolute top-0 left-0 w-1 h-full bg-primary opacity-0 group-hover:opacity-100 transition-opacity" />
                   <CardHeader className="bg-muted/20 border-b py-4">
@@ -237,7 +228,7 @@ export default function ComandasPage() {
                         <p className="text-2xl font-black text-foreground tracking-tighter">{formatCurrency(comanda.total)}</p>
                       </div>
                       
-                      {linkedTable ? (
+                      {linkedTable && (
                         <div className="flex gap-1">
                           <Button 
                             variant="ghost" 
@@ -248,25 +239,7 @@ export default function ComandasPage() {
                           >
                             <Copy className="h-4 w-4" />
                           </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-10 w-10 text-muted-foreground hover:text-primary" 
-                            onClick={(e) => { e.stopPropagation(); window.open(`/m/${store?.id}/${linkedTable.public_token}`, '_blank'); }}
-                            title="Ver Cardápio"
-                          >
-                            <ExternalLink className="h-4 w-4" />
-                          </Button>
                         </div>
-                      ) : (
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="h-8 text-[8px] font-black uppercase tracking-widest text-muted-foreground hover:text-primary"
-                          onClick={(e) => { e.stopPropagation(); handleQuickGenerateLink(comanda.mesa || ''); }}
-                        >
-                          <Plus className="h-3 w-3 mr-1" /> Ativar Link QR
-                        </Button>
                       )}
                     </div>
                   </CardContent>
