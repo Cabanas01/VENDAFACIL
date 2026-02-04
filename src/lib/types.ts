@@ -91,7 +91,7 @@ export type SaleItem = {
   product_id: string;
   product_name_snapshot: string;
   product_barcode_snapshot?: string | null;
-  qty: number;
+  quantity: number;
   unit_price_cents: number;
   subtotal_cents: number;
 };

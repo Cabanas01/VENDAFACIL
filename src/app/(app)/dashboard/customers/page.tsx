@@ -1,3 +1,4 @@
+
 'use client';
 
 /**
@@ -43,7 +44,7 @@ const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((value || 0) / 100);
 
 export default function CustomersDashboardPage() {
-  const { store, addCustomer } = useAuth();
+  const { store, addCustomer, sales } = useAuth();
   const { toast } = useToast();
   
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -83,31 +84,15 @@ export default function CustomersDashboardPage() {
     loadCustomers();
   }, [loadCustomers]);
 
-  const loadCustomerHistory = async (customer: Customer) => {
+  const loadCustomerHistory = (customer: Customer) => {
     setSelectedCustomer(customer);
     setHistoryLoading(true);
     setIsHistoryOpen(true);
-    setCustomerSales([]);
-
-    try {
-      const { data, error } = await supabase
-        .from('sales')
-        .select('*, items:sale_items(*)')
-        .eq('customer_id', customer.id)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setCustomerSales(data || []);
-    } catch (err: any) {
-      console.error('[HISTORY_FETCH_ERROR]', err);
-      toast({ 
-        variant: 'destructive', 
-        title: 'Erro ao buscar histórico', 
-        description: 'Não foi possível carregar as compras deste cliente.' 
-      });
-    } finally {
-      setHistoryLoading(false);
-    }
+    
+    // Regra: Usar dados locais de vendas para garantir rapidez e evitar erros de RLS
+    const filteredSales = (sales || []).filter(s => s.customer_id === customer.id);
+    setCustomerSales(filteredSales);
+    setHistoryLoading(false);
   };
 
   const filteredCustomers = useMemo(() => {
@@ -158,12 +143,11 @@ export default function CustomersDashboardPage() {
       const { error } = await supabase.from('customers').delete().eq('id', id);
       
       if (error) {
-        // Erro de Foreign Key (Código 23503)
         if (error.code === '23503') {
           toast({ 
             variant: 'destructive', 
             title: 'Exclusão Bloqueada', 
-            description: 'Este cliente possui histórico de pedidos vinculados e não pode ser removido para manter a integridade dos seus dados operacionais.' 
+            description: 'Este cliente possui histórico de pedidos vinculados e não pode ser removido.' 
           });
           return;
         }
@@ -176,7 +160,7 @@ export default function CustomersDashboardPage() {
       toast({ 
         variant: 'destructive', 
         title: 'Falha na Operação', 
-        description: err.message || 'Ocorreu um erro ao tentar excluir o registro.' 
+        description: err.message || 'Erro ao excluir o registro.' 
       });
     }
   };
