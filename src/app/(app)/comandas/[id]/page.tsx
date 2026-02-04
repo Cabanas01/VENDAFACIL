@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * @fileOverview Detalhes da Comanda e Checkout de Pagamento.
+ * Refatorado para corresponder fielmente à interface da imagem.
+ */
+
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/components/auth-provider';
@@ -22,7 +27,8 @@ import {
   Search,
   CircleDollarSign,
   QrCode,
-  AlertCircle
+  AlertCircle,
+  X
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -181,7 +187,6 @@ export default function ComandaDetailsPage() {
     
     setIsSubmitting(true);
     try {
-      // 1. Registrar a Venda no PDV (Financeiro)
       const cartItems: CartItem[] = items.map(i => ({
         product_id: i.product_id,
         product_name_snapshot: i.product_name,
@@ -192,22 +197,27 @@ export default function ComandaDetailsPage() {
       }));
 
       const normalizedMethod = method === 'dinheiro' ? 'cash' : (method === 'cartao' ? 'card' : method);
-      const result = await addSale(cartItems, normalizedMethod, customer?.id || null);
       
+      // 1. Tenta faturar
+      const result = await addSale(cartItems, normalizedMethod, customer?.id || null);
       if (!result.success) throw new Error(result.error);
 
-      // 2. Encerrar a Comanda via RPC (Garantindo nomes de parâmetros corretos)
+      // 2. Tenta encerrar via RPC
       const { error: rpcError } = await supabase.rpc('fechar_comanda', {
         p_comanda_id: comanda.id,
-        p_forma_pagamento: method
+        p_forma_pagamento: normalizedMethod
       });
 
       if (rpcError) throw rpcError;
 
-      toast({ title: 'Venda Concluída!' });
+      toast({ title: 'Atendimento Concluído!' });
       router.push('/comandas');
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Falha ao Fechar', description: err.message });
+      toast({ 
+        variant: 'destructive', 
+        title: 'Falha ao Fechar', 
+        description: err.message || 'Erro inesperado ao processar encerramento.' 
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -341,22 +351,59 @@ export default function ComandaDetailsPage() {
       </div>
 
       <Dialog open={isClosing} onOpenChange={(open) => !isSubmitting && setIsClosing(open)}>
-        <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl">
-          <DialogHeader className="bg-slate-950 text-white px-6 py-8 text-center border-b">
+        <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl rounded-[24px]">
+          <div className="absolute right-4 top-4 z-10">
+            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full text-white/50 hover:text-white" onClick={() => setIsClosing(false)} disabled={isSubmitting}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          <DialogHeader className="bg-[#0f172a] text-white px-6 py-10 text-center border-b border-white/5">
             <DialogTitle className="text-3xl font-black font-headline uppercase tracking-tighter text-center text-white">Pagamento</DialogTitle>
             <DialogDescription className="text-[10px] font-bold uppercase tracking-widest opacity-60 text-center text-white/60">Selecione o meio para faturar e encerrar</DialogDescription>
           </DialogHeader>
-          <div className="p-6 space-y-3 bg-background">
-            <Button type="button" variant="outline" className="w-full h-16 justify-start text-sm font-black uppercase tracking-widest gap-4 border-2 hover:border-primary" onClick={() => handleCloseComandaFinal('dinheiro')} disabled={isSubmitting}>
-              <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center"><CircleDollarSign className="h-6 w-6 text-green-600" /></div> Dinheiro
+          <div className="p-8 space-y-4 bg-[#f8fafc]">
+            <Button 
+              type="button" 
+              variant="outline" 
+              className="w-full h-20 justify-start text-sm font-black uppercase tracking-widest gap-6 border-2 hover:border-primary bg-white shadow-sm transition-all active:scale-[0.98]" 
+              onClick={() => handleCloseComandaFinal('dinheiro')} 
+              disabled={isSubmitting}
+            >
+              <div className="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center shrink-0 shadow-inner">
+                <CircleDollarSign className="h-6 w-6 text-green-600" />
+              </div> 
+              <span className="text-slate-900">Dinheiro</span>
             </Button>
-            <Button type="button" variant="outline" className="w-full h-16 justify-start text-sm font-black uppercase tracking-widest gap-4 border-2 hover:border-primary" onClick={() => handleCloseComandaFinal('pix')} disabled={isSubmitting}>
-              <div className="h-10 w-10 rounded-full bg-cyan-100 flex items-center justify-center"><QrCode className="h-6 w-6 text-cyan-600" /></div> PIX
+            <Button 
+              type="button" 
+              variant="outline" 
+              className="w-full h-20 justify-start text-sm font-black uppercase tracking-widest gap-6 border-2 hover:border-primary bg-white shadow-sm transition-all active:scale-[0.98]" 
+              onClick={() => handleCloseComandaFinal('pix')} 
+              disabled={isSubmitting}
+            >
+              <div className="h-12 w-12 rounded-full bg-cyan-100 flex items-center justify-center shrink-0 shadow-inner">
+                <QrCode className="h-6 w-6 text-cyan-600" />
+              </div> 
+              <span className="text-slate-900">Pix</span>
             </Button>
-            <Button type="button" variant="outline" className="w-full h-16 justify-start text-sm font-black uppercase tracking-widest gap-4 border-2 hover:border-primary" onClick={() => handleCloseComandaFinal('cartao')} disabled={isSubmitting}>
-              <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center"><CreditCard className="h-6 w-6 text-blue-600" /></div> Cartão
+            <Button 
+              type="button" 
+              className="w-full h-20 justify-start text-sm font-black uppercase tracking-widest gap-6 shadow-xl bg-accent text-white hover:bg-accent/90 transition-all active:scale-[0.98]" 
+              onClick={() => handleCloseComandaFinal('cartao')} 
+              disabled={isSubmitting}
+            >
+              <div className="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center shrink-0 shadow-lg">
+                <CreditCard className="h-6 w-6 text-white" />
+              </div> 
+              <span>Cartão</span>
             </Button>
           </div>
+          {isSubmitting && (
+            <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm flex flex-col items-center justify-center z-50 animate-in fade-in">
+              <Loader2 className="h-10 w-10 animate-spin text-white mb-4" />
+              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-white">Processando Faturamento...</p>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

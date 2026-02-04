@@ -1,4 +1,3 @@
-
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
@@ -64,8 +63,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 <div className="flex items-center gap-2">
                   <h3 className="text-[10px] font-black tracking-tighter uppercase text-primary">VendaFácil</h3>
                   {is_admin && (
-                    <Badge variant="default" className="text-[8px] h-3.5 px-1.5 font-black uppercase bg-primary text-white border-none shadow-sm">
-                      Super Admin
+                    <Badge variant="default" className="text-[8px] h-4 px-1.5 font-black uppercase bg-primary text-white border-none shadow-sm rounded">
+                      SUPER ADMIN
                     </Badge>
                   )}
                 </div>
