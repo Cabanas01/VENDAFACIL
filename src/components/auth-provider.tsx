@@ -1,10 +1,10 @@
 'use client';
 
 /**
- * @fileOverview AuthProvider (DATA SYNC & REVALIDATION)
+ * @fileOverview AuthProvider (DATA SYNC & RESILIENT RPC)
  * 
- * Responsável por manter os dados da loja em sincronia e revalidar o status 
- * de acesso após pagamentos assíncronos via Webhook.
+ * Responsável por manter os dados da loja em sincronia e normalizar
+ * as respostas dos RPCs do Supabase para evitar erros de formato.
  */
 
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
@@ -65,6 +65,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
+  /**
+   * Normaliza o retorno do RPC get_store_access_status
+   * Trata Array, Objeto ou Booleano de forma resiliente.
+   */
+  const normalizeAccessStatus = (data: any): StoreAccessStatus => {
+    const defaultStatus: StoreAccessStatus = {
+      acesso_liberado: false,
+      data_fim_acesso: null,
+      plano_nome: 'Sem Plano',
+      plano_tipo: null,
+      mensagem: 'Status de acesso não identificado.'
+    };
+
+    if (data === null || data === undefined) return defaultStatus;
+
+    // Caso: Array [ {...} ]
+    if (Array.isArray(data)) {
+      return data[0] ? { ...defaultStatus, ...data[0] } : defaultStatus;
+    }
+
+    // Caso: Objeto Único { ... }
+    if (typeof data === 'object') {
+      return { ...defaultStatus, ...data };
+    }
+
+    // Caso: Booleano Direto
+    if (typeof data === 'boolean') {
+      return {
+        ...defaultStatus,
+        acesso_liberado: data,
+        mensagem: data ? 'Acesso liberado.' : 'Acesso expirado ou restrito.'
+      };
+    }
+
+    return defaultStatus;
+  };
+
   const fetchAppData = useCallback(async (userId: string) => {
     if (!userId) return;
     
@@ -87,7 +124,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           supabase.from('customers').select('*').eq('store_id', storeId).order('name'),
         ]);
 
-        setAccessStatus(accessRes.data?.[0] || null);
+        if (accessRes.error) {
+          console.error('[RPC_ERROR] get_store_access_status:', accessRes.error);
+        }
+
+        setAccessStatus(normalizeAccessStatus(accessRes.data));
         setStore(storeRes.data || null);
         setProducts(prodRes.data || []);
         setSales(salesRes.data || []);

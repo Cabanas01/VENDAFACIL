@@ -6,7 +6,7 @@
  * Fluxo de Pedido Resiliente:
  * 1. Validação de IDs de Unidade.
  * 2. Resolução atômica da comanda.
- * 3. Tratamento de erro humanizado.
+ * 3. Fallback inteligente de RPC (trata 4 ou 5 parâmetros).
  */
 
 import { useState, useEffect, useMemo } from 'react';
@@ -124,7 +124,12 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
 
   const executeOrderSubmission = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isSending || !customerData.name || !customerData.phone || !store?.id) return;
+    
+    const p_name = (customerData.name || '').trim();
+    const p_phone = (customerData.phone || '').trim();
+    const p_cpf = (customerData.cpf || '').trim() || null;
+
+    if (isSending || !p_name || !p_phone || !store?.id) return;
 
     setIsSending(true);
     setSubmissionError(null);
@@ -171,14 +176,25 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
         });
       }
 
-      // 3. Vínculo de Cliente (Passando store_id obrigatório)
-      const { error: regError } = await supabase.rpc('register_customer_on_table', {
-        p_store_id: store.id,
+      // 3. Vínculo de Cliente com Fallback de Parâmetros (PGRST202 Resilience)
+      const rpcParams = {
         p_comanda_id: targetComandaId,
-        p_name: customerData.name,
-        p_phone: customerData.phone,
-        p_cpf: customerData.cpf || null
+        p_name,
+        p_phone,
+        p_cpf
+      };
+
+      // Tentativa 1: Com p_store_id (Assinatura de 5 parâmetros)
+      let { error: regError } = await supabase.rpc('register_customer_on_table', {
+        ...rpcParams,
+        p_store_id: store.id
       });
+
+      // Tentativa 2: Sem p_store_id (Fallback para assinatura de 4 parâmetros se vier function not found)
+      if (regError?.code === 'PGRST202') {
+        const { error: retryError } = await supabase.rpc('register_customer_on_table', rpcParams);
+        regError = retryError;
+      }
 
       if (regError) throw regError;
 
@@ -190,14 +206,14 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
       setTimeout(() => setOrderSuccess(false), 5000);
 
     } catch (err: any) {
-      console.error('[ORDER_SUBMISSION_FATAL]', err);
+      console.error('[ORDER_SUBMISSION_ERROR]', err);
       
-      let friendlyMessage = "Não foi possível concluir seu pedido agora. Por favor, tente novamente em alguns instantes.";
+      let friendlyMessage = "Não foi possível concluir seu pedido agora. Por favor, tente novamente.";
       
-      if (err.message?.includes('store_id') || err.code === '23502') {
-          friendlyMessage = "Erro de identificação da unidade. Por favor, tente ler o QR Code novamente.";
+      if (err.code === 'PGRST202') {
+        friendlyMessage = "Erro de sincronização com o servidor. Chame um atendente.";
       } else if (err.message?.includes('comandas_status_check')) {
-          friendlyMessage = "Esta mesa possui um pedido sendo finalizado. Por favor, chame um atendente.";
+        friendlyMessage = "Esta mesa possui um pedido em fechamento. Chame um atendente.";
       }
 
       setSubmissionError({
@@ -402,8 +418,11 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
               </div>
 
               {submissionError && (
-                <div className="p-4 rounded-2xl flex items-start gap-3 animate-in fade-in zoom-in-95 border bg-red-50 border-red-100 text-red-900">
-                  <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
+                <div className={cn(
+                  "p-4 rounded-2xl flex items-start gap-3 animate-in fade-in zoom-in-95 border",
+                  submissionError.type === 'error' ? "bg-red-50 border-red-100 text-red-900" : "bg-yellow-50 border-yellow-100 text-yellow-900"
+                )}>
+                  {submissionError.type === 'error' ? <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" /> : <Info className="h-5 w-5 text-yellow-600 shrink-0 mt-0.5" />}
                   <p className="text-xs font-bold leading-relaxed">{submissionError.message}</p>
                 </div>
               )}
