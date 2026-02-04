@@ -32,7 +32,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
     '/venda-facil-brasil-pdv',
     '/venda-facil-brasil-pdv-online',
     '/venda-facil-brasil-sistema-pdv',
-    '/venda-facil-brasil-sistema-de-vendas'
+    '/venda-facil-brasil-sistema-de-vendas',
+    '/cardapiodigital'
   ];
 
   const mainRoutes = ['', '/login', '/signup'];
@@ -41,7 +42,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     url: `${baseUrl}${route}`,
     lastModified: now,
     changeFrequency: 'daily' as const,
-    priority: route === '/pdv' ? 1.0 : route === '' ? 0.9 : 0.8,
+    priority: route === '/pdv' || route === '/cardapiodigital' ? 1.0 : route === '' ? 0.9 : 0.8,
   }));
 
   return routes;
