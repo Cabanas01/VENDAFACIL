@@ -1,20 +1,14 @@
 -- =============================================================================
 -- DOMÍNIO: COMANDAS - VENDAFÁCIL BRASIL
--- VERSÃO: 2.1 (RESILIENTE)
+-- VERSÃO: 3.0 (SINCRONIZADA COM FRONTEND)
 -- =============================================================================
 
--- 0. LIMPEZA DE FUNÇÕES LEGADAS (Evita erro 42725 - function not unique)
+-- 0. LIMPEZA DE FUNÇÕES LEGADAS (Assinaturas incompatíveis)
 -- -----------------------------------------------------------------------------
 DROP FUNCTION IF EXISTS public.abrir_comanda(uuid, text);
 DROP FUNCTION IF EXISTS public.abrir_comanda(uuid, text, text, text, text);
 DROP FUNCTION IF EXISTS public.register_customer_on_table(uuid, text, text);
-DROP FUNCTION IF EXISTS public.register_customer_on_table(uuid, text, text, text);
-DROP FUNCTION IF EXISTS public.register_customer_on_table(uuid, text, text, text, uuid);
-DROP FUNCTION IF EXISTS public.add_items_from_table_link(uuid, jsonb);
-DROP FUNCTION IF EXISTS public.iniciar_preparo_item(uuid);
-DROP FUNCTION IF EXISTS public.finalizar_preparo_item(uuid);
 DROP FUNCTION IF EXISTS public.fechar_comanda(uuid, text);
-DROP FUNCTION IF EXISTS public.recalculate_comanda_total(uuid);
 
 -- 1. ESTRUTURA DE TABELAS
 -- -----------------------------------------------------------------------------
@@ -26,6 +20,7 @@ CREATE TABLE IF NOT EXISTS public.comandas (
     numero INTEGER NOT NULL,
     mesa TEXT,
     status TEXT NOT NULL DEFAULT 'aberta' CHECK (status IN ('aberta', 'aguardando_pagamento', 'fechada')),
+    cliente_nome TEXT,
     total NUMERIC(15,2) DEFAULT 0,
     forma_pagamento TEXT CHECK (forma_pagamento IN ('dinheiro', 'pix', 'cartao')),
     created_at TIMESTAMPTZ DEFAULT now()
@@ -34,10 +29,12 @@ CREATE TABLE IF NOT EXISTS public.comandas (
 -- Dados de identificação do cliente vinculados à comanda
 CREATE TABLE IF NOT EXISTS public.customers (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    comanda_id UUID NOT NULL REFERENCES public.comandas(id) ON DELETE CASCADE,
-    nome TEXT NOT NULL,
-    telefone TEXT,
-    UNIQUE(comanda_id)
+    store_id UUID REFERENCES public.stores(id) ON DELETE CASCADE,
+    comanda_id UUID REFERENCES public.comandas(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    phone TEXT,
+    cpf TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
 );
 
 -- Registro de Venda (Cabeçalho Financeiro)
@@ -45,6 +42,7 @@ CREATE TABLE IF NOT EXISTS public.sales (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     store_id UUID NOT NULL REFERENCES public.stores(id) ON DELETE CASCADE,
     comanda_id UUID REFERENCES public.comandas(id) ON DELETE SET NULL,
+    customer_id UUID REFERENCES public.customers(id) ON DELETE SET NULL,
     total_cents INTEGER NOT NULL DEFAULT 0,
     payment_method TEXT CHECK (payment_method IN ('cash', 'pix', 'card')),
     created_at TIMESTAMPTZ DEFAULT now()
@@ -67,26 +65,37 @@ CREATE TABLE IF NOT EXISTS public.sale_items (
 -- 2. FUNÇÕES E PROCEDIMENTOS (RPCs)
 -- -----------------------------------------------------------------------------
 
--- Função: Recalcular Total da Comanda
-CREATE OR REPLACE FUNCTION public.recalculate_comanda_total(p_comanda_id UUID)
-RETURNS NUMERIC AS $$
+-- Função: Registrar Cliente (Assinatura de 4 Parâmetros)
+CREATE OR REPLACE FUNCTION public.register_customer_on_table(
+    p_comanda_id UUID, 
+    p_name TEXT, 
+    p_phone TEXT,
+    p_cpf TEXT DEFAULT NULL
+) RETURNS BOOLEAN AS $$
 DECLARE
-    v_total_cents INTEGER;
+    v_store_id UUID;
 BEGIN
-    SELECT COALESCE(SUM(total_cents), 0) INTO v_total_cents
-    FROM public.sales
-    WHERE comanda_id = p_comanda_id;
-
-    UPDATE public.comandas 
-    SET total = (v_total_cents::NUMERIC / 100)
-    WHERE id = p_comanda_id;
-
-    RETURN (v_total_cents::NUMERIC / 100);
+    SELECT store_id INTO v_store_id FROM public.comandas WHERE id = p_comanda_id;
+    
+    INSERT INTO public.customers (store_id, comanda_id, name, phone, cpf)
+    VALUES (v_store_id, p_comanda_id, p_name, p_phone, p_cpf)
+    ON CONFLICT (comanda_id) DO UPDATE 
+    SET name = EXCLUDED.name, phone = EXCLUDED.phone, cpf = EXCLUDED.cpf;
+    
+    RETURN TRUE;
+EXCEPTION WHEN OTHERS THEN
+    RETURN FALSE;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Função: Abrir Comanda
-CREATE OR REPLACE FUNCTION public.abrir_comanda(p_store_id UUID, p_mesa TEXT)
+-- Função: Abrir Comanda (Assinatura de 5 Parâmetros para bater com o Frontend)
+CREATE OR REPLACE FUNCTION public.abrir_comanda(
+    p_store_id UUID, 
+    p_mesa TEXT,
+    p_cliente_nome TEXT DEFAULT NULL,
+    p_cliente_telefone TEXT DEFAULT NULL,
+    p_cliente_cpf TEXT DEFAULT NULL
+)
 RETURNS UUID AS $$
 DECLARE
     v_numero INTEGER;
@@ -97,96 +106,32 @@ BEGIN
     FROM public.comandas 
     WHERE store_id = p_store_id;
 
-    INSERT INTO public.comandas (store_id, numero, mesa, status)
-    VALUES (p_store_id, v_numero, p_mesa, 'aberta')
+    INSERT INTO public.comandas (store_id, numero, mesa, status, cliente_nome)
+    VALUES (p_store_id, v_numero, p_mesa, 'aberta', p_cliente_nome)
     RETURNING id INTO v_comanda_id;
+
+    -- Se houver dados de cliente, registrar na tabela de clientes
+    IF p_cliente_nome IS NOT NULL THEN
+        PERFORM public.register_customer_on_table(v_comanda_id, p_cliente_nome, p_cliente_telefone, p_cliente_cpf);
+    END IF;
 
     RETURN v_comanda_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Função: Registrar Cliente na Comanda
-CREATE OR REPLACE FUNCTION public.register_customer_on_table(
-    p_comanda_id UUID, 
-    p_nome TEXT, 
-    p_telefone TEXT
-) RETURNS BOOLEAN AS $$
-BEGIN
-    INSERT INTO public.customers (comanda_id, nome, telefone)
-    VALUES (p_comanda_id, p_nome, p_telefone)
-    ON CONFLICT (comanda_id) DO UPDATE 
-    SET nome = EXCLUDED.nome, telefone = EXCLUDED.telefone;
-    RETURN TRUE;
-EXCEPTION WHEN OTHERS THEN
-    RETURN FALSE;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Função: Adicionar Itens via QR Code
-CREATE OR REPLACE FUNCTION public.add_items_from_table_link(
-    p_comanda_id UUID, 
-    p_items JSONB
-) RETURNS BOOLEAN AS $$
-DECLARE
-    v_sale_id UUID;
-    v_store_id UUID;
-    v_total_cents INTEGER := 0;
-    v_item RECORD;
-BEGIN
-    SELECT store_id INTO v_store_id FROM public.comandas WHERE id = p_comanda_id;
-    IF v_store_id IS NULL THEN RETURN FALSE; END IF;
-
-    INSERT INTO public.sales (store_id, comanda_id, total_cents)
-    VALUES (v_store_id, p_comanda_id, 0)
-    RETURNING id INTO v_sale_id;
-
-    FOR v_item IN SELECT * FROM jsonb_to_recordset(p_items) AS x(product_id UUID, qty INTEGER)
-    LOOP
-        INSERT INTO public.sale_items (
-            sale_id, product_id, product_name_snapshot, quantity, unit_price_cents, subtotal_cents, destino_preparo
-        )
-        SELECT 
-            v_sale_id, p.id, p.name, v_item.qty, p.price_cents, (p.price_cents * v_item.qty), COALESCE(p.production_target, 'nenhum')
-        FROM public.products p
-        WHERE p.id = v_item.product_id;
-
-        v_total_cents := v_total_cents + (p.price_cents * v_item.qty) FROM public.products p WHERE p.id = v_item.product_id;
-    END LOOP;
-
-    UPDATE public.sales SET total_cents = v_total_cents WHERE id = v_sale_id;
-    PERFORM public.recalculate_comanda_total(p_comanda_id);
-
-    RETURN TRUE;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Controle de Status de Preparo
-CREATE OR REPLACE FUNCTION public.iniciar_preparo_item(p_item_id UUID)
-RETURNS BOOLEAN AS $$
-BEGIN
-    UPDATE public.sale_items SET status = 'em_preparo' WHERE id = p_item_id;
-    RETURN TRUE;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
-CREATE OR REPLACE FUNCTION public.finalizar_preparo_item(p_item_id UUID)
-RETURNS BOOLEAN AS $$
-BEGIN
-    UPDATE public.sale_items SET status = 'pronto' WHERE id = p_item_id;
-    RETURN TRUE;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Função: Fechar Comanda
+-- Função: Fechar Comanda (Retorna Record para o Frontend)
 CREATE OR REPLACE FUNCTION public.fechar_comanda(
     p_comanda_id UUID, 
     p_forma_pagamento TEXT
-) RETURNS BOOLEAN AS $$
+) RETURNS RECORD AS $$
+DECLARE
+    v_result RECORD;
 BEGIN
     UPDATE public.comandas 
     SET status = 'fechada',
         forma_pagamento = p_forma_pagamento
-    WHERE id = p_comanda_id;
+    WHERE id = p_comanda_id
+    RETURNING id, status, forma_pagamento INTO v_result;
 
     UPDATE public.sales 
     SET payment_method = CASE 
@@ -197,12 +142,25 @@ BEGIN
     END
     WHERE comanda_id = p_comanda_id;
 
-    RETURN TRUE;
+    RETURN v_result;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 3. VIEWS DE PRODUÇÃO E GESTÃO
+-- 3. VIEWS
 -- -----------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW public.v_comandas_totais AS
+SELECT 
+    c.id,
+    c.store_id,
+    c.numero,
+    c.mesa,
+    c.status,
+    c.cliente_nome,
+    COALESCE(SUM(s.total_cents), 0) AS total_cents
+FROM public.comandas c
+LEFT JOIN public.sales s ON c.id = s.comanda_id
+GROUP BY c.id;
 
 CREATE OR REPLACE VIEW public.v_painel_cozinha AS
 SELECT 
@@ -236,20 +194,6 @@ JOIN public.sales s ON si.sale_id = s.id
 JOIN public.comandas c ON s.comanda_id = c.id
 WHERE si.destino_preparo = 'bar' AND si.status != 'pronto' AND c.status != 'fechada';
 
-CREATE OR REPLACE VIEW public.v_comandas_totais AS
-SELECT 
-    c.id,
-    c.store_id,
-    c.numero,
-    c.mesa,
-    c.status,
-    cust.nome AS cliente_nome,
-    COALESCE(SUM(s.total_cents), 0) AS total_cents
-FROM public.comandas c
-LEFT JOIN public.customers cust ON c.id = cust.comanda_id
-LEFT JOIN public.sales s ON c.id = s.comanda_id
-GROUP BY c.id, cust.nome;
-
 -- 4. SEGURANÇA (RLS)
 -- -----------------------------------------------------------------------------
 
@@ -258,23 +202,11 @@ ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.sales ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.sale_items ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Membros podem gerir comandas" ON public.comandas
-    FOR ALL TO authenticated USING (store_id IN (SELECT store_id FROM public.store_members WHERE user_id = auth.uid()));
-
-CREATE POLICY "Membros podem gerir clientes" ON public.customers
-    FOR ALL TO authenticated USING (comanda_id IN (SELECT id FROM public.comandas WHERE store_id IN (SELECT store_id FROM public.store_members WHERE user_id = auth.uid())));
-
-CREATE POLICY "Membros podem gerir vendas" ON public.sales
-    FOR ALL TO authenticated USING (store_id IN (SELECT store_id FROM public.store_members WHERE user_id = auth.uid()));
-
 -- 5. PERMISSÕES
 -- -----------------------------------------------------------------------------
 
-GRANT EXECUTE ON FUNCTION public.abrir_comanda(uuid, text) TO anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.register_customer_on_table(uuid, text, text) TO anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.add_items_from_table_link(uuid, jsonb) TO anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.iniciar_preparo_item(uuid) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.finalizar_preparo_item(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.abrir_comanda(uuid, text, text, text, text) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.register_customer_on_table(uuid, text, text, text) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.fechar_comanda(uuid, text) TO authenticated;
 
 GRANT SELECT ON public.v_painel_cozinha TO authenticated;
