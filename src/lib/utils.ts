@@ -5,6 +5,14 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+export function isValidUUID(uuid: string | null | undefined): boolean {
+  if (!uuid) return false;
+  const regex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  // Fallback para UUIDs que não seguem o padrão v4 estrito mas são aceitos pelo Postgres
+  const regexFlex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return regexFlex.test(uuid);
+}
+
 export function isValidCnpj(cnpj: string): boolean {
   if (!cnpj) return false;
 

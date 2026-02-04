@@ -5,11 +5,13 @@
  * 
  * Responsável por manter os dados da loja em sincronia e normalizar
  * as respostas dos RPCs do Supabase para evitar erros de formato.
+ * Adicionado: Validação de UUID para evitar erros 400.
  */
 
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
+import { isValidUUID } from '@/lib/utils';
 import type { 
   Store, 
   Product, 
@@ -53,7 +55,6 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 /**
  * Normaliza o retorno do RPC get_store_access_status
- * Aceita Array, Objeto ou Booleano e retorna um StoreAccessStatus consistente.
  */
 function normalizeAccessStatus(raw: any): StoreAccessStatus | null {
   const defaultInactive: StoreAccessStatus = {
@@ -66,7 +67,6 @@ function normalizeAccessStatus(raw: any): StoreAccessStatus | null {
 
   if (raw == null) return null;
 
-  // Caso: Array [ {...} ]
   if (Array.isArray(raw)) {
     const row = raw[0];
     if (!row || typeof row !== 'object') return defaultInactive;
@@ -79,7 +79,6 @@ function normalizeAccessStatus(raw: any): StoreAccessStatus | null {
     };
   }
 
-  // Caso: Booleano direto
   if (typeof raw === 'boolean') {
     return {
       ...defaultInactive,
@@ -89,7 +88,6 @@ function normalizeAccessStatus(raw: any): StoreAccessStatus | null {
     };
   }
 
-  // Caso: Objeto único { ... }
   if (typeof raw === 'object') {
     return {
       acesso_liberado: !!raw.acesso_liberado,
@@ -129,7 +127,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         storeId = memberEntry?.store_id;
       }
 
-      if (storeId) {
+      if (storeId && isValidUUID(storeId)) {
         const [accessRes, storeRes, prodRes, salesRes, cashRes, custRes] = await Promise.all([
           supabase.rpc('get_store_access_status', { p_store_id: storeId }),
           supabase.from('stores').select('*').eq('id', storeId).single(),

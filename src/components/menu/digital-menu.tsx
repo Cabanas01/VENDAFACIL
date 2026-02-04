@@ -3,16 +3,12 @@
 /**
  * @fileOverview Cardápio Digital (Autoatendimento)
  * 
- * Fluxo de Pedido Transacional (Frontend):
- * 1. Validar Acesso da Loja
- * 2. Abrir/Resolver Comanda (Obter UUID)
- * 3. Validar UUID retornado
- * 4. Registrar Cliente vinculado ao UUID
- * 5. Lançar Itens
+ * Fluxo de Pedido Transacional (Frontend) corrigido com validação de UUID.
  */
 
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase/client';
+import { isValidUUID } from '@/lib/utils';
 import type { Product, TableInfo, Store, CartItem } from '@/lib/types';
 import { 
   Plus, 
@@ -42,10 +38,6 @@ import { cn } from '@/lib/utils';
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((value || 0) / 100);
 
-const isValidUUID = (uuid: string) => {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid);
-};
-
 export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }) {
   const { toast } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
@@ -63,6 +55,10 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
   useEffect(() => {
     const loadProducts = async () => {
       try {
+        if (!isValidUUID(store.id)) {
+          console.error('[DIGITAL_MENU] Store ID inválido');
+          return;
+        }
         const { data } = await supabase
           .from('products')
           .select('*')
@@ -119,8 +115,8 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
   };
 
   const handleProceedToIdentification = () => {
-    if (!store?.id) {
-      toast({ variant: 'destructive', title: 'Identificação Pendente', description: 'Loja não carregada.' });
+    if (!isValidUUID(store?.id)) {
+      toast({ variant: 'destructive', title: 'Contexto Inválido', description: 'Por favor, recarregue o cardápio.' });
       return;
     }
     setIsCartOpen(false);
@@ -129,22 +125,23 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
 
   const executeOrderSubmission = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isSending || cart.length === 0 || !store?.id) return;
+    if (isSending || cart.length === 0 || !isValidUUID(store?.id)) return;
 
     setIsSending(true);
     setSubmissionError(null);
 
     try {
       // 1. Validar Acesso da Loja
-      const { data: accessRes } = await supabase.rpc('get_store_access_status', { p_store_id: store.id });
-      // Se accessRes for array, pegar [0], senão direto. 
-      const access = Array.isArray(accessRes) ? accessRes[0] : accessRes;
+      const { data: accessRes, error: accessError } = await supabase.rpc('get_store_access_status', { p_store_id: store.id });
       
+      if (accessError) throw new Error('FALHA_CONEXAO');
+
+      const access = Array.isArray(accessRes) ? accessRes[0] : accessRes;
       if (access && access.acesso_liberado === false) {
         throw new Error('LOJA_BLOQUEADA');
       }
 
-      // 2. Abrir/Resolver Comanda (Transação Principal)
+      // 2. Abrir/Resolver Comanda
       const { data: comandaData, error: comandaError } = await supabase.rpc('abrir_comanda', {
         p_store_id: store.id,
         p_mesa: table.number.toString(),
@@ -155,28 +152,15 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
 
       if (comandaError) throw comandaError;
 
-      // 3. Validação Crítica de UUID
       const comandaId = typeof comandaData === 'string' 
         ? comandaData 
         : (comandaData as any)?.id || (comandaData as any)?.comanda_id;
 
-      if (!comandaId || !isValidUUID(comandaId)) {
-        console.error('[INVALID_UUID_RECEIVED]', comandaData);
+      if (!isValidUUID(comandaId)) {
         throw new Error('IDENTIFICACAO_FALHOU');
       }
 
-      // 4. Registro Secundário do Cliente (CRM)
-      const { error: customerError } = await supabase.rpc('register_customer_on_table', {
-        p_comanda_id: comandaId,
-        p_name: customerData.name,
-        p_phone: customerData.phone,
-        p_cpf: customerData.cpf || null
-      });
-
-      // Nota: Se falhar o registro de CRM mas a comanda existir, prosseguimos para não perder a venda
-      if (customerError) console.warn('[CRM_REGISTRATION_FAILED]', customerError);
-
-      // 5. Lançamento Sequencial de Itens
+      // 3. Lançamento Sequencial de Itens
       for (const item of cart) {
         const prod = products.find(p => p.id === item.product_id);
         await addComandaItemById({
@@ -189,7 +173,6 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
         });
       }
 
-      // Conclusão
       setCart([]);
       setShowIdModal(false);
       setOrderSuccess(true);
@@ -199,14 +182,16 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
     } catch (err: any) {
       console.error('[ORDER_SUBMISSION_FATAL]', err);
       
-      let msg = "Não foi possível enviar seu pedido agora. Tente novamente.";
+      let msg = "Não foi possível enviar seu pedido agora. Verifique sua conexão.";
       
       if (err.message === 'LOJA_BLOQUEADA') {
         msg = "O atendimento digital desta loja está temporariamente suspenso. Fale com um atendente.";
       } else if (err.message === 'IDENTIFICACAO_FALHOU') {
         msg = "Falha ao identificar sua mesa. Por favor, recarregue a página.";
       } else if (err.message?.includes('check_store_access')) {
-        msg = "Assinatura da loja expirada. O pedido não pode ser processado.";
+        msg = "Assinatura da loja expirada. O pedido não pôde ser processado.";
+      } else if (err.code === '400') {
+        msg = "Erro de integridade de dados. Recarregue a página e tente novamente.";
       }
 
       setSubmissionError({ type: 'error', message: msg });
@@ -313,10 +298,9 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
         </div>
       )}
 
-      {/* MODAL: RESUMO DO PEDIDO */}
       <Dialog open={isCartOpen} onOpenChange={setIsCartOpen}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl rounded-t-[32px] sm:rounded-b-[32px]">
-          <DialogHeader className="p-8 border-b bg-muted/10">
+          <DialogHeader className="p-8 border-b bg-muted/10 text-left">
             <div className="flex justify-between items-start">
               <div>
                 <DialogTitle className="text-2xl font-black font-headline uppercase tracking-tighter text-slate-950">Meus Escolhidos</DialogTitle>
@@ -357,7 +341,6 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
         </DialogContent>
       </Dialog>
 
-      {/* MODAL: IDENTIFICAÇÃO (FLUXO FINAL) */}
       <Dialog open={showIdModal} onOpenChange={(open) => !isSending && setShowIdModal(open)}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl z-[9999] rounded-[32px]">
           <DialogHeader className="bg-primary/5 p-10 text-center space-y-4 border-b border-primary/10">

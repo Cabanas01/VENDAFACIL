@@ -4,19 +4,20 @@
  * @fileOverview Rota de Entrada do Autoatendimento (QR Code).
  * 
  * Captura e valida storeId e tableToken da URL de forma resiliente.
+ * Adicionado: Validação rigorosa de parâmetros para evitar erro 400.
  */
 
 import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { DigitalMenu } from '@/components/menu/digital-menu';
+import { isValidUUID } from '@/lib/utils';
 import { Loader2, AlertCircle } from 'lucide-react';
 import type { TableInfo, Store } from '@/lib/types';
 
 export default function TableMenuPage() {
   const params = useParams();
   
-  // Garantia de captura dos parâmetros conforme estrutura de pastas [storeId]/[tableToken]
   const storeId = params?.storeId as string;
   const tableToken = params?.tableToken as string;
   
@@ -28,6 +29,12 @@ export default function TableMenuPage() {
   const initializeSession = useCallback(async () => {
     if (!storeId || !tableToken) {
       setError('Erro de identificação: Parâmetros da URL ausentes.');
+      setLoading(false);
+      return;
+    }
+
+    if (!isValidUUID(storeId)) {
+      setError('Identificador de unidade inválido. Tente ler o código novamente.');
       setLoading(false);
       return;
     }
@@ -121,7 +128,7 @@ export default function TableMenuPage() {
     <>
       <DigitalMenu table={table} store={store} />
       
-      {/* Debug Info (Apenas para verificação técnica) */}
+      {/* Debug Info (Oculto em Produção) */}
       <div className="fixed bottom-2 right-2 opacity-0 hover:opacity-100 transition-opacity bg-black/80 text-white p-2 rounded text-[8px] font-mono z-[9999] pointer-events-none">
         STORE: {store.id}<br/>
         TABLE: {table.number}
