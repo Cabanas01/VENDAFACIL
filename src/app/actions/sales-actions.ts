@@ -65,7 +65,7 @@ export async function processSaleAction(
     .select()
     .single();
 
-  // Fallback para cache de esquema desatualizado
+  // Fallback para cache de esquema desatualizado (PGRST204)
   if (saleError && (saleError.code === 'PGRST204' || saleError.message.includes('customer_id'))) {
     const { customer_id, ...fallbackPayload } = insertPayload;
     const retry = await activeClient

@@ -285,7 +285,7 @@ export default function ComandaDetailsPage() {
               <ScrollArea className="flex-1 p-8 bg-slate-50/30">
                 <div className="grid grid-cols-2 gap-6">
                   {filteredProducts.map(p => (
-                    <Card key={p.id} className="cursor-pointer hover:border-primary border-transparent active:scale-95 transition-all shadow-sm bg-white" onClick={() => addToCart(p)}>
+                    <Card key={p.id} className="cursor-pointer hover:border-primary border-transparent active:scale-95 transition-all shadow-sm bg-white" onClick={() => addToLocalCart(p)}>
                       <CardContent className="p-6 space-y-4">
                         <p className="text-xs font-black uppercase text-slate-900 leading-tight h-10 line-clamp-2">{p.name}</p>
                         <p className="font-black text-lg tracking-tighter text-primary">{formatCurrency(p.price_cents)}</p>
