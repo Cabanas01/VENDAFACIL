@@ -23,7 +23,8 @@ import {
   CheckCircle2,
   ArrowRight,
   Trash2,
-  AlertTriangle
+  AlertCircle,
+  Info
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -36,9 +37,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { addComandaItem } from '@/lib/add-comanda-item';
 import { cn } from '@/lib/utils';
 
-const formatCurrency = (val: number) => 
-  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((val || 0) / 100);
-
 export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }) {
   const { toast } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
@@ -46,7 +44,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
   const [search, setSearch] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isSending, setIsSending] = useState(false);
-  const [submissionError, setSubmissionError] = useState<string | null>(null);
+  const [submissionError, setSubmissionError] = useState<{ message: string; type: 'error' | 'warning' } | null>(null);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [showIdModal, setShowIdModal] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
@@ -177,17 +175,19 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
     } catch (err: any) {
       console.error('[ORDER_ERROR]', err);
       
-      // UX: Converter erro técnico em mensagem amigável
-      let friendlyMsg = "Não foi possível concluir seu pedido agora. Por favor, tente novamente em alguns instantes.";
-      
-      if (err.message?.includes('violate') || err.message?.includes('check constraint')) {
-        friendlyMsg = "Ops! Esta mesa já possui um pedido em andamento. Chame um atendente se precisar de ajuda.";
-      } else if (err.message?.includes('permission') || err.code === '42501') {
-        friendlyMsg = "Identificamos uma restrição de acesso. Por favor, reinicie o cardápio.";
+      // UX: Converter erro técnico em mensagem amigável e informativa
+      // Regra de Ouro: Erro de "já possui pedido" vira AVISO, não BLOQUEIO.
+      if (err.message?.includes('violate') || err.message?.includes('check constraint') || err.message?.includes('exists')) {
+        setSubmissionError({
+          type: 'warning',
+          message: "Esta mesa possui um atendimento ativo. Você pode continuar adicionando itens normalmente."
+        });
+      } else {
+        setSubmissionError({
+          type: 'error',
+          message: "Não foi possível concluir seu pedido agora. Por favor, tente novamente em alguns instantes."
+        });
       }
-
-      setSubmissionError(friendlyMsg);
-      // O Modal NÃO fecha aqui, permitindo que o usuário veja o erro e tente de novo.
     } finally {
       setIsSending(false);
     }
@@ -393,9 +393,12 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
               </div>
 
               {submissionError && (
-                <div className="p-4 bg-red-50 border border-red-100 rounded-2xl flex items-start gap-3 animate-in fade-in zoom-in-95">
-                  <AlertTriangle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
-                  <p className="text-xs font-bold text-red-900 leading-relaxed">{submissionError}</p>
+                <div className={cn(
+                  "p-4 rounded-2xl flex items-start gap-3 animate-in fade-in zoom-in-95 border",
+                  submissionError.type === 'warning' ? "bg-amber-50 border-amber-100 text-amber-900" : "bg-red-50 border-red-100 text-red-900"
+                )}>
+                  {submissionError.type === 'warning' ? <Info className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" /> : <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />}
+                  <p className="text-xs font-bold leading-relaxed">{submissionError.message}</p>
                 </div>
               )}
 
