@@ -2,9 +2,10 @@
 
 /**
  * @fileOverview Tela de Nova Venda / PDV com design fiel à imagem premium.
+ * Corrigido erro de processamento e sincronizado com o backend.
  */
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { 
   Search, 
   ShoppingCart, 
@@ -126,18 +127,20 @@ export default function NewSalePage() {
 
     setIsSubmitting(true);
     try {
+      // Chama a função centralizada no AuthProvider que executa a Server Action
       const result = await addSale(cart, method);
       
-      if (result?.success) {
+      if (result) {
         toast({ title: 'Venda Concluída!', description: `Total de ${formatCurrency(cartTotal)} registrado.` });
-        if (result.sale) printReceipt(result.sale, store);
+        printReceipt(result, store);
         setCart([]);
         setIsFinalizing(false);
       } else {
-        throw new Error(result?.error || 'Erro inesperado.');
+        throw new Error('Falha ao processar a venda no servidor.');
       }
     } catch (error: any) {
-      toast({ variant: 'destructive', title: 'Erro na Venda', description: error.message });
+      const errorMessage = typeof error === 'string' ? error : error.message || 'Erro desconhecido';
+      toast({ variant: 'destructive', title: 'Erro na Venda', description: errorMessage });
     } finally {
       setIsSubmitting(false);
     }

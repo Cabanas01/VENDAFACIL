@@ -1,9 +1,8 @@
-
 'use client';
 
 /**
  * @fileOverview AuthProvider - Fonte Única da Verdade para o Frontend.
- * Sincronizado para usar estritamente o fluxo de Comandas do Backend.
+ * Sincronizado para usar estritamente o fluxo de Comandas e Vendas do Backend.
  */
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -19,6 +18,7 @@ import type {
   User,
   ComandaTotalView
 } from '@/lib/types';
+import { processSaleAction } from '@/app/actions/sales-actions';
 
 type AuthContextType = {
   user: User | null;
@@ -26,7 +26,9 @@ type AuthContextType = {
   accessStatus: StoreAccessStatus | null;
   products: Product[];
   comandas: ComandaTotalView[];
+  sales: Sale[];
   customers: Customer[];
+  cashRegisters: CashRegister[];
   storeStatus: 'loading_auth' | 'loading_status' | 'ready' | 'no_store' | 'error';
   
   refreshStatus: () => Promise<void>;
@@ -34,6 +36,8 @@ type AuthContextType = {
   abrirComanda: (mesa: string, cliente: string) => Promise<string>;
   adicionarItem: (comandaId: string, productId: string, quantity: number) => Promise<void>;
   fecharComanda: (comandaId: string, formaPagamento: string) => Promise<void>;
+  addSale: (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => Promise<Sale | null>;
+  setCashRegisters: (action: any) => Promise<void>;
   logout: () => Promise<void>;
 };
 
@@ -45,7 +49,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [accessStatus, setAccessStatus] = useState<StoreAccessStatus | null>(null);
   const [comandas, setComandas] = useState<ComandaTotalView[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [sales, setSales] = useState<Sale[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [cashRegisters, setCashRegistersState] = useState<CashRegister[]>([]);
   const [storeStatus, setStoreStatus] = useState<'loading_auth' | 'loading_status' | 'ready' | 'no_store' | 'error'>('loading_auth');
 
   const fetchAppData = useCallback(async (userId: string) => {
@@ -59,18 +65,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (storeId) {
-        const [storeRes, prodRes, cmdRes, custRes, accessRes] = await Promise.all([
+        const [storeRes, prodRes, cmdRes, custRes, accessRes, salesRes, cashRes] = await Promise.all([
           supabase.from('stores').select('*').eq('id', storeId).single(),
           supabase.from('products').select('*').eq('store_id', storeId).order('name'),
           supabase.from('v_comandas_totais').select('*').eq('store_id', storeId).neq('status', 'fechada'),
           supabase.from('customers').select('*').eq('store_id', storeId).order('name'),
-          supabase.rpc('get_store_access_status', { p_store_id: storeId })
+          supabase.rpc('get_store_access_status', { p_store_id: storeId }),
+          supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeId).order('created_at', { ascending: false }).limit(50),
+          supabase.from('cash_registers').select('*').eq('store_id', storeId).order('opened_at', { ascending: false })
         ]);
 
         setStore(storeRes.data || null);
         setProducts(prodRes.data || []);
         setComandas(cmdRes.data || []);
         setCustomers(custRes.data || []);
+        setSales(salesRes.data || []);
+        setCashRegistersState(cashRes.data || []);
         setAccessStatus(accessRes.data?.[0] || null);
         setStoreStatus('ready');
       } else {
@@ -106,7 +116,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     if (error) throw error;
     await refreshStatus();
-    return data; // Retorna o UUID da comanda
+    return data;
   };
 
   const adicionarItem = async (comandaId: string, productId: string, quantity: number) => {
@@ -128,6 +138,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await refreshStatus();
   };
 
+  const addSale = async (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card') => {
+    if (!store?.id) throw new Error('Sessão inválida');
+    
+    // Executa a Server Action robusta
+    const result = await processSaleAction(store.id, cart, paymentMethod);
+    
+    if (result.success) {
+      await refreshStatus();
+      return result.sale;
+    } else {
+      throw new Error(result.error);
+    }
+  };
+
+  const setCashRegisters = async (action: any) => {
+    if (!store || !user) return;
+    const next = typeof action === 'function' ? action(cashRegisters) : action;
+
+    for (const cr of next) {
+      if (cashRegisters.find(c => c.id === cr.id)) {
+        const { id, ...data } = cr;
+        await supabase.from('cash_registers').update(data).eq('id', id);
+      } else {
+        await supabase.from('cash_registers').insert({ ...cr, store_id: store.id });
+      }
+    }
+    await refreshStatus();
+  };
+
   const createStore = async (storeData: any) => {
     const { error } = await supabase.rpc('create_new_store', { ...storeData });
     if (error) throw error;
@@ -141,8 +180,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider value={{ 
-      user, store, accessStatus, products, comandas, customers, storeStatus,
-      refreshStatus, createStore, abrirComanda, adicionarItem, fecharComanda, logout 
+      user, store, accessStatus, products, comandas, customers, sales, cashRegisters, storeStatus,
+      refreshStatus, createStore, abrirComanda, adicionarItem, fecharComanda, addSale, setCashRegisters, logout 
     }}>
       {children}
     </AuthContext.Provider>
