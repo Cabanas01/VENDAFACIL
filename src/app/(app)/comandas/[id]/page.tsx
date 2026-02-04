@@ -21,7 +21,8 @@ import {
   Printer,
   Search,
   ShoppingCart,
-  Trash2
+  Trash2,
+  X
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -43,12 +44,10 @@ export default function ComandaDetailsPage() {
   const [items, setItems] = useState<SaleItem[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // Modais e Estados
   const [isClosing, setIsClosing] = useState(false);
   const [isAddingItems, setIsAddingItems] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  // PDV Local na Comanda
   const [search, setSearch] = useState('');
   const [localCart, setLocalCart] = useState<CartItem[]>([]);
 
@@ -59,7 +58,6 @@ export default function ComandaDetailsPage() {
     setLoading(true);
     
     try {
-      // 1. Carregar Comanda
       const { data: baseData, error: comError } = await supabase
         .from('v_comandas_totais')
         .select('*')
@@ -68,7 +66,6 @@ export default function ComandaDetailsPage() {
 
       if (comError) throw comError;
 
-      // 2. Carregar Itens (Via Sale Items vinculados à comanda)
       const { data: salesData } = await supabase
         .from('sales')
         .select('id')
@@ -124,26 +121,17 @@ export default function ComandaDetailsPage() {
     if (localCart.length === 0 || !comanda || !store) return;
     setIsSubmitting(true);
     try {
-      // Registra como uma venda do tipo 'pendente' vinculada à comanda
-      await addSale(localCart, 'cash', null); // Vinculamos via PDV
-      // Precisamos garantir que a venda recém criada tenha o comanda_id
-      // Como o addSale é uma server action genérica, vamos vincular manualmente a última venda
-      const { data: lastSale } = await supabase
-        .from('sales')
-        .select('id')
-        .eq('store_id', store.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
+      const result = await addSale(localCart, 'cash', null);
       
-      if (lastSale) {
-        await supabase.from('sales').update({ comanda_id: comanda.id }).eq('id', lastSale.id);
+      if (result?.success && result.saleId) {
+        await supabase.from('sales').update({ comanda_id: comanda.id }).eq('id', result.saleId);
+        toast({ title: 'Itens adicionados!' });
+        setLocalCart([]);
+        setIsAddingItems(false);
+        fetchData();
+      } else {
+        throw new Error(result?.error || 'Erro ao processar itens.');
       }
-
-      toast({ title: 'Itens adicionados!' });
-      setLocalCart([]);
-      setIsAddingItems(false);
-      fetchData();
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Erro ao salvar', description: err.message });
     } finally {
@@ -162,7 +150,6 @@ export default function ComandaDetailsPage() {
 
       if (rpcError) throw rpcError;
 
-      // Imprimir Cupom Final
       const saleMock: any = {
         total_cents: calculatedTotal,
         payment_method: method,
@@ -208,9 +195,9 @@ export default function ComandaDetailsPage() {
         <div className="flex items-center gap-4">
           <Button variant="outline" className="h-12 font-black uppercase text-[10px] tracking-widest" onClick={() => {
             const saleMock: any = { total_cents: calculatedTotal, items, created_at: new Date().toISOString() };
-            printReceipt(saleMock, store!);
+            printReceipt(saleMock, store!, '80mm', { numero: comanda?.numero || 0, mesa: comanda?.mesa || null, cliente: comanda?.cliente_nome || null });
           }}>
-            <Printer className="h-4 w-4 mr-2" /> Pré-Conta
+            <Printer className="h-4 w-4 mr-2" /> PRÉ-CONTA
           </Button>
           <div className="text-right">
             <p className="text-[9px] font-black uppercase text-muted-foreground opacity-60">Consumo Acumulado</p>
@@ -279,26 +266,29 @@ export default function ComandaDetailsPage() {
         </div>
       </div>
 
-      {/* MODAL: ADICIONAR PRODUTOS */}
       <Dialog open={isAddingItems} onOpenChange={setIsAddingItems}>
-        <DialogContent className="sm:max-w-4xl p-0 overflow-hidden border-none shadow-2xl rounded-[32px]">
-          <div className="flex h-[80vh]">
-            {/* Esquerda: Catálogo */}
+        <DialogContent className="sm:max-w-5xl p-0 overflow-hidden border-none shadow-2xl rounded-[32px]">
+          <div className="flex h-[85vh]">
             <div className="flex-1 flex flex-col bg-white border-r">
-              <div className="p-6 border-b space-y-4">
-                <DialogTitle className="text-2xl font-black uppercase tracking-tighter">Cardápio de Vendas</DialogTitle>
+              <div className="p-8 border-b space-y-6">
+                <DialogTitle className="text-3xl font-black uppercase tracking-tighter">CARDÁPIO DE VENDAS</DialogTitle>
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input placeholder="Buscar produto..." className="pl-10 h-11" value={search} onChange={e => setSearch(e.target.value)} />
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                  <Input 
+                    placeholder="Buscar produto..." 
+                    className="pl-12 h-14 rounded-2xl bg-slate-50 border-none shadow-inner text-lg font-medium" 
+                    value={search} 
+                    onChange={e => setSearch(e.target.value)} 
+                  />
                 </div>
               </div>
-              <ScrollArea className="flex-1 p-6">
-                <div className="grid grid-cols-2 gap-4">
+              <ScrollArea className="flex-1 p-8 bg-slate-50/30">
+                <div className="grid grid-cols-2 gap-6">
                   {filteredProducts.map(p => (
-                    <Card key={p.id} className="cursor-pointer hover:border-primary active:scale-95 transition-all shadow-sm" onClick={() => addToLocalCart(p)}>
-                      <CardContent className="p-4 space-y-2">
-                        <p className="text-[10px] font-black uppercase text-primary leading-tight line-clamp-2 h-8">{p.name}</p>
-                        <p className="font-black text-sm tracking-tighter">{formatCurrency(p.price_cents)}</p>
+                    <Card key={p.id} className="cursor-pointer hover:border-primary border-transparent active:scale-95 transition-all shadow-sm bg-white" onClick={() => addToCart(p)}>
+                      <CardContent className="p-6 space-y-4">
+                        <p className="text-xs font-black uppercase text-slate-900 leading-tight h-10 line-clamp-2">{p.name}</p>
+                        <p className="font-black text-lg tracking-tighter text-primary">{formatCurrency(p.price_cents)}</p>
                       </CardContent>
                     </Card>
                   ))}
@@ -306,40 +296,45 @@ export default function ComandaDetailsPage() {
               </ScrollArea>
             </div>
 
-            {/* Direita: Carrinho Temporário */}
-            <div className="w-80 bg-slate-50 flex flex-col">
-              <div className="p-6 border-b bg-white">
-                <h3 className="flex items-center gap-2 font-black uppercase text-[10px] tracking-widest text-muted-foreground">
-                  <ShoppingCart className="h-4 w-4" /> Lançamento Atual
+            <div className="w-96 bg-white flex flex-col relative shadow-2xl">
+              <div className="p-8 border-b flex justify-between items-center bg-slate-50/50">
+                <h3 className="flex items-center gap-2 font-black uppercase text-[11px] tracking-[0.2em] text-slate-900">
+                  <ShoppingCart className="h-4 w-4" /> LANÇAMENTO ATUAL
                 </h3>
+                <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={() => setIsAddingItems(false)}>
+                  <X className="h-4 w-4" />
+                </Button>
               </div>
-              <ScrollArea className="flex-1 p-6">
-                <div className="space-y-4">
+              <ScrollArea className="flex-1 p-8">
+                <div className="space-y-6">
                   {localCart.map(item => (
-                    <div key={item.product_id} className="flex justify-between items-start text-xs font-bold animate-in slide-in-from-right-2">
-                      <div className="flex-1">
-                        <p className="uppercase leading-tight">{item.product_name_snapshot}</p>
-                        <p className="text-primary mt-0.5">x{item.qty} — {formatCurrency(item.subtotal_cents)}</p>
+                    <div key={item.product_id} className="flex justify-between items-start animate-in slide-in-from-right-2">
+                      <div className="flex-1 pr-4">
+                        <p className="font-black uppercase text-[11px] leading-tight text-slate-900">{item.product_name_snapshot}</p>
+                        <p className="text-primary font-bold text-[10px] mt-1 uppercase">x{item.qty} — {formatCurrency(item.unit_price_cents)}</p>
                       </div>
-                      <Button variant="ghost" size="icon" className="h-6 w-6 text-red-400" onClick={() => setLocalCart(localCart.filter(i => i.product_id !== item.product_id))}>
-                        <Trash2 className="h-3 w-3" />
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:bg-red-50 hover:text-red-600 transition-colors" onClick={() => setLocalCart(localCart.filter(i => i.product_id !== item.product_id))}>
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
                   ))}
                   {localCart.length === 0 && (
-                    <div className="py-20 text-center text-[9px] uppercase font-black opacity-20">Aguardando seleção...</div>
+                    <div className="py-32 text-center flex flex-col items-center gap-4 opacity-20">
+                      <ShoppingCart className="h-12 w-12" />
+                      <p className="text-[10px] font-black uppercase tracking-[0.2em]">Aguardando seleção...</p>
+                    </div>
                   )}
                 </div>
               </ScrollArea>
-              <div className="p-6 bg-white border-t space-y-4">
+              <div className="p-8 bg-white border-t space-y-6">
                 <div className="flex justify-between items-end">
-                  <span className="text-[9px] font-black uppercase opacity-40">Subtotal</span>
-                  <span className="text-xl font-black text-primary tracking-tighter">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">SUBTOTAL</span>
+                  <span className="text-3xl font-black text-primary tracking-tighter">
                     {formatCurrency(localCart.reduce((acc, i) => acc + i.subtotal_cents, 0))}
                   </span>
                 </div>
-                <Button className="w-full h-14 font-black uppercase text-xs tracking-widest shadow-lg shadow-primary/20" disabled={localCart.length === 0 || isSubmitting} onClick={handleCommitItems}>
-                  {isSubmitting ? <Loader2 className="animate-spin" /> : 'Confirmar Pedido'}
+                <Button className="w-full h-16 font-black uppercase text-xs tracking-widest shadow-xl shadow-primary/20" disabled={localCart.length === 0 || isSubmitting} onClick={handleCommitItems}>
+                  {isSubmitting ? <Loader2 className="animate-spin" /> : 'CONFIRMAR PEDIDO'}
                 </Button>
               </div>
             </div>
@@ -347,7 +342,6 @@ export default function ComandaDetailsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* MODAL: PAGAMENTO */}
       <Dialog open={isClosing} onOpenChange={setIsClosing}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl rounded-[32px]">
           <DialogHeader className="bg-[#0f172a] text-white px-6 py-12 text-center">
