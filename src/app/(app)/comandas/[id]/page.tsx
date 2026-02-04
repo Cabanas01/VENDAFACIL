@@ -3,7 +3,7 @@
 
 /**
  * @fileOverview Detalhe da Comanda - Fluxo de Fechamento e Pagamento.
- * Corrigido para evitar redirecionamentos automáticos indesejados.
+ * Corrigido para carregar dados exclusivamente pelo ID da rota, sem travas de contexto global.
  */
 
 import { useEffect, useState, useCallback } from 'react';
@@ -44,7 +44,7 @@ const formatCurrency = (val: number) =>
 export default function ComandaDetailsPage() {
   const params = useParams();
   const id = params?.id as string;
-  const { products, refreshStatus, store, storeStatus } = useAuth();
+  const { products, refreshStatus, store } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -63,33 +63,26 @@ export default function ComandaDetailsPage() {
   const [isClosingInProgress, setIsClosingInProgress] = useState(false);
 
   const fetchData = useCallback(async () => {
-    // Se o ID for inválido, marca como não encontrado
     if (!id || id === 'undefined') {
       setNotFound(true);
       setLoading(false);
       return;
     }
 
-    // Não tenta buscar se o contexto da loja ainda não estiver pronto
-    if (storeStatus === 'loading_auth' || storeStatus === 'loading_status') return;
-
     try {
+      // Busca dados usando o ID da rota. RLS cuidará para que apenas membros da loja vejam os dados.
       const [comandaRes, itemsRes] = await Promise.all([
         supabase.from('v_comandas_totais').select('*').eq('id', id).maybeSingle(),
         supabase.from('comanda_itens').select('*').eq('comanda_id', id).order('created_at', { ascending: false })
       ]);
 
-      if (!comandaRes.data) {
-        setNotFound(true);
-        setLoading(false);
-        return;
+      if (comandaRes.error) {
+        console.error('[QUERY_ERROR]', comandaRes.error);
+        throw comandaRes.error;
       }
 
-      // Validação de status (apenas comandas abertas podem ser gerenciadas aqui)
-      const status = (comandaRes.data.status || '').toLowerCase();
-      if (status !== 'aberta' && !isClosingInProgress) {
+      if (!comandaRes.data) {
         setNotFound(true);
-        setLoading(false);
         return;
       }
 
@@ -105,16 +98,16 @@ export default function ComandaDetailsPage() {
       }
     } catch (err) {
       console.error('[FETCH_ERROR]', err);
-      setNotFound(true);
+      // Não marca como notFound em erros de rede/conexão, apenas em 404 real
     } finally {
       setLoading(false);
     }
-  }, [id, storeStatus, isClosingInProgress]);
+  }, [id]);
 
   useEffect(() => {
     fetchData();
 
-    // Sincronização em Tempo Real
+    // Sincronização em Tempo Real baseada apenas no ID da comanda
     const channel = supabase.channel(`sync_comanda_${id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'comanda_itens', filter: `comanda_id=eq.${id}` }, () => fetchData())
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'comandas', filter: `id=eq.${id}` }, () => fetchData())
@@ -122,16 +115,6 @@ export default function ComandaDetailsPage() {
 
     return () => { supabase.removeChannel(channel); };
   }, [id, fetchData]);
-
-  // Efeito isolado para redirecionamento após carregamento completo
-  useEffect(() => {
-    if (!loading && notFound) {
-      const timer = setTimeout(() => {
-        router.replace('/comandas');
-      }, 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [loading, notFound, router]);
 
   const addTempItem = (product: Product) => {
     setTempItems(prev => {
@@ -241,7 +224,7 @@ export default function ComandaDetailsPage() {
       </div>
       <div className="space-y-2">
         <h2 className="text-xl font-black uppercase tracking-tight">Comanda Indisponível</h2>
-        <p className="text-sm text-muted-foreground max-w-xs mx-auto font-medium">Esta comanda pode ter sido encerrada ou não existe mais. Redirecionando...</p>
+        <p className="text-sm text-muted-foreground max-w-xs mx-auto font-medium">Esta comanda pode ter sido encerrada ou não existe mais no sistema.</p>
       </div>
       <Button variant="outline" onClick={() => router.push('/comandas')} className="font-black uppercase text-[10px] tracking-widest px-8">Voltar para Lista</Button>
     </div>
@@ -257,7 +240,7 @@ export default function ComandaDetailsPage() {
           <div>
             <h1 className="text-4xl font-black font-headline tracking-tighter uppercase leading-none">Comanda #{comanda?.numero}</h1>
             <div className="flex items-center gap-3 mt-2">
-              <Badge variant="outline" className="bg-primary/5 text-primary border-primary/10 font-black text-[10px] uppercase">STATUS: ABERTA</Badge>
+              <Badge variant="outline" className="bg-primary/5 text-primary border-primary/10 font-black text-[10px] uppercase">STATUS: {comanda?.status?.toUpperCase() || 'ABERTA'}</Badge>
               <span className="text-[10px] font-black uppercase text-muted-foreground flex items-center gap-1.5"><MapPin className="h-3 w-3" /> {comanda?.mesa || 'Balcão'}</span>
             </div>
           </div>
