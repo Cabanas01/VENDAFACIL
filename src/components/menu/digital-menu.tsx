@@ -95,13 +95,16 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
       if (isAllowed === false) throw new Error('Seu acesso está restrito. Chame o garçom.');
 
       // 2. Abrir Comanda (Retorna UUID)
-      const { data: comandaId, error: openError } = await supabase.rpc('abrir_comanda', {
+      const { data: comandaIdRaw, error: openError } = await supabase.rpc('abrir_comanda', {
         p_store_id: store.id,
         p_mesa: table.number.toString(),
         p_cliente_nome: customerData.name,
         p_cliente_telefone: customerData.phone,
         p_cliente_cpf: customerData.cpf || null
       });
+
+      // Extração robusta do ID da comanda
+      const comandaId = typeof comandaIdRaw === 'string' ? comandaIdRaw : (comandaIdRaw as any)?.id || (comandaIdRaw as any)?.comanda_id;
 
       if (openError || !comandaId || !UUID_REGEX.test(comandaId as string)) {
         console.error('[OPEN_COMANDA_ERROR]', openError);

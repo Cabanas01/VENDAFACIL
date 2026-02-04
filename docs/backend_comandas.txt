@@ -1,9 +1,25 @@
 -- =============================================================================
 -- DOMÍNIO: COMANDAS - VENDAFÁCIL BRASIL
--- VERSÃO: 4.0 (FIX: COLUNA CLIENTE_NOME + UUID SYNC)
+-- VERSÃO: 5.0 (FIX: ALTER TABLE PARA COLUNAS FALTANTES)
 -- =============================================================================
 
--- 0. LIMPEZA DE FUNÇÕES LEGADAS (Assinaturas incompatíveis)
+-- 0. GARANTIA DE ESTRUTURA (Previne erros se a tabela já existir sem a coluna)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.comandas (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    store_id UUID NOT NULL REFERENCES public.stores(id) ON DELETE CASCADE,
+    numero INTEGER NOT NULL,
+    mesa TEXT,
+    status TEXT NOT NULL DEFAULT 'aberta' CHECK (status IN ('aberta', 'aguardando_pagamento', 'fechada')),
+    total_cents INTEGER DEFAULT 0,
+    forma_pagamento TEXT CHECK (forma_pagamento IN ('dinheiro', 'pix', 'cartao')),
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Força a existência da coluna caso o IF NOT EXISTS acima tenha pulado a criação da tabela
+ALTER TABLE public.comandas ADD COLUMN IF NOT EXISTS cliente_nome TEXT;
+
+-- 1. LIMPEZA DE FUNÇÕES LEGADAS
 -- -----------------------------------------------------------------------------
 DROP FUNCTION IF EXISTS public.abrir_comanda(uuid, text);
 DROP FUNCTION IF EXISTS public.abrir_comanda(uuid, text, text, text, text);
@@ -11,23 +27,9 @@ DROP FUNCTION IF EXISTS public.register_customer_on_table(uuid, text, text);
 DROP FUNCTION IF EXISTS public.register_customer_on_table(uuid, text, text, text);
 DROP FUNCTION IF EXISTS public.fechar_comanda(uuid, text);
 
--- 1. ESTRUTURA DE TABELAS
+-- 2. DADOS DE CLIENTES E VENDAS
 -- -----------------------------------------------------------------------------
 
--- Comandas
-CREATE TABLE IF NOT EXISTS public.comandas (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    store_id UUID NOT NULL REFERENCES public.stores(id) ON DELETE CASCADE,
-    numero INTEGER NOT NULL,
-    mesa TEXT,
-    status TEXT NOT NULL DEFAULT 'aberta' CHECK (status IN ('aberta', 'aguardando_pagamento', 'fechada')),
-    cliente_nome TEXT,
-    total NUMERIC(15,2) DEFAULT 0,
-    forma_pagamento TEXT CHECK (forma_pagamento IN ('dinheiro', 'pix', 'cartao')),
-    created_at TIMESTAMPTZ DEFAULT now()
-);
-
--- Dados de identificação do cliente vinculados à comanda
 CREATE TABLE IF NOT EXISTS public.customers (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     store_id UUID REFERENCES public.stores(id) ON DELETE CASCADE,
@@ -38,35 +40,10 @@ CREATE TABLE IF NOT EXISTS public.customers (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Registro de Venda (Cabeçalho Financeiro)
-CREATE TABLE IF NOT EXISTS public.sales (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    store_id UUID NOT NULL REFERENCES public.stores(id) ON DELETE CASCADE,
-    comanda_id UUID REFERENCES public.comandas(id) ON DELETE SET NULL,
-    customer_id UUID REFERENCES public.customers(id) ON DELETE SET NULL,
-    total_cents INTEGER NOT NULL DEFAULT 0,
-    payment_method TEXT CHECK (payment_method IN ('cash', 'pix', 'card')),
-    created_at TIMESTAMPTZ DEFAULT now()
-);
-
--- Itens da Venda (Produção e Detalhe)
-CREATE TABLE IF NOT EXISTS public.sale_items (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    sale_id UUID NOT NULL REFERENCES public.sales(id) ON DELETE CASCADE,
-    product_id UUID NOT NULL REFERENCES public.products(id) ON DELETE RESTRICT,
-    product_name_snapshot TEXT NOT NULL,
-    quantity INTEGER NOT NULL CHECK (quantity > 0),
-    unit_price_cents INTEGER NOT NULL,
-    subtotal_cents INTEGER NOT NULL,
-    status TEXT NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente', 'em_preparo', 'pronto')),
-    destino_preparo TEXT NOT NULL CHECK (destino_preparo IN ('cozinha', 'bar', 'nenhum')),
-    created_at TIMESTAMPTZ DEFAULT now()
-);
-
--- 2. FUNÇÕES E PROCEDIMENTOS (RPCs)
+-- 3. FUNÇÕES E PROCEDIMENTOS (RPCs)
 -- -----------------------------------------------------------------------------
 
--- Função: Registrar Cliente (Assinatura de 4 Parâmetros)
+-- Função: Registrar Cliente
 CREATE OR REPLACE FUNCTION public.register_customer_on_table(
     p_comanda_id UUID, 
     p_name TEXT, 
@@ -87,7 +64,7 @@ EXCEPTION WHEN OTHERS THEN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Função: Abrir Comanda (Assinatura Completa)
+-- Função: Abrir Comanda
 CREATE OR REPLACE FUNCTION public.abrir_comanda(
     p_store_id UUID, 
     p_mesa TEXT,
@@ -109,7 +86,7 @@ BEGIN
     VALUES (p_store_id, v_numero, p_mesa, 'aberta', p_cliente_nome)
     RETURNING id INTO v_comanda_id;
 
-    -- Se houver dados de cliente, registrar na tabela de clientes
+    -- Registro opcional no CRM
     IF p_cliente_nome IS NOT NULL THEN
         PERFORM public.register_customer_on_table(v_comanda_id, p_cliente_nome, p_cliente_telefone, p_cliente_cpf);
     END IF;
@@ -132,6 +109,7 @@ BEGIN
     WHERE id = p_comanda_id
     RETURNING id, status, forma_pagamento INTO v_result;
 
+    -- Sincroniza o método de pagamento nas vendas vinculadas
     UPDATE public.sales 
     SET payment_method = CASE 
         WHEN p_forma_pagamento = 'dinheiro' THEN 'cash'
@@ -145,7 +123,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 3. VIEWS
+-- 4. VIEWS DE MONITORAMENTO
 -- -----------------------------------------------------------------------------
 
 CREATE OR REPLACE VIEW public.v_comandas_totais AS
@@ -192,14 +170,6 @@ FROM public.sale_items si
 JOIN public.sales s ON si.sale_id = s.id
 JOIN public.comandas c ON s.comanda_id = c.id
 WHERE si.destino_preparo = 'bar' AND si.status != 'pronto' AND c.status != 'fechada';
-
--- 4. SEGURANÇA (RLS)
--- -----------------------------------------------------------------------------
-
-ALTER TABLE public.comandas ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.sales ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.sale_items ENABLE ROW LEVEL SECURITY;
 
 -- 5. PERMISSÕES
 -- -----------------------------------------------------------------------------
