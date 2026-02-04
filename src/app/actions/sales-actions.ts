@@ -3,7 +3,7 @@
 /**
  * @fileOverview Server Action definitiva para Processamento de Vendas (PDV).
  * 
- * Implementa bypass de RLS para Super Admins e mapeia corretamente qty para quantity.
+ * Implementa bypass de RLS para Super Admins e tratamento de erros de cache de esquema (PGRST204).
  */
 
 import { createSupabaseServerClient } from '@/lib/supabase/server';
@@ -30,7 +30,7 @@ export async function processSaleAction(
     return { success: false, error: 'Contexto de loja inválido.' };
   }
 
-  // Verificar se o usuário é um administrador global (usando o cliente admin para garantir bypass de RLS na tabela users)
+  // Verificar se o usuário é um administrador global
   const { data: profile } = await supabaseAdmin
     .from('users')
     .select('is_admin')
@@ -38,9 +38,6 @@ export async function processSaleAction(
     .single();
   
   const isSuperAdmin = profile?.is_admin === true;
-
-  // Se for super admin, usamos o cliente admin para ignorar RLS e garantir o fechamento.
-  // Caso contrário, usamos o cliente do usuário para respeitar permissões e limites de plano.
   const activeClient = isSuperAdmin ? supabaseAdmin : supabase;
 
   const totalCents = cart.reduce((sum, item) => sum + (item.subtotal_cents || 0), 0);
@@ -65,21 +62,28 @@ export async function processSaleAction(
       userId: user.id
     });
 
+    // Tratamento específico para erro de cache de esquema (coluna não encontrada)
+    if (saleError.code === 'PGRST204' || saleError.message.includes('schema cache')) {
+      return { 
+        success: false, 
+        error: 'Erro de sincronização: O banco de dados foi atualizado, mas a API ainda não reconheceu a coluna "customer_id". Por favor, atualize o cache do PostgREST no dashboard do Supabase.',
+        code: 'SCHEMA_CACHE_ERROR'
+      };
+    }
+
     let friendlyMessage = 'Erro de permissão: Verifique se seu plano está ativo.';
     
     if (saleError.message.includes('trial_sales_limit')) {
       friendlyMessage = 'Limite de vendas atingido no Plano de Avaliação.';
     } else if (saleError.code === '42501') {
       friendlyMessage = 'Acesso Negado: Sua loja pode estar com o plano expirado ou você não tem permissão nesta unidade.';
-    } else if (saleError.message.includes('check_store_access')) {
-      friendlyMessage = 'Assinatura Inativa: Verifique o status da sua conta no menu Financeiro.';
     }
     
     return { success: false, error: friendlyMessage, code: saleError.code };
   }
 
   try {
-    // 2. Inserir Itens da Venda (Mapeamento qty -> quantity)
+    // 2. Inserir Itens da Venda
     const itemsToInsert = cart.map(item => ({
       sale_id: sale.id,
       product_id: item.product_id,
@@ -109,7 +113,6 @@ export async function processSaleAction(
 
   } catch (err: any) {
     console.error('[SERVER_ACTION] Erro na transação de itens:', err);
-    // Rollback manual do registro da venda em caso de falha nos itens para manter integridade
     await supabaseAdmin.from('sales').delete().eq('id', sale.id);
     return { success: false, error: 'Falha ao processar itens. A venda foi estornada para segurança dos dados.' };
   }

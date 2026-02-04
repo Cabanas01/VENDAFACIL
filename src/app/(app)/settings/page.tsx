@@ -15,7 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { PlusCircle, Trash2 } from 'lucide-react';
+import { PlusCircle, Trash2, AlertTriangle } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -183,7 +183,6 @@ export default function SettingsPage() {
     }
     
     const handleInviteUser = (values: InviteUserFormValues) => {
-        // This would be a backend call to invite a user
         console.log("Inviting user", values);
         toast({ title: 'Convite enviado (simulado)'});
         setIsInviteModalOpen(false);
@@ -205,16 +204,16 @@ export default function SettingsPage() {
         toast({ title: "Excluindo sua conta...", description: "Aguarde um momento." });
         const { error } = await deleteAccount();
         if (error) {
-            // Check for the specific schema cache error and provide a more user-friendly message.
-            const isSchemaCacheError = error.message.includes('Could not find the function') && error.message.includes('schema cache');
+            // Check for schema cache errors (PGRST202 or PGRST204)
+            const isSchemaCacheError = (error.message.includes('Could not find') || error.message.includes('schema cache'));
+            
             const description = isSchemaCacheError 
-                ? "Não foi possível comunicar com o banco de dados para realizar esta ação. Por favor, contate o suporte técnico informando sobre o erro de 'schema cache'."
+                ? "Erro de Sincronização: A API do banco de dados está desatualizada. Vá ao Dashboard do Supabase > SQL Editor e execute: NOTIFY pgrst, 'reload schema';"
                 : error.message;
 
-            toast({ variant: "destructive", title: "Erro ao excluir conta", description: description });
+            toast({ variant: "destructive", title: "Erro na Operação", description: description });
         } else {
             toast({ title: "Conta excluída", description: "Sua conta e todos os dados foram removidos."});
-            // O provedor de autenticação irá redirecionar automaticamente.
         }
     }
 
@@ -300,7 +299,7 @@ export default function SettingsPage() {
                     <div className="flex items-center gap-4">
                         <Avatar className="h-20 w-20 rounded-full">
                             <AvatarImage src={user?.avatar_url ?? undefined} />
-                            <AvatarFallback>{user?.name?.charAt(0)}</AvatarFallback>
+                            <AvatarFallback>{user?.email?.charAt(0).toUpperCase()}</AvatarFallback>
                         </Avatar>
                         <Button variant="outline" onClick={() => avatarInputRef.current?.click()}>
                             Alterar Avatar
@@ -341,7 +340,7 @@ export default function SettingsPage() {
                     <div className="flex items-center gap-4">
                         <Avatar className="h-20 w-20 rounded-lg">
                             <AvatarImage src={store?.logo_url ?? undefined} />
-                            <AvatarFallback>{store?.name?.charAt(0)}</AvatarFallback>
+                            <AvatarFallback>{store?.name?.charAt(0).toUpperCase()}</AvatarFallback>
                         </Avatar>
                         <Button variant="outline" onClick={() => logoInputRef.current?.click()}>
                             Alterar Logo
@@ -521,7 +520,7 @@ export default function SettingsPage() {
                                     <div className="flex items-center gap-2">
                                         <Avatar className="h-8 w-8">
                                             <AvatarImage src={member.avatar_url ?? undefined} />
-                                            <AvatarFallback>{member.name?.charAt(0)}</AvatarFallback>
+                                            <AvatarFallback>{member.name?.charAt(0).toUpperCase()}</AvatarFallback>
                                         </Avatar>
                                         <span>{member.name}</span>
                                     </div>
