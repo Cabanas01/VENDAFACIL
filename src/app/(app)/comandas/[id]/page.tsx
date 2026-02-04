@@ -3,7 +3,7 @@
 
 /**
  * @fileOverview Detalhe da Comanda - Fluxo de Fechamento e Pagamento.
- * Corrigido para calcular o total no frontend e evitar delay de sincronização da View.
+ * Corrigido para calcular o total no frontend e garantir exibição correta dos preços individuais.
  */
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
@@ -60,7 +60,7 @@ export default function ComandaDetailsPage() {
   const [isClosing, setIsClosing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // CÁLCULO EM TEMPO REAL: Evita depender do delay da View v_comandas_totais
+  // CÁLCULO EM TEMPO REAL: Garante que o total reflita os itens carregados
   const calculatedTotal = useMemo(() => {
     return items.reduce((acc, item) => acc + (item.quantidade * item.preco_unitario), 0);
   }, [items]);
@@ -166,9 +166,9 @@ export default function ComandaDetailsPage() {
         created_at: new Date().toISOString(),
         items: items.map(i => ({
           product_name_snapshot: i.product_name,
-          quantity: i.quantity,
+          quantity: i.quantidade,
           unit_price_cents: i.preco_unitario,
-          subtotal_cents: i.quantity * i.preco_unitario
+          subtotal_cents: i.quantidade * i.preco_unitario
         }))
       } as any;
       printReceipt(saleMock, store);
@@ -297,8 +297,8 @@ export default function ComandaDetailsPage() {
                           <Badge className="text-[8px] h-4 px-1.5 uppercase font-black" variant={item.status === 'pronto' ? 'default' : 'secondary'}>{item.status}</Badge>
                         </div>
                       </TableCell>
-                      <TableCell className="text-center font-black text-xs px-6">x{item.quantity}</TableCell>
-                      <TableCell className="text-right font-black text-primary px-6">{formatCurrency(item.quantity * item.preco_unitario)}</TableCell>
+                      <TableCell className="text-center font-black text-xs px-6">x{item.quantidade}</TableCell>
+                      <TableCell className="text-right font-black text-primary px-6">{formatCurrency(item.quantidade * item.preco_unitario)}</TableCell>
                     </TableRow>
                   ))}
                   {items.length === 0 && (
