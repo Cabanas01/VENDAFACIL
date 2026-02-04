@@ -21,9 +21,8 @@ export function generateReceiptHTML(
   sale: Sale,
   store: Store,
   width: '80mm' | '58mm' = '80mm',
-  comandaInfo?: { numero: number; mesa: string; cliente: string }
+  comandaInfo?: { numero: number; mesa: string | null; cliente: string | null }
 ): string {
-  // Garantia de que items existe para evitar erro de compilação/execução
   const items = sale.items || [];
   
   const receiptItems = items
@@ -45,7 +44,7 @@ export function generateReceiptHTML(
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <title>VendaFácil - Cupom Não Fiscal</title>
+  <title>VendaFácil - Cupom</title>
   <style>
     @page { size: ${width} auto; margin: 0; }
     body {
@@ -71,13 +70,12 @@ export function generateReceiptHTML(
 </head>
 <body>
   <div class="center header bold">${store.name}</div>
-  <div class="center info-section">${store.legal_name || ''}</div>
   <div class="center info-section">CNPJ: ${store.cnpj || ''}</div>
   <div class="center info-section">${store.phone || ''}</div>
 
   <div class="line"></div>
-  <div class="center bold">CUPOM NÃO FISCAL</div>
-  <div class="center">${new Date(sale.created_at || new Date()).toLocaleString('pt-BR')}</div>
+  <div class="center bold">CONFERÊNCIA DE MESA</div>
+  <div class="center">${new Date().toLocaleString('pt-BR')}</div>
   <div class="line"></div>
 
   ${comandaInfo ? `
@@ -87,17 +85,15 @@ export function generateReceiptHTML(
     <div class="line"></div>
   ` : ''}
 
-  <div class="bold">DESCRIÇÃO DOS ITENS</div>
+  <div class="bold">ITENS CONSUMIDOS</div>
   ${receiptItems || '<div class="center">Nenhum item registrado</div>'}
 
   <div class="line"></div>
   <div class="total-row bold">
-    <span>TOTAL GERAL</span>
+    <span>TOTAL</span>
     <span>${formatCurrency(sale.total_cents)}</span>
   </div>
   <div class="line"></div>
-
-  <div class="bold">PAGAMENTO: ${paymentMethodLabels[sale.payment_method as keyof typeof paymentMethodLabels] || (sale.payment_method || 'NÃO INFORMADO').toUpperCase()}</div>
 
   <div class="center footer">
     <div>VendaFácil Brasil - Automação Comercial</div>
