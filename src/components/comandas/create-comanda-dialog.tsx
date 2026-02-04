@@ -44,7 +44,7 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
     setIsSubmitting(true);
 
     try {
-      // Chama a RPC de abertura que já cuida do CRM e da Comanda
+      // Ao abrir, a comanda recebe status 'aberta' (regra de backend ou default)
       const { data, error } = await supabase.rpc('abrir_comanda', {
         p_store_id: store.id,
         p_mesa: values.mesa,
@@ -55,7 +55,6 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
 
       if (error) throw error;
 
-      // Captura o ID de forma resiliente. RPCs podem retornar UUID direto ou objeto JSON.
       let comandaId = null;
       if (typeof data === 'string') {
         comandaId = data;
@@ -64,19 +63,17 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
       }
       
       if (comandaId && comandaId !== 'undefined') {
-        toast({ title: 'Comanda Aberta!', description: `Mesa ${values.mesa} para ${values.cliente_nome}.` });
+        toast({ title: 'Comanda Aberta!' });
         onOpenChange(false);
         form.reset();
         router.push(`/comandas/${comandaId}`);
       } else {
-        toast({ title: 'Comanda Aberta!', description: 'Redirecionando para a lista.' });
         onOpenChange(false);
         form.reset();
         if (onSuccess) onSuccess();
       }
     } catch (err: any) {
-      console.error('[ABRIR_COMANDA_ERROR]', err);
-      toast({ variant: 'destructive', title: 'Erro ao abrir comanda', description: err.message });
+      toast({ variant: 'destructive', title: 'Erro ao abrir', description: err.message });
     } finally {
       setIsSubmitting(false);
     }
@@ -89,7 +86,7 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
           <DialogTitle className="text-2xl font-black font-headline uppercase tracking-tighter flex items-center gap-2">
             <ClipboardList className="h-6 w-6 text-primary" /> Abrir Comanda
           </DialogTitle>
-          <DialogDescription>Inicie um novo atendimento registrando mesa e cliente.</DialogDescription>
+          <DialogDescription>Inicie um novo atendimento com status 'aberta'.</DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
@@ -99,8 +96,8 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
               name="mesa"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Mesa / Identificador *</FormLabel>
-                  <FormControl><Input placeholder="Ex: 25" {...field} className="h-12 font-bold" /></FormControl>
+                  <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Mesa *</FormLabel>
+                  <FormControl><Input placeholder="Ex: 10" {...field} className="h-12 font-bold" /></FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -108,7 +105,7 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
 
             <div className="border-t pt-4 space-y-4">
               <h4 className="text-[10px] font-black uppercase tracking-widest text-primary flex items-center gap-2">
-                <UserPlus className="h-3 w-3" /> CRM - Cadastro de Cliente
+                <UserPlus className="h-3 w-3" /> Identificação
               </h4>
               
               <FormField
@@ -116,53 +113,18 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
                 name="cliente_nome"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-[10px] font-bold uppercase">Nome do Cliente *</FormLabel>
-                    <FormControl><Input placeholder="Nome completo" {...field} className="h-11" /></FormControl>
+                    <FormLabel className="text-[10px] font-bold uppercase">Nome *</FormLabel>
+                    <FormControl><Input placeholder="Nome do cliente" {...field} className="h-11" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="cliente_telefone"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-[10px] font-bold uppercase">WhatsApp</FormLabel>
-                      <FormControl>
-                        <div className="relative">
-                          <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                          <Input placeholder="11999999999" className="pl-9 h-11 text-xs" {...field} />
-                        </div>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="cliente_cpf"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-[10px] font-bold uppercase">CPF</FormLabel>
-                      <FormControl>
-                        <div className="relative">
-                          <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                          <Input placeholder="000.000.000-00" className="pl-9 h-11 text-xs" {...field} />
-                        </div>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
             </div>
 
             <DialogFooter>
-              <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={isSubmitting}>Cancelar</Button>
-              <Button type="submit" disabled={isSubmitting} className="h-12 font-black uppercase tracking-widest shadow-lg shadow-primary/20">
-                {isSubmitting ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : 'Confirmar Abertura'}
+              <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
+              <Button type="submit" disabled={isSubmitting} className="h-12 font-black uppercase tracking-widest">
+                {isSubmitting ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : 'Abrir Atendimento'}
               </Button>
             </DialogFooter>
           </form>
