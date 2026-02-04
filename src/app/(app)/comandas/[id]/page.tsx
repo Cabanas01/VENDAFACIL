@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * @fileOverview Detalhes da Comanda com Interface de Vendas Premium.
+ * Sincronizado com a imagem: Títulos em uppercase, subtotal em destaque e cards minimalistas.
+ */
+
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/components/auth-provider';
@@ -22,7 +27,8 @@ import {
   Search,
   ShoppingCart,
   Trash2,
-  X
+  X,
+  ChevronRight
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -266,12 +272,14 @@ export default function ComandaDetailsPage() {
         </div>
       </div>
 
+      {/* MODAL DE VENDAS PREMIUM (CONFORME IMAGEM) */}
       <Dialog open={isAddingItems} onOpenChange={setIsAddingItems}>
         <DialogContent className="sm:max-w-5xl p-0 overflow-hidden border-none shadow-2xl rounded-[32px]">
           <div className="flex h-[85vh]">
+            {/* LADO ESQUERDO: CATÁLOGO */}
             <div className="flex-1 flex flex-col bg-white border-r">
               <div className="p-8 border-b space-y-6">
-                <DialogTitle className="text-3xl font-black uppercase tracking-tighter">CARDÁPIO DE VENDAS</DialogTitle>
+                <DialogTitle className="text-3xl font-black uppercase tracking-tighter text-slate-950">CARDÁPIO DE VENDAS</DialogTitle>
                 <div className="relative">
                   <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                   <Input 
@@ -285,10 +293,14 @@ export default function ComandaDetailsPage() {
               <ScrollArea className="flex-1 p-8 bg-slate-50/30">
                 <div className="grid grid-cols-2 gap-6">
                   {filteredProducts.map(p => (
-                    <Card key={p.id} className="cursor-pointer hover:border-primary border-transparent active:scale-95 transition-all shadow-sm bg-white" onClick={() => addToLocalCart(p)}>
+                    <Card 
+                      key={p.id} 
+                      className="cursor-pointer hover:border-primary border-transparent active:scale-95 transition-all shadow-sm bg-white" 
+                      onClick={() => addToLocalCart(p)}
+                    >
                       <CardContent className="p-6 space-y-4">
                         <p className="text-xs font-black uppercase text-slate-900 leading-tight h-10 line-clamp-2">{p.name}</p>
-                        <p className="font-black text-lg tracking-tighter text-primary">{formatCurrency(p.price_cents)}</p>
+                        <p className="font-black text-xl tracking-tighter text-primary">{formatCurrency(p.price_cents)}</p>
                       </CardContent>
                     </Card>
                   ))}
@@ -296,6 +308,7 @@ export default function ComandaDetailsPage() {
               </ScrollArea>
             </div>
 
+            {/* LADO DIREITO: LANÇAMENTO ATUAL */}
             <div className="w-96 bg-white flex flex-col relative shadow-2xl">
               <div className="p-8 border-b flex justify-between items-center bg-slate-50/50">
                 <h3 className="flex items-center gap-2 font-black uppercase text-[11px] tracking-[0.2em] text-slate-900">
@@ -305,15 +318,21 @@ export default function ComandaDetailsPage() {
                   <X className="h-4 w-4" />
                 </Button>
               </div>
+              
               <ScrollArea className="flex-1 p-8">
                 <div className="space-y-6">
                   {localCart.map(item => (
                     <div key={item.product_id} className="flex justify-between items-start animate-in slide-in-from-right-2">
                       <div className="flex-1 pr-4">
                         <p className="font-black uppercase text-[11px] leading-tight text-slate-900">{item.product_name_snapshot}</p>
-                        <p className="text-primary font-bold text-[10px] mt-1 uppercase">x{item.qty} — {formatCurrency(item.unit_price_cents)}</p>
+                        <p className="text-primary font-bold text-[10px] mt-1 uppercase">X{item.qty} — {formatCurrency(item.unit_price_cents)}</p>
                       </div>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:bg-red-50 hover:text-red-600 transition-colors" onClick={() => setLocalCart(localCart.filter(i => i.product_id !== item.product_id))}>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 text-red-500 hover:bg-red-50 hover:text-red-600 transition-colors" 
+                        onClick={() => setLocalCart(localCart.filter(i => i.product_id !== item.product_id))}
+                      >
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
@@ -326,14 +345,19 @@ export default function ComandaDetailsPage() {
                   )}
                 </div>
               </ScrollArea>
+
               <div className="p-8 bg-white border-t space-y-6">
                 <div className="flex justify-between items-end">
                   <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">SUBTOTAL</span>
-                  <span className="text-3xl font-black text-primary tracking-tighter">
+                  <span className="text-4xl font-black text-primary tracking-tighter">
                     {formatCurrency(localCart.reduce((acc, i) => acc + i.subtotal_cents, 0))}
                   </span>
                 </div>
-                <Button className="w-full h-16 font-black uppercase text-xs tracking-widest shadow-xl shadow-primary/20" disabled={localCart.length === 0 || isSubmitting} onClick={handleCommitItems}>
+                <Button 
+                  className="w-full h-16 font-black uppercase text-xs tracking-widest shadow-xl shadow-primary/20 rounded-2xl" 
+                  disabled={localCart.length === 0 || isSubmitting} 
+                  onClick={handleCommitItems}
+                >
                   {isSubmitting ? <Loader2 className="animate-spin" /> : 'CONFIRMAR PEDIDO'}
                 </Button>
               </div>
