@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
@@ -127,16 +126,17 @@ export default function ComandaDetailsPage() {
         await addComandaItemById({
           comandaId: comanda.id,
           productId: i.product.id,
-          productName: i.product.name,
+          product_name: i.product.name,
           qty: i.quantity,
-          unitPrice: i.product.price_cents,
+          unit_price: i.product.price_cents,
           destino: i.product.production_target || 'nenhum'
         });
       }
 
       await supabase.from('comandas')
         .update({ status: 'em_preparo' })
-        .eq('id', comanda.id);
+        .eq('id', comanda.id)
+        .in('status', ['aberta', 'em_preparo']);
 
       toast({ title: 'Itens Lançados!' });
       setTempItems([]);
@@ -153,7 +153,7 @@ export default function ComandaDetailsPage() {
     if (!comanda) return;
     setIsSubmitting(true);
     try {
-      // REGRA: Força o estado aguardando_pagamento antes de abrir o modal
+      // REGRA: Garante o estado correto antes de processar o faturamento
       await supabase.from('comandas')
         .update({ status: 'aguardando_pagamento' })
         .eq('id', comanda.id)
@@ -161,7 +161,7 @@ export default function ComandaDetailsPage() {
       
       setIsClosing(true);
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Erro ao iniciar fechamento' });
+      toast({ variant: 'destructive', title: 'Erro no Fluxo', description: 'Não foi possível preparar a comanda para pagamento.' });
     } finally {
       setIsSubmitting(false);
     }
@@ -172,11 +172,10 @@ export default function ComandaDetailsPage() {
     
     setIsSubmitting(true);
     try {
-      // 1. Garantir que o estado é o correto para pagamento (Double Check)
+      // 1. Double check de integridade no servidor
       await supabase.from('comandas')
         .update({ status: 'aguardando_pagamento' })
-        .eq('id', comanda.id)
-        .in('status', ['aberta', 'em_preparo', 'pronta', 'aguardando_pagamento']);
+        .eq('id', comanda.id);
 
       const cartItems: CartItem[] = items.map(i => ({
         product_id: i.product_id,
@@ -189,14 +188,14 @@ export default function ComandaDetailsPage() {
 
       const normalizedMethod = method === 'dinheiro' ? 'cash' : (method === 'cartao' ? 'card' : method);
       
-      // 2. Tentar registrar a venda no PDV (AddSale chama processSaleAction no servidor)
+      // 2. Processar Venda (PDV) - Usando Server Action com bypass de admin se necessário
       const result = await addSale(cartItems, normalizedMethod, customer?.id || null);
       
       if (!result.success) {
         throw new Error(result.error);
       }
 
-      // 3. Encerrar a comanda após o sucesso da venda
+      // 3. Encerrar Atendimento
       const { error: finalError } = await supabase.from('comandas').update({ 
         status: 'fechada', 
         closed_at: new Date().toISOString() 
@@ -204,14 +203,14 @@ export default function ComandaDetailsPage() {
 
       if (finalError) throw finalError;
 
-      toast({ title: 'Atendimento Encerrado!' });
+      toast({ title: 'Atendimento Concluído!', description: 'Venda registrada no histórico financeiro.' });
       router.push('/comandas');
     } catch (err: any) {
       console.error('[FECHAMENTO_ERROR]', err);
       toast({ 
         variant: 'destructive', 
         title: 'Não foi possível fechar', 
-        description: err.message || 'Verifique se a comanda está no estado correto para pagamento.' 
+        description: err.message || 'Erro de permissão ou estado da comanda inválido.' 
       });
     } finally {
       setIsSubmitting(false);
@@ -221,7 +220,7 @@ export default function ComandaDetailsPage() {
   if (loading && !comanda) return (
     <div className="h-[60vh] flex flex-col items-center justify-center gap-4">
       <Loader2 className="animate-spin h-8 w-8 text-primary" />
-      <p className="font-black uppercase text-[10px] tracking-widest text-muted-foreground">Sincronizando...</p>
+      <p className="font-black uppercase text-[10px] tracking-widest text-muted-foreground">Sincronizando Atendimento...</p>
     </div>
   );
 
