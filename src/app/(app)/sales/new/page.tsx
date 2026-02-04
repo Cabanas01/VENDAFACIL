@@ -2,6 +2,7 @@
 
 /**
  * @fileOverview Tela de Nova Venda / PDV com Histórico de Hoje e Impressão.
+ * Refatorado para design premium e correção de bug de quantidade (qty vs quantity).
  */
 
 import { useState, useMemo, useEffect } from 'react';
@@ -18,7 +19,8 @@ import {
   ArrowRight,
   History,
   Printer,
-  CalendarDays
+  CalendarDays,
+  X
 } from 'lucide-react';
 import { useAuth } from '@/components/auth-provider';
 import { useToast } from '@/hooks/use-toast';
@@ -33,8 +35,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
@@ -87,12 +87,12 @@ export default function NewSalePage() {
   const addToCart = (product: Product) => {
     const existing = cart.find(item => item.product_id === product.id);
     if (existing) {
-      if (existing.quantity >= product.stock_qty) {
+      if (existing.qty >= product.stock_qty) {
         toast({ variant: 'destructive', title: 'Estoque insuficiente' });
         return;
       }
       setCart(cart.map(item => item.product_id === product.id 
-        ? { ...item, quantity: item.quantity + 1, subtotal_cents: (item.quantity + 1) * item.unit_price_cents } 
+        ? { ...item, qty: item.qty + 1, subtotal_cents: (item.qty + 1) * item.unit_price_cents } 
         : item
       ));
     } else {
@@ -104,7 +104,7 @@ export default function NewSalePage() {
         product_id: product.id,
         product_name_snapshot: product.name,
         product_barcode_snapshot: product.barcode || null,
-        quantity: 1,
+        qty: 1,
         unit_price_cents: product.price_cents,
         subtotal_cents: product.price_cents,
         stock_qty: product.stock_qty
@@ -112,12 +112,29 @@ export default function NewSalePage() {
     }
   };
 
+  const updateQuantity = (productId: string, newQty: number) => {
+    if (newQty < 1) {
+      setCart(cart.filter(i => i.product_id !== productId));
+      return;
+    }
+    
+    const product = products.find(p => p.id === productId);
+    if (product && newQty > product.stock_qty) {
+      toast({ variant: 'destructive', title: 'Estoque insuficiente' });
+      return;
+    }
+
+    setCart(cart.map(item => item.product_id === productId 
+      ? { ...item, qty: newQty, subtotal_cents: newQty * item.unit_price_cents } 
+      : item
+    ));
+  };
+
   const handleFinalize = async (method: 'cash' | 'pix' | 'card') => {
     if (cart.length === 0 || isSubmitting || !store) return;
 
     setIsSubmitting(true);
     try {
-      // O addSale agora retorna o objeto de venda completo com itens
       const result = await addSale(cart, method);
       
       trackEvent('sale_completed', {
@@ -129,7 +146,6 @@ export default function NewSalePage() {
 
       toast({ title: 'Venda Concluída!', description: `Total de ${formatCurrency(cartTotal)} registrado.` });
       
-      // Impressão imediata usando o objeto retornado pelo servidor
       if (result?.sale) {
         printReceipt(result.sale, store);
       }
@@ -140,13 +156,6 @@ export default function NewSalePage() {
       toast({ variant: 'destructive', title: 'Erro na Venda', description: error.message });
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  const handleReprint = (sale: Sale) => {
-    if (store && sale) {
-      printReceipt(sale, store);
-      toast({ title: 'Cupom enviado para impressão' });
     }
   };
 
@@ -194,7 +203,7 @@ export default function NewSalePage() {
           </ScrollArea>
         </div>
 
-        {/* CARRINHO E HISTÓRICO DE HOJE */}
+        {/* CARRINHO E HISTÓRICO */}
         <Card className="flex flex-col h-full border-primary/10 shadow-2xl overflow-hidden">
           <Tabs defaultValue="cart" className="flex flex-col h-full">
             <CardHeader className="p-0 bg-muted/30">
@@ -224,9 +233,9 @@ export default function NewSalePage() {
                       </div>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center border rounded-md h-8 bg-background">
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setCart(cart.map(i => i.product_id === item.product_id ? {...i, quantity: Math.max(1, i.quantity - 1), subtotal_cents: Math.max(1, i.quantity - 1) * i.unit_price_cents} : i))}><Minus className="h-3.5 w-3.5" /></Button>
-                          <span className="w-8 text-center text-xs font-black">{item.quantity}</span>
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => addToCart(products.find(p => p.id === item.product_id)!)}><Plus className="h-3.5 w-3.5" /></Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => updateQuantity(item.product_id, item.qty - 1)}><Minus className="h-3.5 w-3.5" /></Button>
+                          <span className="w-8 text-center text-xs font-black">{item.qty}</span>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => updateQuantity(item.product_id, item.qty + 1)}><Plus className="h-3.5 w-3.5" /></Button>
                         </div>
                         <span className="font-black text-sm text-primary">{formatCurrency(item.subtotal_cents)}</span>
                       </div>
@@ -261,7 +270,7 @@ export default function NewSalePage() {
               <ScrollArea className="flex-1">
                 <div className="p-4 space-y-3">
                   {todaySales.map(sale => (
-                    <div key={sale.id} className="p-3 bg-muted/20 rounded-lg border border-border/50 space-y-2 group hover:border-primary/30 transition-colors">
+                    <div key={sale.id} className="p-3 bg-muted/20 rounded-lg border border-border/50 space-y-2 group">
                       <div className="flex justify-between items-start">
                         <div>
                           <p className="text-[10px] font-black uppercase tracking-tight">{format(new Date(sale.created_at), 'HH:mm:ss')}</p>
@@ -269,7 +278,7 @@ export default function NewSalePage() {
                             {paymentMethodIcons[sale.payment_method as keyof typeof paymentMethodIcons]} {sale.payment_method}
                           </Badge>
                         </div>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-primary opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleReprint(sale)}>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-primary opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => printReceipt(sale, store!)}>
                           <Printer className="h-4 w-4" />
                         </Button>
                       </div>
@@ -279,11 +288,6 @@ export default function NewSalePage() {
                       </div>
                     </div>
                   ))}
-                  {todaySales.length === 0 && (
-                    <div className="py-32 text-center text-muted-foreground text-[10px] font-black uppercase tracking-widest opacity-20">
-                      Nenhuma venda hoje.
-                    </div>
-                  )}
                 </div>
               </ScrollArea>
             </TabsContent>
@@ -292,22 +296,59 @@ export default function NewSalePage() {
       </div>
 
       <Dialog open={isFinalizing} onOpenChange={setIsFinalizing}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle className="text-center font-black uppercase tracking-tighter">Forma de Pagamento</DialogTitle></DialogHeader>
-          <div className="grid grid-cols-1 gap-3 py-4">
-            <Button variant="outline" className="h-16 justify-start text-base font-black uppercase tracking-widest gap-4 border-2 hover:border-primary" onClick={() => handleFinalize('cash')} disabled={isSubmitting}>
-              <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center"><Coins className="h-6 w-6 text-green-600" /></div>
-              Dinheiro / Troco
-            </Button>
-            <Button variant="outline" className="h-16 justify-start text-base font-black uppercase tracking-widest gap-4 border-2 hover:border-primary" onClick={() => handleFinalize('pix')} disabled={isSubmitting}>
-              <div className="h-10 w-10 rounded-full bg-cyan-100 flex items-center justify-center"><PiggyBank className="h-6 w-6 text-cyan-600" /></div>
-              PIX QR Code
-            </Button>
-            <Button variant="outline" className="h-16 justify-start text-base font-black uppercase tracking-widest gap-4 border-2 hover:border-primary" onClick={() => handleFinalize('card')} disabled={isSubmitting}>
-              <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center"><CreditCard className="h-6 w-6 text-blue-600" /></div>
-              Cartão Débito/Crédito
-            </Button>
+        <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl rounded-3xl">
+          <div className="p-6 bg-slate-50 relative">
+            <button 
+              onClick={() => setIsFinalizing(false)}
+              className="absolute right-4 top-4 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <DialogHeader className="mb-6">
+              <DialogTitle className="text-center font-black uppercase tracking-tighter text-slate-900">Forma de Pagamento</DialogTitle>
+            </DialogHeader>
+            
+            <div className="grid grid-cols-1 gap-3">
+              {/* Opção Dinheiro */}
+              <Button 
+                variant="outline" 
+                className="h-20 justify-start text-sm font-black uppercase tracking-widest gap-6 border-none bg-white shadow-sm hover:bg-slate-100 transition-all px-6" 
+                onClick={() => handleFinalize('cash')} 
+                disabled={isSubmitting}
+              >
+                <div className="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center shrink-0">
+                  <Coins className="h-6 w-6 text-green-600" />
+                </div>
+                <span>Dinheiro / Troco</span>
+              </Button>
+
+              {/* Opção PIX (Destaque conforme a imagem) */}
+              <Button 
+                className="h-20 justify-start text-sm font-black uppercase tracking-widest gap-6 border-none bg-cyan-400 text-white shadow-lg hover:bg-cyan-500 transition-all px-6" 
+                onClick={() => handleFinalize('pix')} 
+                disabled={isSubmitting}
+              >
+                <div className="h-12 w-12 rounded-full bg-white flex items-center justify-center shrink-0">
+                  <PiggyBank className="h-6 w-6 text-cyan-500" />
+                </div>
+                <span>PIX QR CODE</span>
+              </Button>
+
+              {/* Opção Cartão */}
+              <Button 
+                variant="outline" 
+                className="h-20 justify-start text-sm font-black uppercase tracking-widest gap-6 border-none bg-white shadow-sm hover:bg-slate-100 transition-all px-6" 
+                onClick={() => handleFinalize('card')} 
+                disabled={isSubmitting}
+              >
+                <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
+                  <CreditCard className="h-6 w-6 text-blue-600" />
+                </div>
+                <span>Cartão Débito/Crédito</span>
+              </Button>
+            </div>
           </div>
+
           {isSubmitting && (
             <div className="absolute inset-0 bg-background/80 flex flex-col items-center justify-center z-50 animate-in fade-in">
               <Loader2 className="h-10 w-10 animate-spin text-primary mb-2" />
