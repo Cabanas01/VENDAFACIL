@@ -96,14 +96,13 @@ export default function ComandasPage() {
   , [comandas, search]);
 
   const handleManageComanda = (comanda: any) => {
-    // REGRA DE OURO: SEMPRE USAR O UUID (id ou comanda_id da view)
     const comandaId = comanda.id || comanda.comanda_id;
     
     if (!comandaId || comandaId === 'undefined') {
       toast({ 
         variant: 'destructive', 
         title: 'Falha na Identificação', 
-        description: 'UUID da comanda não localizado. Tente atualizar a página.' 
+        description: 'UUID da comanda não localizado.' 
       });
       return;
     }
@@ -231,11 +230,6 @@ export default function ComandasPage() {
                 </CardContent>
               </Card>
             ))}
-            {tables.length === 0 && !loading && (
-              <div className="py-20 text-center border-2 border-dashed rounded-3xl opacity-30">
-                <p className="text-xs font-black uppercase tracking-widest">Nenhuma mesa cadastrada no sistema</p>
-              </div>
-            )}
           </div>
         </TabsContent>
       </Tabs>

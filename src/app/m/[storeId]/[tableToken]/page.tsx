@@ -1,10 +1,9 @@
 'use client';
 
 /**
- * @fileOverview Rota de Entrada do Autoatendimento (QR Code) - Versão Aberta.
+ * @fileOverview Rota de Entrada do Autoatendimento (QR Code).
  * 
- * - Valida a existência da mesa via link público.
- * - Libera o cardápio IMEDIATAMENTE após validação da mesa.
+ * Captura e valida storeId e tableToken da URL de forma resiliente.
  */
 
 import { useEffect, useState, useCallback } from 'react';
@@ -16,6 +15,8 @@ import type { TableInfo, Store } from '@/lib/types';
 
 export default function TableMenuPage() {
   const params = useParams();
+  
+  // Garantia de captura dos parâmetros conforme estrutura de pastas [storeId]/[tableToken]
   const storeId = params?.storeId as string;
   const tableToken = params?.tableToken as string;
   
@@ -26,7 +27,7 @@ export default function TableMenuPage() {
 
   const initializeSession = useCallback(async () => {
     if (!storeId || !tableToken) {
-      setError('Link de acesso incompleto. Por favor, verifique o QR Code.');
+      setError('Erro de identificação: Parâmetros da URL ausentes.');
       setLoading(false);
       return;
     }
@@ -35,17 +36,16 @@ export default function TableMenuPage() {
     setError(null);
 
     try {
-      // 1. Validar Mesa (Acesso Público)
+      // 1. Validar Mesa (Acesso Público via Token)
       const { data: tableData, error: tableError } = await supabase.rpc('get_table_by_token', {
         p_store_id: storeId,
         p_table_token: tableToken
       });
 
       if (tableError || !tableData) {
-        throw new Error('Mesa não localizada. Verifique o QR Code ou chame o atendente.');
+        throw new Error('Mesa não localizada. Por favor, tente ler o QR Code novamente.');
       }
 
-      // Tratar retorno como objeto único resiliente
       const resolvedTable = Array.isArray(tableData) ? tableData[0] : tableData;
       
       if (!resolvedTable) {
@@ -68,7 +68,7 @@ export default function TableMenuPage() {
         .maybeSingle();
       
       if (storeErr || !storeData) {
-        throw new Error('Falha ao carregar informações da loja.');
+        throw new Error('Falha ao carregar informações da unidade.');
       }
       setStore(storeData);
 
@@ -89,7 +89,7 @@ export default function TableMenuPage() {
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#F8FAFC] gap-4">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
         <p className="font-black uppercase text-[10px] tracking-[0.25em] text-muted-foreground animate-pulse">
-          Abrindo Cardápio...
+          Sincronizando Cardápio...
         </p>
       </div>
     );
@@ -102,7 +102,7 @@ export default function TableMenuPage() {
           <AlertCircle className="h-16 w-16 text-red-500" />
         </div>
         <div className="space-y-2 max-w-xs mx-auto">
-          <h1 className="text-2xl font-black font-headline uppercase tracking-tighter">MESA NÃO LOCALIZADA</h1>
+          <h1 className="text-2xl font-black font-headline uppercase tracking-tighter">ERRO DE ACESSO</h1>
           <p className="text-muted-foreground font-medium text-sm leading-relaxed">{error}</p>
         </div>
         <button 
@@ -118,9 +118,14 @@ export default function TableMenuPage() {
   if (!table || !store) return null;
 
   return (
-    <DigitalMenu 
-      table={table} 
-      store={store} 
-    />
+    <>
+      <DigitalMenu table={table} store={store} />
+      
+      {/* Debug Info (Apenas para verificação técnica) */}
+      <div className="fixed bottom-2 right-2 opacity-0 hover:opacity-100 transition-opacity bg-black/80 text-white p-2 rounded text-[8px] font-mono z-[9999] pointer-events-none">
+        STORE: {store.id}<br/>
+        TABLE: {table.number}
+      </div>
+    </>
   );
 }

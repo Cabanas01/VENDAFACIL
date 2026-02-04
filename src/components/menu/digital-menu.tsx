@@ -1,13 +1,12 @@
-
 'use client';
 
 /**
  * @fileOverview Cardápio Digital (Autoatendimento)
  * 
- * Fluxo de Pedido Refatorado:
- * 1. Resolução única da comanda (atômica).
- * 2. Lançamento serial de itens.
- * 3. Registro do cliente vinculado.
+ * Fluxo de Pedido Resiliente:
+ * 1. Validação de IDs de Unidade.
+ * 2. Resolução atômica da comanda.
+ * 3. Tratamento de erro humanizado.
  */
 
 import { useState, useEffect, useMemo } from 'react';
@@ -113,12 +112,11 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
     });
   };
 
-  const handleOpenReview = () => {
-    if (cart.length === 0) return;
-    setIsCartOpen(true);
-  };
-
   const handleProceedToIdentification = () => {
+    if (!store?.id || !table?.number) {
+      toast({ variant: 'destructive', title: 'Erro de Unidade', description: 'Dados da loja não identificados. Recarregue a página.' });
+      return;
+    }
     setIsCartOpen(false);
     setSubmissionError(null);
     setShowIdModal(true);
@@ -126,13 +124,13 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
 
   const executeOrderSubmission = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isSending || !customerData.name || !customerData.phone) return;
+    if (isSending || !customerData.name || !customerData.phone || !store?.id) return;
 
     setIsSending(true);
     setSubmissionError(null);
 
     try {
-      // 1. Garantir que temos uma comanda aberta (Resolução Única)
+      // 1. Resolução Atômica da Comanda
       const { data: existingComanda, error: findError } = await supabase
         .from('comandas')
         .select('id')
@@ -160,7 +158,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
         targetComandaId = newComanda.id;
       }
 
-      // 2. Lançar Itens
+      // 2. Lançamento Serial de Itens
       for (const item of cart) {
         const product = products.find(p => p.id === item.product_id);
         await addComandaItemById({
@@ -173,8 +171,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
         });
       }
 
-      // 3. Vincular Cliente
-      // RESOLUÇÃO DO ERRO DA IMAGEM: Passando p_store_id para evitar violação de constraint
+      // 3. Vínculo de Cliente (Passando store_id obrigatório)
       const { error: regError } = await supabase.rpc('register_customer_on_table', {
         p_store_id: store.id,
         p_comanda_id: targetComandaId,
@@ -185,28 +182,22 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
 
       if (regError) throw regError;
 
-      // 4. Mover status se necessário
-      await supabase.from('comandas')
-        .update({ status: 'em_preparo' })
-        .eq('id', targetComandaId)
-        .eq('status', 'aberta');
-
+      // 4. Conclusão Visual
       setCart([]);
       setShowIdModal(false);
       setOrderSuccess(true);
-      toast({ title: 'Pedido Enviado!' });
+      toast({ title: 'Pedido Recebido!' });
       setTimeout(() => setOrderSuccess(false), 5000);
 
     } catch (err: any) {
-      console.error('[ORDER_ERROR]', err);
+      console.error('[ORDER_SUBMISSION_FATAL]', err);
       
       let friendlyMessage = "Não foi possível concluir seu pedido agora. Por favor, tente novamente em alguns instantes.";
       
-      // Mapeamento de erros técnicos para mensagens amigáveis (Conforme pedido de UX)
-      if (err.message && (err.message.includes('store_id') || err.code === '23502')) {
+      if (err.message?.includes('store_id') || err.code === '23502') {
           friendlyMessage = "Erro de identificação da unidade. Por favor, tente ler o QR Code novamente.";
-      } else if (err.message && err.message.includes('comandas_status_check')) {
-          friendlyMessage = "Esta mesa já possui um atendimento sendo encerrado. Chame o garçom para novos itens.";
+      } else if (err.message?.includes('comandas_status_check')) {
+          friendlyMessage = "Esta mesa possui um pedido sendo finalizado. Por favor, chame um atendente.";
       }
 
       setSubmissionError({
@@ -218,20 +209,13 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
     }
   };
 
-  if (loading) return (
-    <div className="h-screen flex flex-col items-center justify-center bg-white gap-4">
-      <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      <p className="font-black text-[10px] uppercase tracking-widest text-muted-foreground animate-pulse">Carregando Cardápio...</p>
-    </div>
-  );
-
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-32">
       <header className="bg-white border-b sticky top-0 z-40 px-6 py-4 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-3">
           <Avatar className="h-10 w-10 rounded-xl border border-primary/10">
             <AvatarFallback className="bg-primary text-white font-black text-xs">
-              {store.name?.substring(0,2).toUpperCase()}
+              {store.name?.substring(0,2).toUpperCase() || 'VF'}
             </AvatarFallback>
           </Avatar>
           <div className="flex flex-col">
@@ -239,7 +223,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
             <span className="text-[10px] font-black uppercase text-primary tracking-widest mt-1">Mesa #{table.number}</span>
           </div>
         </div>
-        <Badge variant="outline" className="text-[8px] font-black uppercase text-green-600 bg-green-50">Cardápio Ativo</Badge>
+        <Badge variant="outline" className="text-[8px] font-black uppercase text-green-600 bg-green-50">Cardápio Aberto</Badge>
       </header>
 
       <div className="p-6 space-y-6">
@@ -299,7 +283,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
             <CheckCircle2 className="h-6 w-6" />
             <div className="flex flex-col">
               <p className="text-[10px] font-black uppercase tracking-widest leading-none">Pedido Enviado!</p>
-              <p className="text-[9px] font-bold opacity-80 uppercase mt-1">Já estamos preparando tudo.</p>
+              <p className="text-[9px] font-bold opacity-80 uppercase mt-1">Preparando seus itens.</p>
             </div>
           </div>
         </div>
@@ -309,11 +293,11 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
         <div className="fixed bottom-8 inset-x-6 z-50 animate-in slide-in-from-bottom-4 duration-500">
           <Button 
             className="w-full h-16 rounded-2xl font-black uppercase text-[10px] tracking-[0.25em] shadow-2xl flex justify-between px-8 bg-slate-950 hover:bg-slate-900 active:scale-95 transition-all" 
-            onClick={handleOpenReview}
+            onClick={() => setIsCartOpen(true)}
           >
             <div className="flex items-center gap-3">
               <ShoppingCart className="h-4 w-4" /> 
-              <span>Ver Itens</span>
+              <span>Ver Pedido</span>
             </div>
             <div className="flex items-center gap-3">
               <Badge className="bg-primary text-white h-6 font-black">{cart.reduce((a,b) => a + b.qty, 0)}</Badge>
@@ -323,13 +307,14 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
         </div>
       )}
 
+      {/* MODAL: RESUMO DO PEDIDO */}
       <Dialog open={isCartOpen} onOpenChange={setIsCartOpen}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl rounded-t-[32px] sm:rounded-b-[32px]">
           <DialogHeader className="p-8 border-b bg-muted/10">
             <div className="flex justify-between items-start">
               <div>
-                <DialogTitle className="text-2xl font-black font-headline uppercase tracking-tighter">Meu Pedido</DialogTitle>
-                <DialogDescription className="text-[10px] font-black uppercase text-primary tracking-widest mt-1">Confira os itens selecionados</DialogDescription>
+                <DialogTitle className="text-2xl font-black font-headline uppercase tracking-tighter text-slate-950">Meus Escolhidos</DialogTitle>
+                <DialogDescription className="text-[10px] font-black uppercase text-primary tracking-widest mt-1">Revise seu pedido antes de enviar</DialogDescription>
               </div>
               <Button variant="ghost" size="icon" onClick={() => setCart([])} className="text-destructive"><Trash2 className="h-5 w-5" /></Button>
             </div>
@@ -353,7 +338,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
           </ScrollArea>
           <div className="p-8 bg-slate-50 border-t space-y-6">
             <div className="flex justify-between items-end px-2">
-              <span className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Total</span>
+              <span className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Subtotal</span>
               <span className="text-4xl font-black tracking-tighter text-slate-950">{formatCurrency(cartTotal)}</span>
             </div>
             <Button 
@@ -366,15 +351,16 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
         </DialogContent>
       </Dialog>
 
+      {/* MODAL: IDENTIFICAÇÃO */}
       <Dialog open={showIdModal} onOpenChange={(open) => !isSending && setShowIdModal(open)}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl z-[9999] rounded-[32px] fixed">
           <DialogHeader className="bg-primary/5 p-10 text-center space-y-4 border-b border-primary/10">
             <div className="mx-auto h-16 w-16 rounded-3xl bg-white shadow-xl flex items-center justify-center text-primary">
               <UserCheck className="h-8 w-8" />
             </div>
-            <div className="space-y-1">
+            <div>
               <DialogTitle className="text-2xl font-black font-headline uppercase tracking-tighter text-center">Quem está Pedindo?</DialogTitle>
-              <DialogDescription className="text-[10px] font-black uppercase tracking-widest text-muted-foreground text-center">Precisamos desses dados para iniciar seu atendimento</DialogDescription>
+              <DialogDescription className="text-[10px] font-black uppercase tracking-widest text-muted-foreground text-center mt-1">Precisamos desses dados para iniciar seu atendimento</DialogDescription>
             </div>
           </DialogHeader>
           
