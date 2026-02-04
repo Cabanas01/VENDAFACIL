@@ -122,6 +122,7 @@ export default function ComandaDetailsPage() {
     if (tempItems.length === 0 || isSubmitting || !comanda) return;
     setIsSubmitting(true);
     try {
+      // REGRA: Inserção direta por ID
       for (const i of tempItems) {
         await addComandaItemById({
           comandaId: comanda.id,
@@ -133,7 +134,11 @@ export default function ComandaDetailsPage() {
         });
       }
 
-      await supabase.from('comandas').update({ status: 'em_preparo' }).eq('id', comanda.id).in('status', ['aberta', 'em_preparo']);
+      // Transição Idempotente para preparo
+      await supabase.from('comandas')
+        .update({ status: 'em_preparo' })
+        .eq('id', comanda.id)
+        .in('status', ['aberta', 'em_preparo']);
 
       toast({ title: 'Itens Lançados!' });
       setTempItems([]);
@@ -150,7 +155,12 @@ export default function ComandaDetailsPage() {
     if (!comanda) return;
     setIsSubmitting(true);
     try {
-      await supabase.from('comandas').update({ status: 'aguardando_pagamento' }).eq('id', comanda.id).in('status', ['aberta', 'em_preparo', 'pronta']);
+      // Move para aguardando_pagamento ANTES de abrir o modal
+      await supabase.from('comandas')
+        .update({ status: 'aguardando_pagamento' })
+        .eq('id', comanda.id)
+        .in('status', ['aberta', 'em_preparo', 'pronta', 'aguardando_pagamento']);
+      
       setIsClosing(true);
     } finally {
       setIsSubmitting(false);
@@ -162,12 +172,6 @@ export default function ComandaDetailsPage() {
     
     setIsSubmitting(true);
     try {
-      // REGRA: Comanda precisa estar em 'aguardando_pagamento'
-      if (comanda.status !== 'aguardando_pagamento') {
-        const { error: stateError } = await supabase.from('comandas').update({ status: 'aguardando_pagamento' }).eq('id', comanda.id);
-        if (stateError) throw new Error('Falha ao preparar comanda para pagamento.');
-      }
-
       const cartItems: CartItem[] = items.map(i => ({
         product_id: i.product_id,
         product_name_snapshot: i.product_name,
@@ -179,12 +183,14 @@ export default function ComandaDetailsPage() {
 
       const normalizedMethod = method === 'dinheiro' ? 'cash' : (method === 'cartao' ? 'card' : method);
       
+      // Motor de Vendas do PDV
       const result = await addSale(cartItems, normalizedMethod, customer?.id || null);
       
       if (!result.success) {
-        throw new Error(result.error || 'Erro no motor financeiro.');
+        throw new Error(result.error || 'Erro de permissão ou plano expirado.');
       }
 
+      // Encerramento Oficial da Comanda
       const { error: finalError } = await supabase.from('comandas').update({ 
         status: 'fechada', 
         closed_at: new Date().toISOString() 
@@ -198,8 +204,8 @@ export default function ComandaDetailsPage() {
       console.error('[FECHAMENTO_ERROR]', err);
       toast({ 
         variant: 'destructive', 
-        title: 'Falha no Encerramento', 
-        description: 'Verifique se a comanda está pronta para pagamento.' 
+        title: 'Não foi possível fechar', 
+        description: err.message || 'Verifique se a comanda está no estado correto para pagamento.' 
       });
       setIsSubmitting(false);
     }
@@ -208,7 +214,7 @@ export default function ComandaDetailsPage() {
   if (loading && !comanda) return (
     <div className="h-[60vh] flex flex-col items-center justify-center gap-4">
       <Loader2 className="animate-spin h-8 w-8 text-primary" />
-      <p className="font-black uppercase text-[10px] tracking-widest text-muted-foreground animate-pulse">Sincronizando...</p>
+      <p className="font-black uppercase text-[10px] tracking-widest text-muted-foreground">Sincronizando...</p>
     </div>
   );
 

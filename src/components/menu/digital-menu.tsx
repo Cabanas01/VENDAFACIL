@@ -102,22 +102,21 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
   };
 
   const handleMainAction = async () => {
+    // 1. Apenas abre o resumo (sem tocar no banco)
     if (step === CheckoutStep.REVIEW) {
       setIsCartOpen(true);
       setStep(CheckoutStep.IDENTIFY);
       return;
     }
 
+    // 2. Dispara o Modal de Identificação
     if (step === CheckoutStep.IDENTIFY) {
-      if (!hasIdentification) {
-        setIsCartOpen(false); // Fecha o resumo para não ficar atrás
-        setShowIdModal(true);
-      } else {
-        setStep(CheckoutStep.CONFIRM);
-      }
+      setIsCartOpen(false); // REGRA: Fecha o resumo para abrir o ID modal como principal
+      setShowIdModal(true);
       return;
     }
 
+    // 3. Envio Real do Pedido
     if (step === CheckoutStep.CONFIRM) {
       await executeOrderSubmission();
     }
@@ -130,7 +129,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
     setHasIdentification(true);
     setShowIdModal(false);
     setStep(CheckoutStep.CONFIRM);
-    setIsCartOpen(true); // Reabre para confirmação final
+    setIsCartOpen(true); // Reabre para confirmação final (Passo 3)
     toast({ title: 'Identificado!', description: 'Agora confirme seu pedido.' });
   };
 
@@ -141,7 +140,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
     try {
       let comandaId: string | null = null;
 
-      // Inserção sequencial para garantir integridade
+      // Inserção sequencial atômica
       for (const item of cart) {
         const product = products.find(p => p.id === item.product_id);
         const cid = await addComandaItem({
@@ -157,7 +156,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
       }
 
       if (comandaId) {
-        // Vínculo do cliente e mudança de status atômica
+        // Vínculo do cliente e mudança de status
         await supabase.rpc('register_customer_on_table', {
           p_comanda_id: comandaId,
           p_name: customerData.name,
@@ -165,7 +164,8 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
           p_cpf: customerData.cpf || null
         });
 
-        await supabase.from('comandas').update({ status: 'em_preparo' }).eq('id', comandaId).eq('status', 'aberta');
+        // Transição segura para preparo
+        await supabase.from('comandas').update({ status: 'em_preparo' }).eq('id', comandaId);
       }
 
       setCart([]);
@@ -173,7 +173,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
       setStep(CheckoutStep.REVIEW);
       setOrderSuccess(true);
       setTimeout(() => setOrderSuccess(false), 5000);
-      toast({ title: 'Pedido Enviado com Sucesso!' });
+      toast({ title: 'Pedido Enviado!' });
 
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Falha no Envio', description: err.message });
@@ -269,13 +269,16 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
         </div>
       )}
 
-      {cart.length > 0 && !isCartOpen && (
+      {cart.length > 0 && (
         <div className="fixed bottom-8 inset-x-6 z-50 animate-in slide-in-from-bottom-4 duration-500">
           <Button 
             className="w-full h-16 rounded-2xl font-black uppercase text-[10px] tracking-[0.25em] shadow-2xl gap-4 flex justify-between px-8 bg-slate-950" 
             onClick={handleMainAction}
           >
-            <div className="flex items-center gap-3"><ShoppingCart className="h-4 w-4" /> <span>Resumo do Pedido</span></div>
+            <div className="flex items-center gap-3">
+              <ShoppingCart className="h-4 w-4" /> 
+              <span>{step === CheckoutStep.CONFIRM ? 'Confirmar Envio' : 'Resumo do Pedido'}</span>
+            </div>
             <span className="text-base tracking-tighter">{formatCurrency(cartTotal)}</span>
           </Button>
         </div>

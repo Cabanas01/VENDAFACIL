@@ -12,7 +12,7 @@ type AddItemParams = {
 
 /**
  * Resolve a comanda aberta pelo número (Mesa) e insere o item.
- * Utilizado principalmente pelo Cardápio Digital (Autoatendimento).
+ * Utilizado pelo Cardápio Digital (Autoatendimento).
  */
 export async function addComandaItem({
   storeId,
@@ -39,7 +39,6 @@ export async function addComandaItem({
     throw comandaError || new Error('Comanda inválida');
   }
 
-  // Insert padronizado com campos de compatibilidade
   const { error } = await supabase.from('comanda_itens').insert({
     comanda_id: comandaId,
     product_id: productId,
@@ -90,3 +89,6 @@ export async function addComandaItemById({
 
   if (error) throw error;
 }
+
+// Exportação de compatibilidade para evitar erros de "not a function"
+export { addComandaItem as addComandaItemByNumero };
