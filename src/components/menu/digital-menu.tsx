@@ -22,7 +22,8 @@ import {
   Clock,
   UserCheck,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Send
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -126,11 +127,13 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
    * 2. Resolver comanda da mesa
    * 3. Enviar itens
    */
-  const handleCheckoutProcess = async () => {
+  const handleCheckoutProcess = async (forcedCustomerId?: string) => {
+    const finalCustomerId = forcedCustomerId || customerId;
+
     if (cart.length === 0 || isSending) return;
 
     // A. Identificação é o primeiro passo
-    if (!customerId) {
+    if (!finalCustomerId) {
       setShowIdModal(true);
       return;
     }
@@ -143,6 +146,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
         const { data: comRes, error: comErr } = await supabase.rpc('get_or_create_comanda_by_table', {
           p_table_id: table.id
         });
+        
         if (comErr) throw comErr;
         
         const rawCom = Array.isArray(comRes) ? comRes[0] : comRes;
@@ -176,7 +180,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
 
     } catch (err: any) {
       console.error('[ORDER_FLOW_ERROR]', err);
-      toast({ variant: 'destructive', title: 'Erro ao Enviar', description: err.message });
+      toast({ variant: 'destructive', title: 'Erro ao Enviar', description: err.message || 'Falha ao processar o envio.' });
     } finally {
       setIsSending(false);
     }
@@ -197,6 +201,8 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
         setComandaId(currentComandaId);
       }
 
+      if (!currentComandaId) throw new Error('Falha ao abrir comanda para identificação.');
+
       const { data: custRes, error: custErr } = await supabase.rpc('register_customer_on_table', {
         p_comanda_id: currentComandaId,
         p_name: customerData.name,
@@ -209,17 +215,18 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
       const rawCust = Array.isArray(custRes) ? custRes[0] : custRes;
       const finalId = typeof rawCust === 'string' ? rawCust : (rawCust?.customer_id || rawCust?.id);
       
-      if (finalId) {
-        setCustomerId(finalId);
-        localStorage.setItem(`vf_cust_${store.id}`, finalId);
-      }
+      if (!finalId) throw new Error('Falha ao registrar identificação do cliente.');
 
+      setCustomerId(finalId);
+      localStorage.setItem(`vf_cust_${store.id}`, finalId);
       setShowIdModal(false);
-      // Após identificar, tenta processar o pedido automaticamente
-      setTimeout(() => handleCheckoutProcess(), 300);
+      
+      // Prossegue automaticamente com o envio do pedido usando o novo ID
+      toast({ title: 'Identificação concluída!' });
+      await handleCheckoutProcess(finalId);
 
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Falha na Identificação', description: err.message });
+      toast({ variant: 'destructive', title: 'Falha na Identificação', description: err.message || 'Erro ao processar seus dados.' });
     } finally {
       setIsIdentifying(false);
     }
@@ -380,17 +387,17 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
               </div>
               <Button 
                 className="w-full h-20 text-sm font-black uppercase tracking-[0.2em] shadow-2xl rounded-[24px]"
-                onClick={handleCheckoutProcess}
+                onClick={() => handleCheckoutProcess()}
                 disabled={isSending}
               >
-                {isSending ? <Loader2 className="h-6 w-6 animate-spin mr-3" /> : 'Confirmar e Enviar Pedido'}
+                {isSending ? <Loader2 className="h-6 w-6 animate-spin mr-3" /> : <><Send className="h-5 w-5 mr-3" /> Confirmar e Enviar Pedido</>}
               </Button>
             </div>
           </div>
         </div>
       )}
 
-      <Dialog open={showIdModal} onOpenChange={(open) => !isIdentifying && setShowIdModal(open)}>
+      <Dialog open={showIdModal} onOpenChange={(open) => !isIdentifying && !isSending && setShowIdModal(open)}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl rounded-[32px]">
           <div className="bg-primary/5 p-10 text-center space-y-4 border-b border-primary/10">
             <div className="mx-auto h-16 w-16 rounded-3xl bg-white shadow-xl flex items-center justify-center text-primary ring-8 ring-primary/5">
@@ -419,8 +426,8 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
                   <Input placeholder="000.000.000-00" value={customerData.cpf} onChange={e => setCustomerData({...customerData, cpf: e.target.value})} className="h-14 font-bold border-muted-foreground/20 rounded-2xl" />
                 </div>
               </div>
-              <Button type="submit" className="w-full h-16 rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl shadow-primary/20" disabled={isIdentifying}>
-                {isIdentifying ? <Loader2 className="animate-spin h-5 w-5" /> : 'Avançar para o Pedido'}
+              <Button type="submit" className="w-full h-16 rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl shadow-primary/20" disabled={isIdentifying || isSending}>
+                {isIdentifying ? <Loader2 className="animate-spin h-5 w-5" /> : 'Finalizar Pedido'}
               </Button>
             </form>
           </div>
