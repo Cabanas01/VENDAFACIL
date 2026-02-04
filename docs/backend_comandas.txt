@@ -1,9 +1,15 @@
 -- =============================================================================
 -- DOMÍNIO: INFRAESTRUTURA COMPLETA - VENDAFÁCIL BRASIL
--- VERSÃO: 6.2 (Resiliência Total e Correção de Tipos)
+-- VERSÃO: 6.3 (Correção de Tipos de View e Sincronização Final)
 -- =============================================================================
 
--- 0. DROPS PREVENTIVOS (Evita erro 42P13: cannot change return type)
+-- 0. LIMPEZA DE VIEWS (Resolve erro 42P16: cannot change data type of view column)
+-- -----------------------------------------------------------------------------
+DROP VIEW IF EXISTS public.v_painel_cozinha CASCADE;
+DROP VIEW IF EXISTS public.v_painel_bar CASCADE;
+DROP VIEW IF EXISTS public.v_comandas_totais CASCADE;
+
+-- 0.1. DROPS DE FUNÇÕES (Evita erro 42P13)
 -- -----------------------------------------------------------------------------
 DROP FUNCTION IF EXISTS public.iniciar_preparo_item(uuid);
 DROP FUNCTION IF EXISTS public.finalizar_preparo_item(uuid);
@@ -226,10 +232,10 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 5. VIEWS DE MONITORAMENTO
+-- 5. VIEWS DE MONITORAMENTO (Recriadas com CASCADE para evitar erro 42P16)
 -- -----------------------------------------------------------------------------
 
-CREATE OR REPLACE VIEW public.v_comandas_totais AS
+CREATE VIEW public.v_comandas_totais AS
 SELECT 
     c.id,
     c.store_id,
@@ -242,7 +248,7 @@ FROM public.comandas c
 LEFT JOIN public.sales s ON c.id = s.comanda_id
 GROUP BY c.id, c.store_id, c.numero, c.mesa, c.status, c.cliente_nome;
 
-CREATE OR REPLACE VIEW public.v_painel_cozinha AS
+CREATE VIEW public.v_painel_cozinha AS
 SELECT 
     si.id AS item_id,
     c.id AS comanda_id,
@@ -258,7 +264,7 @@ JOIN public.sales s ON si.sale_id = s.id
 JOIN public.comandas c ON s.comanda_id = c.id
 WHERE si.destino_preparo = 'cozinha' AND si.status != 'pronto' AND c.status != 'fechada';
 
-CREATE OR REPLACE VIEW public.v_painel_bar AS
+CREATE VIEW public.v_painel_bar AS
 SELECT 
     si.id AS item_id,
     c.id AS comanda_id,
