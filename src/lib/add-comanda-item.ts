@@ -1,4 +1,3 @@
-
 import { supabase } from '@/lib/supabase/client';
 
 type AddItemParams = {
@@ -12,8 +11,8 @@ type AddItemParams = {
 };
 
 /**
- * Função Oficial Única para Adicionar Itens em Comandas.
- * Resolve a comanda aberta para o número informado e insere o item padronizado.
+ * Função Única e Oficial para Adicionar Item em Comanda.
+ * Resolve a comanda aberta e insere o item com compatibilidade total de colunas.
  */
 export async function addComandaItem({
   storeId,
@@ -24,7 +23,11 @@ export async function addComandaItem({
   unitPrice,
   destino,
 }: AddItemParams) {
-  // 1. Backend resolve a comanda (get_or_create_open_comanda deve existir no banco)
+  if (!productId || !productName || !qty || !unitPrice) {
+    throw new Error('Dados obrigatórios do item ausentes');
+  }
+
+  // 1️⃣ Backend resolve a comanda (Busca aberta ou cria uma nova)
   const { data: comandaId, error: comandaError } = await supabase.rpc(
     'get_or_create_open_comanda',
     {
@@ -33,14 +36,16 @@ export async function addComandaItem({
     }
   );
 
-  if (comandaError) throw comandaError;
+  if (comandaError || !comandaId) {
+    throw comandaError || new Error('Comanda inválida ou não encontrada');
+  }
 
-  // 2. Insert Padronizado com compatibilidade para colunas em português
+  // 2️⃣ Insert padronizado com campos em inglês e português para compatibilidade
   const { error } = await supabase.from('comanda_itens').insert({
     comanda_id: comandaId,
     product_id: productId,
     product_name: productName,
-    qty,
+    qty: qty,
     unit_price: unitPrice,
     quantidade: qty,           // Compatibilidade legada
     preco_unitario: unitPrice, // Compatibilidade legada
@@ -49,6 +54,6 @@ export async function addComandaItem({
   });
 
   if (error) throw error;
-  
+
   return comandaId;
 }

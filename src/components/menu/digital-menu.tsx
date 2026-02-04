@@ -1,9 +1,7 @@
-
 'use client';
 
 /**
  * @fileOverview Cardápio Digital Público.
- * Ajustado para transicionar o status da comanda para 'em_preparo' ao enviar o pedido.
  */
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -76,33 +74,47 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
   const addToCart = (product: Product) => {
     setCart(prev => {
       const existing = prev.find(i => i.product_id === product.id);
-      if (existing) return prev.map(i => i.product_id === product.id ? { ...i, qty: i.qty + 1, subtotal_cents: (i.qty + 1) * i.unit_price_cents } : i);
-      return [...prev, { product_id: product.id, product_name_snapshot: product.name, qty: 1, unit_price_cents: product.price_cents, subtotal_cents: product.price_cents, stock_qty: product.stock_qty, notes: '' }];
+      if (existing) {
+        return prev.map(i => i.product_id === product.id ? { ...i, qty: i.qty + 1, subtotal_cents: (i.qty + 1) * i.unit_price_cents } : i);
+      }
+      return [...prev, { 
+        product_id: product.id, 
+        product_name_snapshot: product.name, 
+        qty: 1, 
+        unit_price_cents: product.price_cents, 
+        subtotal_cents: product.price_cents, 
+        stock_qty: product.stock_qty, 
+        notes: '' 
+      }];
     });
   };
 
   const removeFromCart = (productId: string) => {
     setCart(prev => {
       const existing = prev.find(i => i.product_id === productId);
-      if (existing && existing.qty > 1) return prev.map(i => i.product_id === productId ? { ...i, qty: i.qty - 1, subtotal_cents: (i.qty - 1) * i.unit_price_cents } : i);
+      if (existing && existing.qty > 1) {
+        return prev.map(i => i.product_id === productId ? { ...i, qty: i.qty - 1, subtotal_cents: (i.qty - 1) * i.unit_price_cents } : i);
+      }
       return prev.filter(i => i.product_id !== productId);
     });
   };
 
-  const executeOrderSubmission = async () => {
+  const executeOrderSubmission = async (finalCustomerId?: string) => {
     setIsSending(true);
     try {
-      // 1. Garantir comanda aberta
-      const { data: comRes, error: comErr } = await supabase.rpc('get_or_create_comanda_by_table', { p_table_id: table.id });
+      // 1. Resolver comanda aberta via RPC
+      const { data: comRes, error: comErr } = await supabase.rpc('get_or_create_comanda_by_table', { 
+        p_table_id: table.id 
+      });
       if (comErr) throw comErr;
       
       const rawCom = Array.isArray(comRes) ? comRes[0] : comRes;
       const numComanda = rawCom?.numero || rawCom?.comanda_numero;
-      const finalComId = rawCom?.comanda_id || rawCom?.id;
+      const comandaId = rawCom?.comanda_id || rawCom?.id;
       
-      if (!numComanda) throw new Error('Falha no atendimento.');
+      if (!numComanda || !comandaId) throw new Error('Falha ao identificar atendimento.');
 
-      // 2. Lançar itens
+      // 2. Lançar cada item individualmente via RPC Oficial
       for (const item of cart) {
         const product = products.find(p => p.id === item.product_id);
         await addComandaItem({
@@ -116,14 +128,17 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
         });
       }
 
-      // 3. Atualizar status da comanda para 'em_preparo'
-      await supabase.from('comandas').update({ status: 'em_preparo' }).eq('id', finalComId);
+      // 3. Transicionar status da comanda conforme MAPA OFICIAL
+      await supabase
+        .from('comandas')
+        .update({ status: 'em_preparo' })
+        .eq('id', comandaId);
 
       setCart([]);
       setIsCartOpen(false);
       setOrderSuccess(true);
       setTimeout(() => setOrderSuccess(false), 5000);
-      toast({ title: 'Pedido Enviado!' });
+      toast({ title: 'Pedido Enviado!', description: 'Já estamos preparando para você.' });
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Erro no Pedido', description: err.message });
     } finally {
@@ -133,8 +148,11 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
 
   const handleCheckoutProcess = async () => {
     if (cart.length === 0 || isSending) return;
-    if (!customerId) { setShowIdModal(true); return; }
-    await executeOrderSubmission();
+    if (!customerId) { 
+      setShowIdModal(true); 
+      return; 
+    }
+    await executeOrderSubmission(customerId);
   };
 
   const handleIdentifyCustomer = async (e: React.FormEvent) => {
@@ -142,6 +160,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
     if (!customerData.name || !customerData.phone || isIdentifying) return;
     setIsIdentifying(true);
     try {
+      // Registrar cliente na comanda atual
       const { data: comRes } = await supabase.rpc('get_or_create_comanda_by_table', { p_table_id: table.id });
       const rawCom = Array.isArray(comRes) ? comRes[0] : comRes;
       const finalComId = rawCom?.comanda_id || rawCom?.id;
@@ -160,7 +179,9 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
       setCustomerId(finalCustId);
       localStorage.setItem(`vf_cust_${store.id}`, finalCustId);
       setShowIdModal(false);
-      await executeOrderSubmission();
+      
+      // Prossegue automaticamente com o envio
+      await executeOrderSubmission(finalCustId);
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Falha na Identificação', description: err.message });
     } finally {

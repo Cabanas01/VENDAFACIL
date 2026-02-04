@@ -1,9 +1,7 @@
-
 'use client';
 
 /**
  * @fileOverview Gerenciamento de Comanda (Painel Admin)
- * Ajustado para seguir o mapa de status oficial: aberta, em_preparo, aguardando_pagamento, fechada.
  */
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
@@ -21,12 +19,10 @@ import {
   Trash2, 
   Loader2, 
   CheckCircle2, 
-  User,
   MapPin,
   CreditCard,
   Send,
   Search,
-  Printer,
   CircleDollarSign,
   QrCode,
   AlertCircle
@@ -35,7 +31,6 @@ import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import type { ComandaItem, Product, ComandaTotalView, Customer, CartItem } from '@/lib/types';
-import { printReceipt } from '@/lib/print-receipt';
 import { addComandaItem } from '@/lib/add-comanda-item';
 
 const formatCurrency = (val: number) => 
@@ -61,6 +56,7 @@ export default function ComandaDetailsPage() {
   const [isClosing, setIsClosing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Cálculo de total local (Source of Truth) para evitar delay de View
   const calculatedTotal = useMemo(() => {
     return items.reduce((acc, item) => acc + (item.qty * item.unit_price), 0);
   }, [items]);
@@ -85,7 +81,7 @@ export default function ComandaDetailsPage() {
         mesa: baseRes.data.mesa,
         status: baseRes.data.status,
         cliente_nome: baseRes.data.cliente_nome,
-        total: 0
+        total: 0 // Usamos o calculado localmente
       });
 
       setItems(itemsRes.data || []);
@@ -109,10 +105,22 @@ export default function ComandaDetailsPage() {
     return () => { supabase.removeChannel(channel); };
   }, [id, fetchData]);
 
+  const addTempItem = (product: Product) => {
+    setTempItems(prev => {
+      const existing = prev.find(i => i.product.id === product.id);
+      if (existing) {
+        return prev.map(i => i.product.id === product.id ? { ...i, quantity: i.quantity + 1 } : i);
+      }
+      return [...prev, { product, quantity: 1 }];
+    });
+    toast({ title: 'Adicionado à prévia', description: product.name });
+  };
+
   const confirmOrder = async () => {
     if (tempItems.length === 0 || isSubmitting || !store || !comanda) return;
     setIsSubmitting(true);
     try {
+      // 1. Lançar itens via RPC Oficial
       for (const i of tempItems) {
         await addComandaItem({
           storeId: store.id,
@@ -125,8 +133,11 @@ export default function ComandaDetailsPage() {
         });
       }
 
-      // Após lançar itens, atualizamos o status da comanda para 'em_preparo'
-      await supabase.from('comandas').update({ status: 'em_preparo' }).eq('id', comanda.id);
+      // 2. Transicionar status da comanda conforme MAPA OFICIAL
+      await supabase
+        .from('comandas')
+        .update({ status: 'em_preparo' })
+        .eq('id', comanda.id);
 
       toast({ title: 'Pedido Lançado!' });
       setTempItems([]);
@@ -143,7 +154,6 @@ export default function ComandaDetailsPage() {
     if (!comanda) return;
     setIsSubmitting(true);
     try {
-      // Muda status para 'aguardando_pagamento'
       await supabase.from('comandas').update({ status: 'aguardando_pagamento' }).eq('id', comanda.id);
       setIsClosing(true);
     } catch (err: any) {
@@ -167,11 +177,15 @@ export default function ComandaDetailsPage() {
         stock_qty: 999 
       }));
 
+      // Processar venda via motor do PDV
       const result = await addSale(cartItems, method, customer?.id || null);
       if (!result.success) throw new Error(result.error);
 
-      // Status final: 'fechada'
-      await supabase.from('comandas').update({ status: 'fechada', closed_at: new Date().toISOString() }).eq('id', comanda.id);
+      // Status final: fechada
+      await supabase.from('comandas').update({ 
+        status: 'fechada', 
+        closed_at: new Date().toISOString() 
+      }).eq('id', comanda.id);
 
       toast({ title: 'Comanda Encerrada!' });
       router.push('/comandas');
