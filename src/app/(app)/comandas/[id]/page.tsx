@@ -31,7 +31,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import type { ComandaItem, Product, ComandaTotalView, Customer, CartItem } from '@/lib/types';
-import { addComandaItem } from '@/lib/add-comanda-item';
+import { addComandaItemById } from '@/lib/add-comanda-item';
 
 const formatCurrency = (val: number) => 
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((val || 0) / 100);
@@ -118,14 +118,13 @@ export default function ComandaDetailsPage() {
   };
 
   const confirmOrder = async () => {
-    if (tempItems.length === 0 || isSubmitting || !store || !comanda) return;
+    if (tempItems.length === 0 || isSubmitting || !comanda) return;
     setIsSubmitting(true);
     try {
-      // 1. Lançar itens via utilitário blindado
+      // 1. Lançar itens via UUID direto (Helper Administrativo)
       for (const i of tempItems) {
-        await addComandaItem({
-          storeId: store.id,
-          numeroComanda: comanda.numero,
+        await addComandaItemById({
+          comandaId: comanda.id,
           productId: i.product.id,
           productName: i.product.name,
           qty: i.quantity,
@@ -134,12 +133,12 @@ export default function ComandaDetailsPage() {
         });
       }
 
-      // 2. Transicionar status da comanda em query ÚNICA e PROTEGIDA
+      // 2. Transicionar status da comanda de forma resiliente
       await supabase
         .from('comandas')
         .update({ status: 'em_preparo' })
         .eq('id', comanda.id)
-        .eq('status', 'aberta');
+        .in('status', ['aberta', 'em_preparo']);
 
       toast({ title: 'Pedido Lançado!' });
       setTempItems([]);

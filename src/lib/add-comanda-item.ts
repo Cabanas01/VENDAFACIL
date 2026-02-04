@@ -1,21 +1,10 @@
 import { supabase } from '@/lib/supabase/client';
 
-type AddItemParams = {
-  storeId: string;
-  numeroComanda: number;
-  productId: string;
-  productName: string;
-  qty: number;
-  unitPrice: number;
-  destino: 'cozinha' | 'bar' | 'nenhum';
-};
-
 /**
- * Função Única e Oficial para Adicionar Item em Comanda.
- * Resolve a comanda aberta e insere o item com compatibilidade total de colunas.
- * REGRA: NUNCA atualiza o status da comanda aqui dentro.
+ * Helper para o Cardápio Digital (Público)
+ * Resolve a comanda aberta pela loja/número antes de inserir.
  */
-export async function addComandaItem({
+export async function addComandaItemByNumero({
   storeId,
   numeroComanda,
   productId,
@@ -23,12 +12,15 @@ export async function addComandaItem({
   qty,
   unitPrice,
   destino,
-}: AddItemParams) {
-  if (!productId || !productName || !qty || !unitPrice) {
-    throw new Error('Dados obrigatórios do item ausentes');
-  }
-
-  // 1️⃣ Backend resolve a comanda (Busca aberta ou cria uma nova)
+}: {
+  storeId: string;
+  numeroComanda: number;
+  productId: string;
+  productName: string;
+  qty: number;
+  unitPrice: number;
+  destino: 'cozinha' | 'bar' | 'nenhum';
+}) {
   const { data: comandaId, error: comandaError } = await supabase.rpc(
     'get_or_create_open_comanda',
     {
@@ -38,23 +30,55 @@ export async function addComandaItem({
   );
 
   if (comandaError || !comandaId) {
-    throw comandaError || new Error('Comanda inválida ou não encontrada');
+    throw comandaError || new Error('Falha ao resolver comanda');
   }
 
-  // 2️⃣ Insert padronizado com campos em inglês e português para compatibilidade
   const { error } = await supabase.from('comanda_itens').insert({
     comanda_id: comandaId,
     product_id: productId,
     product_name: productName,
     qty: qty,
     unit_price: unitPrice,
-    quantidade: qty,           // Compatibilidade legada
-    preco_unitario: unitPrice, // Compatibilidade legada
+    quantidade: qty,           // compatibilidade legada
+    preco_unitario: unitPrice, // compatibilidade legada
     destino_preparo: destino,
     status: 'pendente',
   });
 
   if (error) throw error;
-
   return comandaId;
+}
+
+/**
+ * Helper para o Painel Administrativo
+ * Insere itens diretamente usando o UUID da comanda (Fonte da Verdade).
+ */
+export async function addComandaItemById({
+  comandaId,
+  productId,
+  productName,
+  qty,
+  unitPrice,
+  destino,
+}: {
+  comandaId: string;
+  productId: string;
+  productName: string;
+  qty: number;
+  unitPrice: number;
+  destino: 'cozinha' | 'bar' | 'nenhum';
+}) {
+  const { error } = await supabase.from('comanda_itens').insert({
+    comanda_id: comandaId,
+    product_id: productId,
+    product_name: productName,
+    qty: qty,
+    unit_price: unitPrice,
+    quantidade: qty,           // compatibilidade legada
+    preco_unitario: unitPrice, // compatibilidade legada
+    destino_preparo: destino,
+    status: 'pendente',
+  });
+
+  if (error) throw error;
 }

@@ -27,7 +27,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { addComandaItem } from '@/lib/add-comanda-item';
+import { addComandaItemByNumero } from '@/lib/add-comanda-item';
 
 const formatCurrency = (val: number) => 
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((val || 0) / 100);
@@ -99,15 +99,15 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
     });
   };
 
-  const executeOrderSubmission = async () => {
+  const executeOrderSubmission = async (resolvedCustId?: string) => {
     setIsSending(true);
     try {
       let resolvedComandaId: string | null = null;
 
-      // 1. Lançar itens via utilitário blindado
+      // 1. Lançar itens via número de mesa (Helper Público)
       for (const item of cart) {
         const product = products.find(p => p.id === item.product_id);
-        const cid = await addComandaItem({
+        const cid = await addComandaItemByNumero({
           storeId: store.id,
           numeroComanda: table.number,
           productId: item.product_id,
@@ -119,13 +119,13 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
         if (!resolvedComandaId) resolvedComandaId = cid;
       }
 
-      // 2. Transicionar status da comanda em query ÚNICA e PROTEGIDA
+      // 2. Transicionar status da comanda
       if (resolvedComandaId) {
         await supabase
           .from('comandas')
           .update({ status: 'em_preparo' })
           .eq('id', resolvedComandaId)
-          .eq('status', 'aberta');
+          .in('status', ['aberta', 'em_preparo']);
       }
 
       setCart([]);
@@ -146,7 +146,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
       setShowIdModal(true); 
       return; 
     }
-    await executeOrderSubmission();
+    await executeOrderSubmission(customerId);
   };
 
   const handleIdentifyCustomer = async (e: React.FormEvent) => {
@@ -173,7 +173,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
       localStorage.setItem(`vf_cust_${store.id}`, finalCustId);
       setShowIdModal(false);
       
-      await executeOrderSubmission();
+      await executeOrderSubmission(finalCustId);
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Falha na Identificação', description: err.message });
     } finally {
