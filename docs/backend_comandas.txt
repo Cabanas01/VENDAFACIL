@@ -1,9 +1,20 @@
 -- =============================================================================
 -- DOMÍNIO: INFRAESTRUTURA COMPLETA - VENDAFÁCIL BRASIL
--- VERSÃO: 6.0 (Sincronização Total: PDV + KDS + Estoque + Governança)
+-- VERSÃO: 6.2 (Resiliência Total e Correção de Tipos)
 -- =============================================================================
 
--- 0. GARANTIA DE ESTRUTURA (TABELAS E COLUNAS)
+-- 0. DROPS PREVENTIVOS (Evita erro 42P13: cannot change return type)
+-- -----------------------------------------------------------------------------
+DROP FUNCTION IF EXISTS public.iniciar_preparo_item(uuid);
+DROP FUNCTION IF EXISTS public.finalizar_preparo_item(uuid);
+DROP FUNCTION IF EXISTS public.decrement_stock(uuid, integer);
+DROP FUNCTION IF EXISTS public.abrir_comanda(uuid, text, text, text, text);
+DROP FUNCTION IF EXISTS public.fechar_comanda(uuid, text);
+DROP FUNCTION IF EXISTS public.get_user_bootstrap_status();
+DROP FUNCTION IF EXISTS public.get_store_access_status(uuid);
+DROP FUNCTION IF EXISTS public.admin_grant_store_access(uuid, text, integer, text, boolean);
+
+-- 1. GARANTIA DE ESTRUTURA (TABELAS E COLUNAS)
 -- -----------------------------------------------------------------------------
 
 -- Tabela: Comandas (Cabeçalho de Atendimento)
@@ -19,16 +30,15 @@ CREATE TABLE IF NOT EXISTS public.comandas (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Forçar colunas necessárias se a tabela já existir
+-- Garantir colunas se a tabela já existia
 ALTER TABLE public.comandas ADD COLUMN IF NOT EXISTS cliente_nome TEXT;
 ALTER TABLE public.comandas ADD COLUMN IF NOT EXISTS total_cents INTEGER DEFAULT 0;
 
--- Tabela: Itens da Comanda / Venda (Produção)
--- Nota: Estas colunas devem existir na tabela sale_items para o KDS/BDS funcionar
+-- Tabela: Itens da Venda (Produção KDS/BDS)
 ALTER TABLE public.sale_items ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pendente' CHECK (status IN ('pendente', 'em_preparo', 'pronto', 'entregue'));
 ALTER TABLE public.sale_items ADD COLUMN IF NOT EXISTS destino_preparo TEXT DEFAULT 'nenhum' CHECK (destino_preparo IN ('cozinha', 'bar', 'nenhum'));
 
--- 1. FUNÇÕES DE OPERAÇÃO COMERCIAL (RPCs)
+-- 2. FUNÇÕES DE OPERAÇÃO COMERCIAL (RPCs)
 -- -----------------------------------------------------------------------------
 
 -- Função: Abrir Comanda
@@ -44,7 +54,19 @@ DECLARE
     v_numero INTEGER;
     v_comanda_id UUID;
 BEGIN
-    -- Numeração sequencial simples por loja (Mesa ou Comanda)
+    -- Busca comanda aberta para a mesma mesa na mesma loja
+    SELECT id INTO v_comanda_id 
+    FROM public.comandas 
+    WHERE store_id = p_store_id 
+      AND mesa = p_mesa 
+      AND status != 'fechada' 
+    LIMIT 1;
+
+    IF v_comanda_id IS NOT NULL THEN
+        RETURN v_comanda_id;
+    END IF;
+
+    -- Se não existe, cria uma nova
     SELECT COALESCE(MAX(numero), 0) + 1 INTO v_numero 
     FROM public.comandas 
     WHERE store_id = p_store_id;
@@ -61,27 +83,24 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE OR REPLACE FUNCTION public.fechar_comanda(
     p_comanda_id UUID, 
     p_forma_pagamento TEXT
-) RETURNS RECORD AS $$
-DECLARE
-    v_result RECORD;
+) RETURNS TABLE (id UUID, status TEXT, forma_pagamento TEXT) AS $$
 BEGIN
+    RETURN QUERY
     UPDATE public.comandas 
     SET status = 'fechada',
         forma_pagamento = p_forma_pagamento
-    WHERE id = p_comanda_id
-    RETURNING id, status, forma_pagamento INTO v_result;
+    WHERE public.comandas.id = p_comanda_id
+    RETURNING public.comandas.id, public.comandas.status, public.comandas.forma_pagamento;
 
     -- Sincroniza o método de pagamento nas vendas vinculadas
     UPDATE public.sales 
     SET payment_method = CASE 
-        WHEN p_forma_pagamento = 'dinheiro' THEN 'cash'
-        WHEN p_forma_pagamento = 'pix' THEN 'pix'
-        WHEN p_forma_pagamento = 'cartao' THEN 'card'
-        ELSE 'cash'
+        WHEN p_forma_pagamento = 'dinheiro' THEN 'cash'::public.sales.payment_method
+        WHEN p_forma_pagamento = 'pix' THEN 'pix'::public.sales.payment_method
+        WHEN p_forma_pagamento = 'cartao' THEN 'card'::public.sales.payment_method
+        ELSE 'cash'::public.sales.payment_method
     END
     WHERE comanda_id = p_comanda_id;
-
-    RETURN v_result;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -95,10 +114,9 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 2. FUNÇÕES DE PRODUÇÃO (KDS / BDS)
+-- 3. FUNÇÕES DE PRODUÇÃO (KDS / BDS)
 -- -----------------------------------------------------------------------------
 
--- Função: Iniciar Preparo
 CREATE OR REPLACE FUNCTION public.iniciar_preparo_item(p_item_id UUID)
 RETURNS VOID AS $$
 BEGIN
@@ -108,7 +126,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Função: Finalizar Preparo
 CREATE OR REPLACE FUNCTION public.finalizar_preparo_item(p_item_id UUID)
 RETURNS VOID AS $$
 BEGIN
@@ -118,10 +135,9 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 3. FUNÇÕES DE GOVERNANÇA E ACESSO (SECURITY)
+-- 4. FUNÇÕES DE GOVERNANÇA E ACESSO
 -- -----------------------------------------------------------------------------
 
--- Função: Status de Bootstrap (Decide destino do usuário no login)
 CREATE OR REPLACE FUNCTION public.get_user_bootstrap_status()
 RETURNS JSONB AS $$
 DECLARE
@@ -142,7 +158,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Função: Status de Licenciamento
 CREATE OR REPLACE FUNCTION public.get_store_access_status(p_store_id UUID)
 RETURNS JSONB AS $$
 DECLARE
@@ -171,7 +186,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Função: Conceder Plano (Admin Manual)
 CREATE OR REPLACE FUNCTION public.admin_grant_store_access(
     p_store_id UUID, 
     p_plano_tipo TEXT, 
@@ -180,7 +194,6 @@ CREATE OR REPLACE FUNCTION public.admin_grant_store_access(
     p_renovavel BOOLEAN
 ) RETURNS VOID AS $$
 BEGIN
-    -- Validação básica de permissão no banco
     IF NOT (SELECT is_admin FROM public.users WHERE id = auth.uid()) THEN
         RAISE EXCEPTION 'not admin';
     END IF;
@@ -213,7 +226,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 4. VIEWS DE MONITORAMENTO
+-- 5. VIEWS DE MONITORAMENTO
 -- -----------------------------------------------------------------------------
 
 CREATE OR REPLACE VIEW public.v_comandas_totais AS
@@ -224,7 +237,7 @@ SELECT
     c.mesa,
     c.status,
     c.cliente_nome,
-    COALESCE(SUM(s.total_cents), 0) AS total_cents
+    COALESCE(SUM(s.total_cents), 0)::INTEGER AS total_cents
 FROM public.comandas c
 LEFT JOIN public.sales s ON c.id = s.comanda_id
 GROUP BY c.id, c.store_id, c.numero, c.mesa, c.status, c.cliente_nome;
@@ -261,7 +274,7 @@ JOIN public.sales s ON si.sale_id = s.id
 JOIN public.comandas c ON s.comanda_id = c.id
 WHERE si.destino_preparo = 'bar' AND si.status != 'pronto' AND c.status != 'fechada';
 
--- 5. PERMISSÕES FINAIS
+-- 6. PERMISSÕES FINAIS
 -- -----------------------------------------------------------------------------
 
 GRANT EXECUTE ON FUNCTION public.abrir_comanda(uuid, text, text, text, text) TO anon, authenticated;

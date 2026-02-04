@@ -2,8 +2,6 @@
 
 /**
  * @fileOverview Server Action robusta para Processamento de Vendas (PDV e Comandas).
- * 
- * Implementa sincronização obrigatória dos campos de produção para evitar erro de estorno.
  */
 
 import { createSupabaseServerClient } from '@/lib/supabase/server';
@@ -30,19 +28,9 @@ export async function processSaleAction(
   }
 
   try {
-    // 1. Identificar privilégios e produtos para mapear destinos de preparo
-    const { data: profile } = await supabaseAdmin
-      .from('users')
-      .select('is_admin')
-      .eq('id', user.id)
-      .single();
-    
-    const isSuperAdmin = profile?.is_admin === true;
-    const activeClient = isSuperAdmin ? supabaseAdmin : supabase;
-
-    // Buscar destinos de preparo dos produtos no carrinho
+    // 1. Identificar produtos para mapear destinos de preparo
     const productIds = cart.map(i => i.product_id);
-    const { data: productsData } = await activeClient
+    const { data: productsData } = await supabaseAdmin
       .from('products')
       .select('id, production_target')
       .in('id', productIds);
@@ -52,7 +40,7 @@ export async function processSaleAction(
     const totalCents = Math.round(cart.reduce((sum, item) => sum + (Number(item.subtotal_cents) || 0), 0));
 
     // 2. Inserir a Venda Principal
-    const { data: sale, error: saleError } = await activeClient
+    const { data: sale, error: saleError } = await supabaseAdmin
       .from('sales')
       .insert({
         store_id: storeId,
@@ -65,7 +53,7 @@ export async function processSaleAction(
 
     if (saleError) throw saleError;
 
-    // 3. Inserir Itens da Venda com campos de produção (OBRIGATÓRIO PARA KDS/BDS)
+    // 3. Inserir Itens da Venda com campos de produção
     const itemsToInsert = cart.map(item => ({
       sale_id: sale.id,
       product_id: item.product_id,
@@ -78,12 +66,12 @@ export async function processSaleAction(
       destino_preparo: productTargets.get(item.product_id) || 'nenhum'
     }));
 
-    const { error: itemsError } = await activeClient.from('sale_items').insert(itemsToInsert);
+    const { error: itemsError } = await supabaseAdmin.from('sale_items').insert(itemsToInsert);
     if (itemsError) throw itemsError;
 
     // 4. Atualizar Estoque via RPC
     for (const item of cart) {
-      await activeClient.rpc('decrement_stock', {
+      await supabaseAdmin.rpc('decrement_stock', {
         p_product_id: item.product_id,
         p_quantity: Math.max(1, Number(item.qty) || 1)
       });
@@ -96,10 +84,10 @@ export async function processSaleAction(
     };
 
   } catch (err: any) {
-    console.error('[SERVER_ACTION] Erro crítico no processamento:', err);
+    console.error('[SERVER_ACTION] Erro crítico:', err);
     return { 
       success: false, 
-      error: 'Falha ao processar itens. A venda foi estornada para segurança dos dados.',
+      error: 'Falha ao processar itens da venda.',
       details: err.message 
     };
   }
