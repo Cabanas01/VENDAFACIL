@@ -51,6 +51,58 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+/**
+ * Normaliza o retorno do RPC get_store_access_status
+ * Aceita Array, Objeto ou Booleano e retorna um StoreAccessStatus consistente.
+ */
+function normalizeAccessStatus(raw: any): StoreAccessStatus | null {
+  const defaultInactive: StoreAccessStatus = {
+    acesso_liberado: false,
+    data_fim_acesso: null,
+    plano_nome: 'Sem plano',
+    plano_tipo: null,
+    mensagem: 'Acesso não liberado.'
+  };
+
+  if (raw == null) return null;
+
+  // Caso: Array [ {...} ]
+  if (Array.isArray(raw)) {
+    const row = raw[0];
+    if (!row || typeof row !== 'object') return defaultInactive;
+    return {
+      acesso_liberado: !!row.acesso_liberado,
+      data_fim_acesso: row.data_fim_acesso ?? null,
+      plano_nome: row.plano_nome ?? 'Plano',
+      plano_tipo: row.plano_tipo ?? null,
+      mensagem: row.mensagem ?? ''
+    };
+  }
+
+  // Caso: Booleano direto
+  if (typeof raw === 'boolean') {
+    return {
+      ...defaultInactive,
+      acesso_liberado: raw,
+      plano_nome: raw ? 'Ativo' : 'Inativo',
+      mensagem: raw ? 'Acesso liberado.' : 'Seu acesso não está ativo.'
+    };
+  }
+
+  // Caso: Objeto único { ... }
+  if (typeof raw === 'object') {
+    return {
+      acesso_liberado: !!raw.acesso_liberado,
+      data_fim_acesso: raw.data_fim_acesso ?? null,
+      plano_nome: raw.plano_nome ?? 'Plano',
+      plano_tipo: raw.plano_tipo ?? null,
+      mensagem: raw.mensagem ?? ''
+    };
+  }
+
+  return defaultInactive;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [user, setUser] = useState<User | null>(null);
@@ -64,43 +116,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [cashRegisters, setCashRegistersState] = useState<CashRegister[]>([]);
 
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
-
-  /**
-   * Normaliza o retorno do RPC get_store_access_status
-   * Trata Array, Objeto ou Booleano de forma resiliente.
-   */
-  const normalizeAccessStatus = (data: any): StoreAccessStatus => {
-    const defaultStatus: StoreAccessStatus = {
-      acesso_liberado: false,
-      data_fim_acesso: null,
-      plano_nome: 'Sem Plano',
-      plano_tipo: null,
-      mensagem: 'Status de acesso não identificado.'
-    };
-
-    if (data === null || data === undefined) return defaultStatus;
-
-    // Caso: Array [ {...} ]
-    if (Array.isArray(data)) {
-      return data[0] ? { ...defaultStatus, ...data[0] } : defaultStatus;
-    }
-
-    // Caso: Objeto Único { ... }
-    if (typeof data === 'object') {
-      return { ...defaultStatus, ...data };
-    }
-
-    // Caso: Booleano Direto
-    if (typeof data === 'boolean') {
-      return {
-        ...defaultStatus,
-        acesso_liberado: data,
-        mensagem: data ? 'Acesso liberado.' : 'Acesso expirado ou restrito.'
-      };
-    }
-
-    return defaultStatus;
-  };
 
   const fetchAppData = useCallback(async (userId: string) => {
     if (!userId) return;
@@ -123,10 +138,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           supabase.from('cash_registers').select('*').eq('store_id', storeId).order('opened_at', { ascending: false }),
           supabase.from('customers').select('*').eq('store_id', storeId).order('name'),
         ]);
-
-        if (accessRes.error) {
-          console.error('[RPC_ERROR] get_store_access_status:', accessRes.error);
-        }
 
         setAccessStatus(normalizeAccessStatus(accessRes.data));
         setStore(storeRes.data || null);
@@ -223,6 +234,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       },
       p_phone: storeData.phone,
       p_timezone: storeData.timezone || 'America/Sao_Paulo',
+      p_business_type: storeData.business_type || 'outros'
     });
 
     if (rpcError) throw rpcError;
@@ -250,7 +262,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const removeStoreMember = async (uid: string) => { const r = await supabase.from('store_members').delete().eq('user_id', uid); await refreshStatus(); return r; };
   const findProductByBarcode = async (b: string) => { if (!store) return null; const { data } = await supabase.from('products').select('*').eq('store_id', store.id).eq('barcode', b).maybeSingle(); return data; };
   const setCashRegisters = async (action: any) => { if (!store) return; const next = typeof action === 'function' ? action(cashRegisters) : action; for (const cr of next) { if (cashRegisters.find(c => c.id === cr.id)) await supabase.from('cash_registers').update(cr).eq('id', cr.id); else await supabase.from('cash_registers').insert({ ...cr, store_id: store.id }); } await refreshStatus(); };
-  const deleteAccount = async () => { const r = await supabase.rpc('delete_user_account'); if (!r.error) await logout(); return r; };
+  
+  const deleteAccount = async () => { 
+    try {
+      const res = await fetch('/api/account/delete', { method: 'POST' });
+      if (!res.ok) {
+        const err = await res.json();
+        return { error: new Error(err.error || 'Falha ao excluir conta.') };
+      }
+      await logout();
+      return { error: null };
+    } catch (err: any) {
+      return { error: err };
+    }
+  };
 
   return (
     <AuthContext.Provider value={{ 

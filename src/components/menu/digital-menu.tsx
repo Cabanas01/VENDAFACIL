@@ -122,6 +122,47 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
     setShowIdModal(true);
   };
 
+  /**
+   * Chamada segura para o registro do cliente com fallback de assinatura.
+   */
+  async function registerCustomerSafe(args: {
+    comandaId: string;
+    storeId: string;
+    name: string;
+    phone: string;
+    cpf?: string | null;
+  }) {
+    // 1) tenta assinatura 4 params (padrão do backend atual)
+    let { error } = await supabase.rpc('register_customer_on_table', {
+      p_comanda_id: args.comandaId,
+      p_name: args.name,
+      p_phone: args.phone,
+      p_cpf: args.cpf ?? null
+    });
+
+    if (!error) return;
+
+    // 2) se PGRST202 (function not found), tenta assinatura 5 params (compatibilidade legado)
+    const msg = (error as any)?.message || '';
+    const code = (error as any)?.code || '';
+    const isPgrst202 = code === 'PGRST202' || msg.includes('PGRST202') || msg.includes('schema cache') || msg.includes('Could not find the function');
+
+    if (isPgrst202) {
+      const retry = await supabase.rpc('register_customer_on_table', {
+        p_store_id: args.storeId,
+        p_comanda_id: args.comandaId,
+        p_name: args.name,
+        p_phone: args.phone,
+        p_cpf: args.cpf ?? null
+      });
+
+      if (retry.error) throw retry.error;
+      return;
+    }
+
+    throw error;
+  }
+
   const executeOrderSubmission = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -176,27 +217,14 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
         });
       }
 
-      // 3. Vínculo de Cliente com Fallback de Parâmetros (PGRST202 Resilience)
-      const rpcParams = {
-        p_comanda_id: targetComandaId,
-        p_name,
-        p_phone,
-        p_cpf
-      };
-
-      // Tentativa 1: Com p_store_id (Assinatura de 5 parâmetros)
-      let { error: regError } = await supabase.rpc('register_customer_on_table', {
-        ...rpcParams,
-        p_store_id: store.id
+      // 3. Registro do Cliente (Com Fallback Resiliente)
+      await registerCustomerSafe({
+        comandaId: targetComandaId,
+        storeId: store.id,
+        name: p_name,
+        phone: p_phone,
+        cpf: p_cpf
       });
-
-      // Tentativa 2: Sem p_store_id (Fallback para assinatura de 4 parâmetros se vier function not found)
-      if (regError?.code === 'PGRST202') {
-        const { error: retryError } = await supabase.rpc('register_customer_on_table', rpcParams);
-        regError = retryError;
-      }
-
-      if (regError) throw regError;
 
       // 4. Conclusão Visual
       setCart([]);
@@ -210,9 +238,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
       
       let friendlyMessage = "Não foi possível concluir seu pedido agora. Por favor, tente novamente.";
       
-      if (err.code === 'PGRST202') {
-        friendlyMessage = "Erro de sincronização com o servidor. Chame um atendente.";
-      } else if (err.message?.includes('comandas_status_check')) {
+      if (err.message?.includes('comandas_status_check')) {
         friendlyMessage = "Esta mesa possui um pedido em fechamento. Chame um atendente.";
       }
 
@@ -369,7 +395,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
 
       {/* MODAL: IDENTIFICAÇÃO */}
       <Dialog open={showIdModal} onOpenChange={(open) => !isSending && setShowIdModal(open)}>
-        <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl z-[9999] rounded-[32px] fixed">
+        <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl z-[9999] rounded-[32px]">
           <DialogHeader className="bg-primary/5 p-10 text-center space-y-4 border-b border-primary/10">
             <div className="mx-auto h-16 w-16 rounded-3xl bg-white shadow-xl flex items-center justify-center text-primary">
               <UserCheck className="h-8 w-8" />
