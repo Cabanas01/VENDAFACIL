@@ -7,12 +7,6 @@ export type User = {
   is_admin?: boolean;
 };
 
-export type BootstrapStatus = {
-  has_store: boolean;
-  is_member: boolean;
-  is_admin: boolean;
-};
-
 export type StoreSettings = {
   blockSaleWithoutStock?: boolean;
   confirmBeforeFinalizingSale?: boolean;
@@ -81,7 +75,7 @@ export type Sale = {
   customer_id?: string | null;
   created_at: string;
   total_cents: number;
-  payment_method: 'dinheiro' | 'pix' | 'cartao' | 'cash' | 'card';
+  payment_method: 'cash' | 'pix' | 'card';
   items: SaleItem[];
 };
 
@@ -94,6 +88,9 @@ export type SaleItem = {
   quantity: number;
   unit_price_cents: number;
   subtotal_cents: number;
+  // Campos para produção
+  status?: string;
+  destino_preparo?: string;
 };
 
 export type CartItem = {
@@ -104,7 +101,6 @@ export type CartItem = {
   unit_price_cents: number;
   subtotal_cents: number;
   stock_qty: number;
-  notes?: string;
 };
 
 export type CashRegister = {
@@ -124,20 +120,6 @@ export type Customer = {
     phone: string | null;
     cpf: string | null;
     created_at: string;
-};
-
-export type ComandaItem = {
-  id: string;
-  comanda_id: string;
-  product_id: string;
-  product_name: string;
-  qty: number;
-  unit_price: number;
-  status: 'pendente' | 'em_preparo' | 'pronto';
-  destino_preparo: string;
-  created_at: string;
-  started_at?: string;
-  finished_at?: string;
 };
 
 export type ComandaTotalView = {
@@ -170,13 +152,6 @@ export type TableInfo = {
   status: string;
   public_token: string;
 };
-
-export type StoreStatus = 
-  | 'loading_auth'
-  | 'loading_status'
-  | 'ready'
-  | 'no_store'
-  | 'error';
 
 export type StoreAccessStatus = {
     acesso_liberado: boolean;

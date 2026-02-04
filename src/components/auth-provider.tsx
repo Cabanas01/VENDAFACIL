@@ -1,17 +1,14 @@
+
 'use client';
 
 /**
- * @fileOverview AuthProvider (CONTRATO IMUTÁVEL)
+ * @fileOverview AuthProvider (CONTRATO DE CONFORMIDADE)
  * 
- * Responsável pela sincronização de dados seguindo estritamente o backend:
- * - get_store_access_status retorna BOOLEAN.
- * - Tabelas usam created_at (não criada_em).
+ * Normaliza retornos do Supabase RPC e garante integridade dos dados.
  */
 
-import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
-import { usePathname } from 'next/navigation';
+import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/client';
-import { isValidUUID } from '@/lib/utils';
 import type { 
   Store, 
   Product, 
@@ -37,17 +34,10 @@ type AuthContextType = {
   refreshStatus: () => Promise<void>;
   createStore: (storeData: any) => Promise<void>;
   updateStore: (data: any) => Promise<void>;
-  updateUser: (data: any) => Promise<void>;
-  removeStoreMember: (userId: string) => Promise<{ error: any }>;
   addProduct: (product: any) => Promise<void>;
   addCustomer: (customer: any) => Promise<void>;
-  updateProduct: (id: string, product: any) => Promise<void>;
-  updateProductStock: (id: string, qty: number) => Promise<void>;
-  removeProduct: (id: string) => Promise<void>;
-  findProductByBarcode: (barcode: string) => Promise<Product | null>;
-  addSale: (cart: CartItem[], paymentMethod: any, customerId?: string | null) => Promise<any>;
+  addSale: (cart: CartItem[], method: any, customerId?: string | null) => Promise<any>;
   setCashRegisters: (action: any) => Promise<void>;
-  deleteAccount: () => Promise<{ error: any }>;
   logout: () => Promise<void>;
 };
 
@@ -55,8 +45,43 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+function normalizeAccessStatus(raw: any): StoreAccessStatus {
+  const defaultStatus: StoreAccessStatus = {
+    acesso_liberado: false,
+    data_fim_acesso: null,
+    plano_nome: 'Sem Plano',
+    plano_tipo: null,
+    mensagem: 'Seu acesso não está ativo.'
+  };
+
+  if (raw === null || raw === undefined) return defaultStatus;
+
+  // Caso retorne boolean direto
+  if (typeof raw === 'boolean') {
+    return {
+      ...defaultStatus,
+      acesso_liberado: raw,
+      plano_nome: raw ? 'Plano Ativo' : 'Inativo',
+      mensagem: raw ? 'Acesso liberado.' : 'Sua assinatura expirou.'
+    };
+  }
+
+  // Caso retorne Record ou Array
+  const data = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof data === 'object') {
+    return {
+      acesso_liberado: !!data.acesso_liberado,
+      data_fim_acesso: data.data_fim_acesso || null,
+      plano_nome: data.plano_nome || (!!data.acesso_liberado ? 'Ativo' : 'Sem Plano'),
+      plano_tipo: data.plano_tipo || null,
+      mensagem: data.mensagem || (!!data.acesso_liberado ? 'Acesso liberado.' : 'Acesso restrito.')
+    };
+  }
+
+  return defaultStatus;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
   const [user, setUser] = useState<User | null>(null);
   const [store, setStore] = useState<Store | null>(null);
   const [accessStatus, setAccessStatus] = useState<StoreAccessStatus | null>(null);
@@ -66,8 +91,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [sales, setSales] = useState<Sale[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [cashRegisters, setCashRegistersState] = useState<CashRegister[]>([]);
-
-  const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchAppData = useCallback(async (userId: string) => {
     if (!userId || !UUID_REGEX.test(userId)) return;
@@ -82,17 +105,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (storeId && UUID_REGEX.test(storeId)) {
-        // 1. Validar Acesso (Retorna BOOLEAN puro)
-        const { data: isAllowed } = await supabase.rpc('get_store_access_status', { p_store_id: storeId });
+        // 1. Validar Acesso (Resiliente)
+        const { data: accessData } = await supabase.rpc('get_store_access_status', { p_store_id: storeId });
+        setAccessStatus(normalizeAccessStatus(accessData));
 
-        setAccessStatus({
-          acesso_liberado: isAllowed === true,
-          data_fim_acesso: null,
-          plano_nome: isAllowed === true ? 'Plano Ativo' : 'Acesso Restrito',
-          plano_tipo: null,
-          mensagem: isAllowed === true ? 'Seu acesso está liberado.' : 'Sua assinatura expirou ou está inativa.'
-        });
-
+        // 2. Carga de Dados (Usa created_at, nunca criada_em)
         const [storeRes, prodRes, salesRes, cashRes, custRes] = await Promise.all([
           supabase.from('stores').select('*').eq('id', storeId).single(),
           supabase.from('products').select('*').eq('store_id', storeId).order('name'),
@@ -111,15 +128,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setStoreStatus('no_store');
       }
     } catch (err) {
-      console.error('[CLIENT_SYNC_ERROR]', err);
+      console.error('[AUTH_SYNC_FATAL]', err);
       setStoreStatus('error');
     }
   }, []);
 
   const refreshStatus = useCallback(async () => {
-    if (user?.id) {
-      await fetchAppData(user.id);
-    }
+    if (user?.id) await fetchAppData(user.id);
   }, [user?.id, fetchAppData]);
 
   useEffect(() => {
@@ -131,19 +146,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setStoreStatus('no_store');
       }
     });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session?.user) {
-        setUser({ id: session.user.id, email: session.user.email || '' });
-        fetchAppData(session.user.id);
-      } else {
-        setUser(null);
-        setStore(null);
-        setStoreStatus('no_store');
-      }
-    });
-
-    return () => subscription.unsubscribe();
   }, [fetchAppData]);
 
   const logout = async () => {
@@ -152,9 +154,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const createStore = async (storeData: any) => {
-    const { data: { user: authUser } } = await supabase.auth.getUser();
-    if (!authUser) throw new Error('Sessão expirada.');
-
     const { error: rpcError } = await supabase.rpc('create_new_store', {
       p_name: storeData.name,
       p_legal_name: storeData.legal_name,
@@ -178,46 +177,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const addSale = useCallback(async (cart: CartItem[], method: any, customerId?: string | null) => {
     if (!store?.id) throw new Error('Loja não identificada.');
-    
-    const normalizedMethod = method === 'dinheiro' ? 'cash' : (method === 'cartao' ? 'card' : method);
-    
-    const result = await processSaleAction(store.id, cart, normalizedMethod, customerId);
+    const result = await processSaleAction(store.id, cart, method, customerId);
     if (!result.success) throw new Error(result.error);
     await refreshStatus();
     return result;
   }, [store, refreshStatus]);
 
   const updateStore = async (data: any) => { if (store) { await supabase.from('stores').update(data).eq('id', store.id); await refreshStatus(); } };
-  const updateUser = async (data: any) => { if (user) { await supabase.from('users').update(data).eq('id', user.id); await refreshStatus(); } };
   const addProduct = async (p: any) => { if (store) { await supabase.from('products').insert({ ...p, store_id: store.id }); await refreshStatus(); } };
   const addCustomer = async (c: any) => { if (store) { await supabase.from('customers').insert({ ...c, store_id: store.id }); await refreshStatus(); } };
   const updateProduct = async (id: string, p: any) => { await supabase.from('products').update(p).eq('id', id); await refreshStatus(); };
   const updateProductStock = async (id: string, q: number) => { await supabase.from('products').update({ stock_qty: q }).eq('id', id); await refreshStatus(); };
   const removeProduct = async (id: string) => { await supabase.from('products').delete().eq('id', id); await refreshStatus(); };
-  const removeStoreMember = async (uid: string) => { const r = await supabase.from('store_members').delete().eq('user_id', uid); await refreshStatus(); return r; };
   const findProductByBarcode = async (b: string) => { if (!store) return null; const { data } = await supabase.from('products').select('*').eq('store_id', store.id).eq('barcode', b).maybeSingle(); return data; };
   const setCashRegisters = async (action: any) => { if (!store) return; const next = typeof action === 'function' ? action(cashRegisters) : action; for (const cr of next) { if (cashRegisters.find(c => c.id === cr.id)) await supabase.from('cash_registers').update(cr).eq('id', cr.id); else await supabase.from('cash_registers').insert({ ...cr, store_id: store.id }); } await refreshStatus(); };
-  
-  const deleteAccount = async () => { 
-    try {
-      const res = await fetch('/api/account/delete', { method: 'POST' });
-      if (!res.ok) {
-        const err = await res.json();
-        return { error: new Error(err.error || 'Falha ao excluir conta.') };
-      }
-      await logout();
-      return { error: null };
-    } catch (err: any) {
-      return { error: err };
-    }
-  };
 
   return (
     <AuthContext.Provider value={{ 
       user, store, accessStatus, products, sales, customers, cashRegisters, storeStatus,
-      refreshStatus, createStore, updateStore, updateUser, removeStoreMember,
-      addProduct, addCustomer, updateProduct, updateProductStock, removeProduct,
-      findProductByBarcode, addSale, setCashRegisters, deleteAccount, logout 
+      refreshStatus, createStore, updateStore, addProduct, addCustomer, updateProduct, 
+      updateProductStock, removeProduct, findProductByBarcode, addSale, setCashRegisters, logout 
     }}>
       {children}
     </AuthContext.Provider>
