@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/components/auth-provider';
 import { supabase } from '@/lib/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -252,7 +252,10 @@ export default function ComandaDetailsPage() {
         <div className="lg:col-span-2 space-y-6">
           {tempItems.length > 0 && (
             <Card className="border-primary bg-primary/5 shadow-2xl">
-              <CardHeader className="py-3"><CardTitle className="text-[10px] font-black uppercase text-primary">Lançamento Pendente</CardTitle></CardHeader>
+              <CardHeader className="py-3">
+                <CardTitle className="text-[10px] font-black uppercase text-primary">Lançamento Pendente</CardTitle>
+                <CardDescription className="sr-only">Resumo dos itens que serão adicionados</CardDescription>
+              </CardHeader>
               <CardContent className="p-4 space-y-4">
                 <div className="space-y-2">
                   {tempItems.map(i => (
@@ -281,7 +284,10 @@ export default function ComandaDetailsPage() {
 
           <Card className="border-none shadow-sm overflow-hidden">
             <CardHeader className="flex flex-row justify-between items-center bg-muted/10 border-b py-4 px-6">
-              <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Consumo Atual</CardTitle>
+              <div className="flex flex-col">
+                <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Consumo Atual</CardTitle>
+                <CardDescription className="sr-only">Lista de todos os itens já lançados nesta comanda</CardDescription>
+              </div>
               <Button size="sm" onClick={() => setIsAdding(true)} className="h-9 px-4 font-black uppercase text-[10px]"><Plus className="h-3 w-3 mr-1.5" /> Adicionar Item</Button>
             </CardHeader>
             <div className="p-0">
@@ -313,15 +319,16 @@ export default function ComandaDetailsPage() {
 
         <div className="space-y-6">
           <Card className="border-primary/20 bg-primary/5 shadow-2xl overflow-hidden sticky top-24">
-            <CardHeader className="bg-primary/10 text-center py-6">
+            <CardHeader className="bg-primary/10 text-center py-6 border-b border-primary/10">
               <CardTitle className="text-xs font-black uppercase tracking-widest text-primary">Encerramento</CardTitle>
+              <CardDescription className="sr-only">Resumo financeiro final da comanda</CardDescription>
             </CardHeader>
             <CardContent className="p-8 space-y-6">
               <div className="text-center space-y-1 py-6 bg-background rounded-2xl border">
                 <p className="text-[10px] font-black uppercase text-muted-foreground">Valor Final</p>
                 <p className="text-5xl font-black text-foreground tracking-tighter">{formatCurrency(calculatedTotal)}</p>
               </div>
-              <Button className="w-full h-20 text-lg font-black uppercase tracking-widest" onClick={handleStartClosing} disabled={calculatedTotal <= 0 || isSubmitting}>
+              <Button className="w-full h-20 text-lg font-black uppercase tracking-widest shadow-xl shadow-primary/20" onClick={handleStartClosing} disabled={calculatedTotal <= 0 || isSubmitting}>
                 {isSubmitting ? <Loader2 className="h-7 w-7 animate-spin mr-3" /> : <CheckCircle2 className="h-7 w-7 mr-3" />} Fechar Turno
               </Button>
             </CardContent>
@@ -333,7 +340,7 @@ export default function ComandaDetailsPage() {
         <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl">
           <DialogHeader className="bg-slate-950 text-white px-6 py-8 text-center border-b">
             <DialogTitle className="text-3xl font-black font-headline uppercase tracking-tighter text-center text-white">Pagamento</DialogTitle>
-            <DialogDescription className="text-[10px] font-bold uppercase tracking-widest opacity-60 text-center text-white/60">Selecione o meio para faturar</DialogDescription>
+            <DialogDescription className="text-[10px] font-bold uppercase tracking-widest opacity-60 text-center text-white/60">Selecione o meio para faturar e encerrar</DialogDescription>
           </DialogHeader>
           <div className="p-6 space-y-3 bg-background">
             <Button type="button" variant="outline" className="w-full h-16 justify-start text-sm font-black uppercase tracking-widest gap-4 border-2 hover:border-primary" onClick={() => handleCloseComandaFinal('dinheiro')} disabled={isSubmitting}>
@@ -351,9 +358,9 @@ export default function ComandaDetailsPage() {
 
       <Dialog open={isAdding} onOpenChange={setIsAdding}>
         <DialogContent className="sm:max-w-3xl border-none shadow-2xl p-0 overflow-hidden">
-          <DialogHeader className="sr-only">
-            <DialogTitle>Adicionar Itens</DialogTitle>
-            <DialogDescription>Pesquise e selecione itens para adicionar à comanda.</DialogDescription>
+          <DialogHeader className="p-6 bg-muted/10 border-b">
+            <DialogTitle className="text-xl font-black uppercase tracking-tighter">Adicionar Itens</DialogTitle>
+            <DialogDescription className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Pesquise e selecione itens para a comanda</DialogDescription>
           </DialogHeader>
           <div className="p-6 space-y-6">
             <div className="relative">

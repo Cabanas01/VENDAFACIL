@@ -12,7 +12,6 @@ type AddItemParams = {
 
 /**
  * Insere item diretamente usando o ID da comanda.
- * Utilizado pelo Painel Administrativo e fluxo resolvido do Cardápio.
  */
 export async function addComandaItemById({
   comandaId,
@@ -48,7 +47,6 @@ export async function addComandaItemById({
 
 /**
  * Resolve a comanda aberta pelo número (Mesa) e insere o item.
- * @deprecated Use o fluxo de resolução única no componente e chame addComandaItemById.
  */
 export async function addComandaItem({
   storeId,
@@ -61,7 +59,7 @@ export async function addComandaItem({
 }: AddItemParams) {
   if (!productId || !productName) throw new Error('Dados do item ausentes');
 
-  // 1. Resolver o ID da comanda
+  // 1. Resolver o ID da comanda (Busca aberta ou cria nova)
   const { data: openComanda } = await supabase
     .from('comandas')
     .select('id')
@@ -99,3 +97,6 @@ export async function addComandaItem({
   
   return comandaId;
 }
+
+// Alias para compatibilidade com chamadas que usam o sufixo ByNumero
+export { addComandaItem as addComandaItemByNumero };

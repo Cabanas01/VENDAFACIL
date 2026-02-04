@@ -131,7 +131,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
     setSubmissionError(null);
 
     try {
-      // 1. Garantir que temos uma comanda aberta ANTES de iterar os itens (Evita Race Condition)
+      // 1. Garantir que temos uma comanda aberta (Resolução Única)
       const { data: existingComanda, error: findError } = await supabase
         .from('comandas')
         .select('id')
@@ -159,7 +159,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
         targetComandaId = newComanda.id;
       }
 
-      // 2. Inserir Itens na Comanda Resolvida
+      // 2. Lançar Itens
       for (const item of cart) {
         const product = products.find(p => p.id === item.product_id);
         await addComandaItemById({
@@ -172,7 +172,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
         });
       }
 
-      // 3. Registrar Cliente e Vincular à Comanda (RPC Segura)
+      // 3. Vincular Cliente
       const { error: regError } = await supabase.rpc('register_customer_on_table', {
         p_comanda_id: targetComandaId,
         p_name: customerData.name,
@@ -182,7 +182,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
 
       if (regError) throw regError;
 
-      // 4. Mover para Preparo se for novo atendimento
+      // 4. Mover status se necessário
       await supabase.from('comandas')
         .update({ status: 'em_preparo' })
         .eq('id', targetComandaId)
@@ -191,14 +191,14 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
       setCart([]);
       setShowIdModal(false);
       setOrderSuccess(true);
-      toast({ title: 'Pedido Enviado!', description: 'Já estamos preparando para você.' });
+      toast({ title: 'Pedido Enviado!' });
       setTimeout(() => setOrderSuccess(false), 5000);
 
     } catch (err: any) {
       console.error('[ORDER_ERROR]', err);
       setSubmissionError({
         type: 'error',
-        message: err.message || "Não foi possível concluir seu pedido agora. Por favor, tente novamente."
+        message: "Ocorreu uma falha ao enviar seu pedido. Por favor, tente novamente."
       });
     } finally {
       setIsSending(false);
@@ -284,7 +284,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
         <div className="fixed top-24 inset-x-6 z-50 animate-in slide-in-from-top-4 duration-500">
           <div className="bg-green-600 text-white p-4 rounded-2xl shadow-2xl flex items-center gap-4 border border-green-500">
             <CheckCircle2 className="h-6 w-6" />
-            <div>
+            <div className="flex flex-col">
               <p className="text-[10px] font-black uppercase tracking-widest leading-none">Pedido Enviado!</p>
               <p className="text-[9px] font-bold opacity-80 uppercase mt-1">Já estamos preparando tudo.</p>
             </div>
@@ -317,7 +317,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
             <div className="flex justify-between items-start">
               <div>
                 <DialogTitle className="text-2xl font-black font-headline uppercase tracking-tighter">Meu Pedido</DialogTitle>
-                <DialogDescription className="text-[10px] font-black uppercase text-primary tracking-widest mt-1">Resumo visual</DialogDescription>
+                <DialogDescription className="text-[10px] font-black uppercase text-primary tracking-widest mt-1">Confira os itens selecionados</DialogDescription>
               </div>
               <Button variant="ghost" size="icon" onClick={() => setCart([])} className="text-destructive"><Trash2 className="h-5 w-5" /></Button>
             </div>
@@ -354,7 +354,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
         </DialogContent>
       </Dialog>
 
-      {/* MODAL 2: IDENTIFICAÇÃO (MODAL PRINCIPAL) */}
+      {/* MODAL 2: IDENTIFICAÇÃO */}
       <Dialog open={showIdModal} onOpenChange={(open) => !isSending && setShowIdModal(open)}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl z-[9999] rounded-[32px] fixed">
           <DialogHeader className="bg-primary/5 p-10 text-center space-y-4 border-b border-primary/10">
@@ -363,7 +363,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
             </div>
             <div className="space-y-1">
               <DialogTitle className="text-2xl font-black font-headline uppercase tracking-tighter text-center">Quem está Pedindo?</DialogTitle>
-              <DialogDescription className="text-[10px] font-black uppercase tracking-widest text-muted-foreground text-center">Preencha para enviarmos à cozinha</DialogDescription>
+              <DialogDescription className="text-[10px] font-black uppercase tracking-widest text-muted-foreground text-center">Precisamos desses dados para iniciar seu atendimento</DialogDescription>
             </div>
           </DialogHeader>
           
@@ -405,11 +405,8 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
               </div>
 
               {submissionError && (
-                <div className={cn(
-                  "p-4 rounded-2xl flex items-start gap-3 animate-in fade-in zoom-in-95 border",
-                  submissionError.type === 'warning' ? "bg-amber-50 border-amber-100 text-amber-900" : "bg-red-50 border-red-100 text-red-900"
-                )}>
-                  {submissionError.type === 'warning' ? <Info className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" /> : <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />}
+                <div className="p-4 rounded-2xl flex items-start gap-3 animate-in fade-in zoom-in-95 border bg-red-50 border-red-100 text-red-900">
+                  <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
                   <p className="text-xs font-bold leading-relaxed">{submissionError.message}</p>
                 </div>
               )}
@@ -425,10 +422,10 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
                 {isSending ? (
                   <>
                     <Loader2 className="h-6 w-6 animate-spin mr-3" />
-                    Enviando Pedido...
+                    Processando...
                   </>
                 ) : (
-                  <>Confirmar e Enviar Pedido <CheckCircle2 className="h-5 w-5 ml-2" /></>
+                  <>Confirmar Pedido <CheckCircle2 className="h-5 w-5 ml-2" /></>
                 )}
               </Button>
               
@@ -439,7 +436,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
                 onClick={() => setShowIdModal(false)}
                 disabled={isSending}
               >
-                Voltar e Revisar Itens
+                Voltar
               </Button>
             </form>
           </div>
