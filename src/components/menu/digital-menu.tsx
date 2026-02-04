@@ -3,10 +3,10 @@
 /**
  * @fileOverview Cardápio Digital (Autoatendimento)
  * 
- * Implementa o Fluxo Oficial de 3 Etapas com Tratamento de Erro Robusto:
- * 1. Ver Resumo (Conferência Visual)
- * 2. Identificação (Pop-up Principal - Não fecha em erro)
- * 3. Envio Real (Escrita no Banco com feedback de loading)
+ * Fluxo de Pedido Refatorado:
+ * 1. Resolução única da comanda (atômica).
+ * 2. Lançamento serial de itens.
+ * 3. Registro do cliente vinculado.
  */
 
 import { useState, useEffect, useMemo } from 'react';
@@ -34,7 +34,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { addComandaItem } from '@/lib/add-comanda-item';
+import { addComandaItemById } from '@/lib/add-comanda-item';
 import { cn } from '@/lib/utils';
 
 const formatCurrency = (value: number) =>
@@ -131,42 +131,62 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
     setSubmissionError(null);
 
     try {
-      let comandaId: string | null = null;
+      // 1. Garantir que temos uma comanda aberta ANTES de iterar os itens (Evita Race Condition)
+      const { data: existingComanda, error: findError } = await supabase
+        .from('comandas')
+        .select('id')
+        .eq('store_id', store.id)
+        .eq('numero', table.number)
+        .in('status', ['aberta', 'em_preparo', 'pronta', 'aguardando_pagamento'])
+        .maybeSingle();
 
-      // 1. Inserir Itens na Comanda (Resolve ou cria a comanda na primeira iteração)
+      if (findError) throw findError;
+
+      let targetComandaId = existingComanda?.id;
+
+      if (!targetComandaId) {
+        const { data: newComanda, error: createError } = await supabase
+          .from('comandas')
+          .insert({
+            store_id: store.id,
+            numero: table.number,
+            status: 'aberta'
+          })
+          .select('id')
+          .single();
+        
+        if (createError) throw createError;
+        targetComandaId = newComanda.id;
+      }
+
+      // 2. Inserir Itens na Comanda Resolvida
       for (const item of cart) {
         const product = products.find(p => p.id === item.product_id);
-        const cid = await addComandaItem({
-          storeId: store.id,
-          numeroComanda: table.number,
+        await addComandaItemById({
+          comandaId: targetComandaId,
           productId: item.product_id,
           productName: item.product_name_snapshot,
           qty: item.qty,
           unitPrice: item.unit_price_cents,
           destino: product?.production_target || 'nenhum'
         });
-        if (!comandaId) comandaId = cid;
       }
 
-      if (comandaId) {
-        // 2. Registrar Cliente e Vincular à Comanda
-        const { error: regError } = await supabase.rpc('register_customer_on_table', {
-          p_comanda_id: comandaId,
-          p_name: customerData.name,
-          p_phone: customerData.phone,
-          p_cpf: customerData.cpf || null
-        });
+      // 3. Registrar Cliente e Vincular à Comanda (RPC Segura)
+      const { error: regError } = await supabase.rpc('register_customer_on_table', {
+        p_comanda_id: targetComandaId,
+        p_name: customerData.name,
+        p_phone: customerData.phone,
+        p_cpf: customerData.cpf || null
+      });
 
-        if (regError) throw regError;
+      if (regError) throw regError;
 
-        // 3. Mover para Preparo
-        const { error: updateError } = await supabase.from('comandas')
-          .update({ status: 'em_preparo' })
-          .eq('id', comandaId)
-          .eq('status', 'aberta');
-        
-        if (updateError) throw updateError;
-      }
+      // 4. Mover para Preparo se for novo atendimento
+      await supabase.from('comandas')
+        .update({ status: 'em_preparo' })
+        .eq('id', targetComandaId)
+        .eq('status', 'aberta');
 
       setCart([]);
       setShowIdModal(false);
