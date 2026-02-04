@@ -1,8 +1,7 @@
 'use client';
 
 /**
- * @fileOverview Tela de Nova Venda / PDV com Histórico de Hoje e Impressão.
- * Refatorado para design premium fiel à imagem solicitada.
+ * @fileOverview Tela de Nova Venda / PDV com design fiel à imagem premium.
  */
 
 import { useState, useMemo, useEffect } from 'react';
@@ -19,7 +18,6 @@ import {
   ArrowRight,
   History,
   Printer,
-  CalendarDays,
   X
 } from 'lucide-react';
 import { useAuth } from '@/components/auth-provider';
@@ -38,32 +36,23 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import type { Product, CartItem, Sale } from '@/lib/types';
+import type { Product, CartItem } from '@/lib/types';
 import { useRouter } from 'next/navigation';
 import { printReceipt } from '@/lib/print-receipt';
-import { format, startOfToday, isAfter } from 'date-fns';
-import { trackEvent } from '@/lib/analytics/track';
+import { startOfToday, isAfter } from 'date-fns';
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value / 100);
 
-const paymentMethodIcons = {
-  cash: <Coins className="h-3 w-3" />,
-  pix: <PiggyBank className="h-3 w-3" />,
-  card: <CreditCard className="h-3 w-3" />,
-};
-
 export default function NewSalePage() {
   const { products, sales, addSale, store } = useAuth();
   const { toast } = useToast();
-  const router = useRouter();
-
+  
   const [search, setSearch] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Vendas realizadas hoje para histórico rápido
   const todaySales = useMemo(() => {
     const today = startOfToday();
     return (sales || []).filter(s => isAfter(new Date(s.created_at), today));
@@ -74,8 +63,7 @@ export default function NewSalePage() {
     return products.filter(p => 
       p.active && (
         (p.name || '').toLowerCase().includes(term) || 
-        (p.barcode || '').includes(term) ||
-        (p.category || '').toLowerCase().includes(term)
+        (p.barcode || '').includes(term)
       )
     );
   }, [products, search]);
@@ -137,21 +125,14 @@ export default function NewSalePage() {
     try {
       const result = await addSale(cart, method);
       
-      trackEvent('sale_completed', {
-        total: cartTotal / 100,
-        method,
-        items_count: cart.length,
-        store_id: store.id
-      });
-
-      toast({ title: 'Venda Concluída!', description: `Total de ${formatCurrency(cartTotal)} registrado.` });
-      
-      if (result?.sale) {
-        printReceipt(result.sale, store);
+      if (result?.success) {
+        toast({ title: 'Venda Concluída!', description: `Total de ${formatCurrency(cartTotal)} registrado.` });
+        if (result.sale) printReceipt(result.sale, store);
+        setCart([]);
+        setIsFinalizing(false);
+      } else {
+        throw new Error(result?.error || 'Erro inesperado.');
       }
-
-      setCart([]);
-      setIsFinalizing(false);
     } catch (error: any) {
       toast({ variant: 'destructive', title: 'Erro na Venda', description: error.message });
     } finally {
@@ -161,11 +142,11 @@ export default function NewSalePage() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)]">
-      <PageHeader title="Ponto de Venda" subtitle={`Operador: ${store?.name || 'Carregando...'}`} />
+      <PageHeader title="Ponto de Venda" subtitle={`Operador: ${store?.name || '...'}`} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 overflow-hidden">
         
-        {/* CATÁLOGO DE PRODUTOS */}
+        {/* LADO ESQUERDO: CATÁLOGO */}
         <div className="lg:col-span-2 flex flex-col space-y-4">
           <Card className="flex-none bg-background border-none shadow-sm">
             <CardContent className="p-4">
@@ -176,7 +157,6 @@ export default function NewSalePage() {
                   className="pl-10 h-12 text-base bg-slate-50 border-none shadow-inner"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  autoFocus
                 />
               </div>
             </CardContent>
@@ -203,7 +183,7 @@ export default function NewSalePage() {
           </ScrollArea>
         </div>
 
-        {/* CARRINHO E HISTÓRICO */}
+        {/* LADO DIREITO: CARRINHO */}
         <Card className="flex flex-col h-full border-primary/10 shadow-2xl overflow-hidden rounded-[32px] bg-background">
           <Tabs defaultValue="cart" className="flex flex-col h-full">
             <CardHeader className="p-0 bg-muted/20">
@@ -261,7 +241,7 @@ export default function NewSalePage() {
                   disabled={cart.length === 0 || isSubmitting}
                   onClick={() => setIsFinalizing(true)}
                 >
-                  Confirmar Venda <ArrowRight className="ml-2 h-4 w-4" />
+                  {isSubmitting ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Confirmar Venda'} <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </CardFooter>
             </TabsContent>
@@ -272,13 +252,8 @@ export default function NewSalePage() {
                   {todaySales.map(sale => (
                     <div key={sale.id} className="p-4 bg-background rounded-2xl border border-primary/5 space-y-3 shadow-sm group">
                       <div className="flex justify-between items-start">
-                        <div>
-                          <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{format(new Date(sale.created_at), 'HH:mm:ss')}</p>
-                          <Badge variant="outline" className="text-[8px] h-5 font-black uppercase mt-1.5 gap-1.5 border-primary/10 text-primary">
-                            {paymentMethodIcons[sale.payment_method as keyof typeof paymentMethodIcons]} {sale.payment_method}
-                          </Badge>
-                        </div>
-                        <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full text-primary opacity-0 group-hover:opacity-100 transition-all bg-primary/5" onClick={() => printReceipt(sale, store!)}>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Venda #{sale.id.substring(0,8)}</p>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-primary opacity-0 group-hover:opacity-100 transition-all" onClick={() => printReceipt(sale, store!)}>
                           <Printer className="h-4 w-4" />
                         </Button>
                       </div>
@@ -295,12 +270,13 @@ export default function NewSalePage() {
         </Card>
       </div>
 
+      {/* MODAL DE PAGAMENTO (FIEL À IMAGEM) */}
       <Dialog open={isFinalizing} onOpenChange={setIsFinalizing}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl rounded-[32px]">
-          <div className="p-8 bg-slate-50 relative">
+          <div className="p-8 bg-white relative">
             <button 
               onClick={() => setIsFinalizing(false)}
-              className="absolute right-6 top-6 h-10 w-10 rounded-full bg-white flex items-center justify-center text-slate-400 hover:text-slate-900 transition-colors shadow-sm"
+              className="absolute right-6 top-6 h-10 w-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:text-slate-900 transition-colors shadow-sm"
             >
               <X className="h-5 w-5" />
             </button>
@@ -309,10 +285,9 @@ export default function NewSalePage() {
             </DialogHeader>
             
             <div className="grid grid-cols-1 gap-4">
-              {/* Opção Dinheiro */}
               <Button 
                 variant="outline" 
-                className="h-24 justify-start text-xs font-black uppercase tracking-[0.15em] gap-6 border-none bg-white shadow-sm hover:bg-slate-100 transition-all px-8 rounded-3xl" 
+                className="h-24 justify-start text-xs font-black uppercase tracking-[0.15em] gap-6 border-none bg-slate-50 shadow-sm hover:bg-slate-100 transition-all px-8 rounded-3xl" 
                 onClick={() => handleFinalize('cash')} 
                 disabled={isSubmitting}
               >
@@ -322,7 +297,6 @@ export default function NewSalePage() {
                 <span>Dinheiro / Troco</span>
               </Button>
 
-              {/* Opção PIX (Destaque Cyan conforme a imagem) */}
               <Button 
                 className="h-24 justify-start text-xs font-black uppercase tracking-[0.15em] gap-6 border-none bg-cyan-400 text-white shadow-xl shadow-cyan-400/20 hover:bg-cyan-500 transition-all px-8 rounded-3xl" 
                 onClick={() => handleFinalize('pix')} 
@@ -334,10 +308,9 @@ export default function NewSalePage() {
                 <span>PIX QR CODE</span>
               </Button>
 
-              {/* Opção Cartão */}
               <Button 
                 variant="outline" 
-                className="h-24 justify-start text-xs font-black uppercase tracking-[0.15em] gap-6 border-none bg-white shadow-sm hover:bg-slate-100 transition-all px-8 rounded-3xl" 
+                className="h-24 justify-start text-xs font-black uppercase tracking-[0.15em] gap-6 border-none bg-slate-50 shadow-sm hover:bg-slate-100 transition-all px-8 rounded-3xl" 
                 onClick={() => handleFinalize('card')} 
                 disabled={isSubmitting}
               >
@@ -352,7 +325,7 @@ export default function NewSalePage() {
           {isSubmitting && (
             <div className="absolute inset-0 bg-background/80 flex flex-col items-center justify-center z-50 animate-in fade-in">
               <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-              <p className="text-[10px] font-black uppercase tracking-widest text-primary animate-pulse">Sincronizando Atendimento...</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-primary animate-pulse">Processando Transação...</p>
             </div>
           )}
         </DialogContent>

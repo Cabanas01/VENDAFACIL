@@ -89,7 +89,7 @@ export async function processSaleAction(
     console.error('[SERVER_ACTION] Erro crítico:', err);
     return { 
       success: false, 
-      error: 'Falha ao processar itens da venda.',
+      error: 'Falha ao processar itens. A venda foi estornada para segurança dos dados.',
       details: err.message 
     };
   }
