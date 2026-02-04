@@ -1,3 +1,4 @@
+
 'use client';
 
 import Link from 'next/link';
@@ -48,10 +49,10 @@ import { cn } from '@/lib/utils';
 const mainNavItems = [
   { href: '/dashboard', label: 'Visão Geral', icon: Home, exact: true },
   { href: '/sales/new', label: 'Vendas / PDV', icon: ShoppingCart, exact: false },
-  { href: '/comandas', label: 'Comandas Eletrônicas', icon: ClipboardList, exact: false },
+  { href: '/comandas', label: 'Atendimento', icon: ClipboardList, exact: false },
   { href: '/dashboard/products', label: 'Produtos', icon: Package, exact: true },
   { href: '/dashboard/customers', label: 'Clientes', icon: Users, exact: true },
-  { href: '/cash', label: 'Caixa', icon: Wallet, exact: true },
+  { href: '/cash', label: 'Fluxo de Caixa', icon: Wallet, exact: true },
 ];
 
 const managementNavItems = [
@@ -130,37 +131,35 @@ export function MainNav() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {store?.use_comanda && (
-          <SidebarGroup>
-            <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-[0.25em] px-4 text-slate-500 mb-2">
-              Produção (Painéis)
-            </SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu className="gap-1.5">
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={isActive('/painel/cozinha', true)} className={cn("px-4 h-11 rounded-lg text-slate-400 hover:bg-white/5 hover:text-white", isActive('/painel/cozinha', true) && "bg-primary text-white")}>
-                    <Link href="/painel/cozinha" className="flex items-center gap-3">
-                      <ChefHat className="h-4 w-4" />
-                      <span className="font-bold text-xs tracking-tight">Cozinha</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={isActive('/painel/bar', true)} className={cn("px-4 h-11 rounded-lg text-slate-400 hover:bg-white/5 hover:text-white", isActive('/painel/bar', true) && "bg-primary text-white")}>
-                    <Link href="/painel/bar" className="flex items-center gap-3">
-                      <GlassWater className="h-4 w-4" />
-                      <span className="font-bold text-xs tracking-tight">Bar</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-[0.25em] px-4 text-slate-500 mb-2">
+            Produção
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu className="gap-1.5">
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/painel/cozinha', true)} className={cn("px-4 h-11 rounded-lg text-slate-400 hover:bg-white/5 hover:text-white", isActive('/painel/cozinha', true) && "bg-primary text-white")}>
+                  <Link href="/painel/cozinha" className="flex items-center gap-3">
+                    <ChefHat className="h-4 w-4" />
+                    <span className="font-bold text-xs tracking-tight">Cozinha (KDS)</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/painel/bar', true)} className={cn("px-4 h-11 rounded-lg text-slate-400 hover:bg-white/5 hover:text-white", isActive('/painel/bar', true) && "bg-primary text-white")}>
+                  <Link href="/painel/bar" className="flex items-center gap-3">
+                    <GlassWater className="h-4 w-4" />
+                    <span className="font-bold text-xs tracking-tight">Bar (BDS)</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
 
         <SidebarGroup>
           <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-[0.25em] px-4 text-slate-500 mb-2">
-            Estratégico
+            Gestão
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu className="gap-1.5">
