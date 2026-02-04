@@ -1,3 +1,4 @@
+
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
@@ -11,7 +12,6 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
  * AppLayout (Server Gatekeeper)
  * 
  * dynamic = 'force-dynamic' é OBRIGATÓRIO para páginas que usam cookies/auth.
- * O Providers já é provido pelo RootLayout, não deve ser repetido aqui.
  */
 export const dynamic = 'force-dynamic';
 
@@ -61,13 +61,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <header className="h-16 border-b bg-background flex items-center justify-between px-6 sticky top-0 z-50">
             <div className="flex items-center gap-4">
               <div className="flex flex-col">
-                <h3 className="text-[10px] font-black tracking-tighter uppercase text-primary mb-0.5">
-                  {isAdminPath ? 'Portal SaaS Admin' : 'VendaFácil'}
-                </h3>
-                <div className="flex items-center gap-1.5">
-                  <Badge variant="outline" className="text-[8px] h-3.5 px-1.5 font-black uppercase bg-primary/5 border-primary/10 text-primary">
-                    {is_admin ? 'Super Admin' : 'Conta Ativa'}
-                  </Badge>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-[10px] font-black tracking-tighter uppercase text-primary">VendaFácil</h3>
+                  {is_admin && (
+                    <Badge variant="default" className="text-[8px] h-3.5 px-1.5 font-black uppercase bg-primary text-white border-none shadow-sm">
+                      Super Admin
+                    </Badge>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">Painel de Controle Ativo</span>
                 </div>
               </div>
             </div>

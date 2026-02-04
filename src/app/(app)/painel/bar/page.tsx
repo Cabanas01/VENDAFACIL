@@ -23,7 +23,6 @@ export default function BarPage() {
   const fetchPedidos = useCallback(async () => {
     if (!store?.id) return;
     try {
-      // Regra de Ouro: Mostrar apenas o que está em fila (pendente ou em preparo)
       const { data, error } = await supabase
         .from('v_painel_bar')
         .select('*')
@@ -46,7 +45,11 @@ export default function BarPage() {
 
     const channel = supabase
       .channel('bds_sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'comanda_itens' }, () => fetchPedidos())
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'comanda_itens' 
+      }, () => fetchPedidos())
       .subscribe();
 
     return () => { 
@@ -70,8 +73,6 @@ export default function BarPage() {
     try {
       const { error } = await supabase.rpc('concluir_item', { p_item_id: itemId });
       if (error) throw error;
-      
-      // Feedback instantâneo no UI
       setPedidos(prev => prev.filter(p => p.item_id !== itemId));
       toast({ title: 'Drink pronto!' });
     } catch (err: any) {
@@ -108,45 +109,45 @@ export default function BarPage() {
           const isLate = elapsed >= targetTime;
 
           return (
-            <Card key={p.item_id} className={`border-none shadow-xl overflow-hidden transition-all duration-300 ${isLate ? 'atrasado ring-2 ring-red-500 ring-offset-2 scale-[1.02]' : 'bg-background border-muted'}`}>
-              <div className={`px-6 py-4 flex justify-between items-center border-b ${isLate ? 'bg-red-500/10 border-red-500/20' : 'bg-cyan-500/5 border-cyan-500/10'}`}>
+            <Card key={p.item_id} className={`border-none shadow-xl overflow-hidden transition-all duration-300 ${isLate ? 'ring-2 ring-red-500 ring-offset-2 scale-[1.02]' : 'bg-background border-muted'}`}>
+              <div className={`px-6 py-4 flex justify-between items-center border-b ${isLate ? 'bg-red-500 text-white' : 'bg-cyan-500/5 border-cyan-500/10'}`}>
                 <div className="flex flex-col">
-                  <span className={`text-2xl font-black font-headline tracking-tighter uppercase leading-none ${isLate ? 'text-red-700' : 'text-foreground'}`}>
+                  <span className={`text-xl font-black font-headline tracking-tighter uppercase leading-none ${isLate ? 'text-white' : 'text-foreground'}`}>
                     Comanda #{p.comanda_numero}
                   </span>
-                  <div className="flex items-center gap-1.5 mt-1.5 text-[10px] font-black uppercase text-cyan-600">
+                  <div className={`flex items-center gap-1.5 mt-1.5 text-[10px] font-black uppercase ${isLate ? 'text-white/80' : 'text-cyan-600'}`}>
                     <MapPin className="h-3 w-3" /> {p.mesa || 'Balcão'}
                   </div>
                 </div>
-                <div className={`flex flex-col items-end gap-1 font-black uppercase text-[10px] ${isLate ? 'text-red-600' : 'text-muted-foreground'}`}>
+                <div className={`flex flex-col items-end gap-1 font-black uppercase text-[10px] ${isLate ? 'text-white' : 'text-muted-foreground'}`}>
                   <div className="flex items-center gap-1.5"><Clock className="h-3 w-3" /> {elapsed} min</div>
                   {isLate && (
-                    <Badge className="bg-red-600 text-[8px] h-4 px-1 gap-1 border-none shadow-lg animate-bounce">
+                    <Badge className="bg-white text-red-600 text-[8px] h-4 px-1 gap-1 border-none font-black">
                       <AlertTriangle className="h-2 w-2" /> PRIORIDADE
                     </Badge>
                   )}
                 </div>
               </div>
               <CardContent className="p-8 space-y-8">
-                <div className="flex justify-between items-start">
+                <div className="flex justify-between items-center">
                   <div className="space-y-1">
                     <p className={`text-3xl font-black leading-tight uppercase tracking-tight ${isLate ? 'text-red-900' : 'text-cyan-700'}`}>{p.produto}</p>
                     <Badge variant="secondary" className="text-[10px] font-black uppercase tracking-widest bg-cyan-50/50">
                       {p.status?.replace('_', ' ')}
                     </Badge>
                   </div>
-                  <div className={`h-16 w-16 rounded-2xl flex items-center justify-center border transition-colors ${isLate ? 'bg-red-600 text-white border-red-700 shadow-lg shadow-red-200' : 'bg-cyan-50 text-cyan-600 border-cyan-100'}`}>
+                  <div className={`h-16 w-16 rounded-2xl flex items-center justify-center border transition-colors ${isLate ? 'bg-red-600 text-white border-red-700 shadow-lg' : 'bg-cyan-50 text-cyan-600 border-cyan-100'}`}>
                     <span className="text-4xl font-black">{p.qty}</span>
                   </div>
                 </div>
                 <div className="flex gap-3">
                   {p.status === 'pendente' ? (
-                    <Button className="flex-1 h-14 font-black uppercase tracking-widest text-xs" variant="outline" onClick={() => handleIniciar(p.item_id)}>
+                    <Button className="w-full h-14 font-black uppercase tracking-widest text-xs shadow-lg" variant="outline" onClick={() => handleIniciar(p.item_id)}>
                       <Play className="h-4 w-4 mr-2" /> Iniciar Preparo
                     </Button>
                   ) : (
-                    <Button className={`flex-1 h-14 font-black uppercase tracking-widest text-xs transition-all ${isLate ? 'bg-red-600 hover:bg-red-700 shadow-xl shadow-red-300' : 'bg-cyan-600 hover:bg-cyan-700 shadow-lg shadow-cyan-100'}`} onClick={() => handleConcluir(p.item_id)}>
-                      <CheckCircle2 className="h-4 w-4 mr-2" /> Pronto p/ Entrega
+                    <Button className={`w-full h-14 font-black uppercase tracking-widest text-xs transition-all shadow-xl ${isLate ? 'bg-red-600 hover:bg-red-700' : 'bg-cyan-600 hover:bg-cyan-700'}`} onClick={() => handleConcluir(p.item_id)}>
+                      <CheckCircle2 className="h-4 w-4 mr-2" /> Concluir Drink
                     </Button>
                   )}
                 </div>

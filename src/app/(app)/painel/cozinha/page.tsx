@@ -23,7 +23,6 @@ export default function CozinhaPage() {
   const fetchPedidos = useCallback(async () => {
     if (!store?.id) return;
     try {
-      // Regra de Ouro: Mostrar apenas o que está em fila (pendente ou em preparo)
       const { data, error } = await supabase
         .from('v_painel_cozinha')
         .select('*')
@@ -42,19 +41,29 @@ export default function CozinhaPage() {
 
   useEffect(() => {
     fetchPedidos();
-    // Atualiza o relógio a cada 30 segundos para o cálculo de atraso
     const clockInterval = setInterval(() => setNow(new Date()), 30000);
 
+    // Corrigido: table 'comanda_itens' (Português) para bater com o schema real
     const channel = supabase
       .channel('kds_sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'comanda_itens' }, () => fetchPedidos())
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'comanda_itens' 
+      }, () => fetchPedidos())
+      .on('postgres_changes', { 
+        event: 'UPDATE', 
+        schema: 'public', 
+        table: 'comandas',
+        filter: `store_id=eq.${store?.id}`
+      }, () => fetchPedidos())
       .subscribe();
 
     return () => { 
       supabase.removeChannel(channel);
       clearInterval(clockInterval);
     };
-  }, [fetchPedidos]);
+  }, [store?.id, fetchPedidos]);
 
   const handleIniciar = async (itemId: string) => {
     try {
@@ -71,8 +80,6 @@ export default function CozinhaPage() {
     try {
       const { error } = await supabase.rpc('concluir_item', { p_item_id: itemId });
       if (error) throw error;
-      
-      // Remove localmente para feedback instantâneo
       setPedidos(prev => prev.filter(p => p.item_id !== itemId));
       toast({ title: 'Item concluído!' });
     } catch (err: any) {
@@ -97,7 +104,7 @@ export default function CozinhaPage() {
             <RefreshCw className={`h-3 w-3 mr-2 ${loading ? 'animate-spin' : ''}`} /> Atualizar
           </Button>
           <Badge variant="outline" className="h-10 px-4 gap-2 font-black uppercase text-xs border-primary/20 bg-primary/5 text-primary">
-            <ChefHat className="h-4 w-4" /> {pedidos.length} Itens em Fila
+            <ChefHat className="h-4 w-4 text-primary" /> {pedidos.length} Itens em Fila
           </Badge>
         </div>
       </div>
@@ -109,45 +116,45 @@ export default function CozinhaPage() {
           const isLate = elapsed >= targetTime;
 
           return (
-            <Card key={p.item_id} className={`border-none shadow-xl overflow-hidden transition-all duration-300 ${isLate ? 'atrasado ring-2 ring-red-500 ring-offset-2 scale-[1.02]' : 'bg-background border-muted'}`}>
-              <div className={`px-6 py-4 flex justify-between items-center border-b ${isLate ? 'bg-red-500/10 border-red-500/20' : 'bg-muted/30 border-muted/20'}`}>
+            <Card key={p.item_id} className={`border-none shadow-xl overflow-hidden transition-all duration-300 ${isLate ? 'ring-2 ring-red-500 ring-offset-2 scale-[1.02]' : 'bg-background border-muted'}`}>
+              <div className={`px-6 py-4 flex justify-between items-center border-b ${isLate ? 'bg-red-500 text-white' : 'bg-muted/30 border-muted/20'}`}>
                 <div className="flex flex-col">
-                  <span className={`text-2xl font-black font-headline tracking-tighter uppercase leading-none ${isLate ? 'text-red-700' : 'text-foreground'}`}>
+                  <span className={`text-xl font-black font-headline tracking-tighter uppercase leading-none ${isLate ? 'text-white' : 'text-foreground'}`}>
                     Comanda #{p.comanda_numero}
                   </span>
-                  <div className="flex items-center gap-1.5 mt-1.5 text-[10px] font-black uppercase text-primary">
+                  <div className={`flex items-center gap-1.5 mt-1.5 text-[10px] font-black uppercase ${isLate ? 'text-white/80' : 'text-primary'}`}>
                     <MapPin className="h-3 w-3" /> {p.mesa || 'Balcão'}
                   </div>
                 </div>
-                <div className={`flex flex-col items-end gap-1 font-black uppercase text-[10px] ${isLate ? 'text-red-600' : 'text-muted-foreground'}`}>
+                <div className={`flex flex-col items-end gap-1 font-black uppercase text-[10px] ${isLate ? 'text-white' : 'text-muted-foreground'}`}>
                   <div className="flex items-center gap-1.5"><Clock className="h-3 w-3" /> {elapsed} min</div>
                   {isLate && (
-                    <Badge className="bg-red-600 text-[8px] h-4 px-1 gap-1 border-none shadow-lg animate-bounce">
+                    <Badge className="bg-white text-red-600 text-[8px] h-4 px-1 gap-1 border-none font-black">
                       <AlertTriangle className="h-2 w-2" /> ATRASADO
                     </Badge>
                   )}
                 </div>
               </div>
               <CardContent className="p-8 space-y-6">
-                <div className="flex justify-between items-start">
+                <div className="flex justify-between items-center">
                   <div className="space-y-1">
                     <p className={`text-3xl font-black leading-tight uppercase tracking-tight ${isLate ? 'text-red-900' : 'text-foreground'}`}>{p.produto}</p>
                     <Badge variant="secondary" className="text-[10px] font-black uppercase tracking-widest bg-muted/50">
                       {p.status?.replace('_', ' ')}
                     </Badge>
                   </div>
-                  <div className={`h-16 w-16 rounded-2xl flex items-center justify-center border transition-colors ${isLate ? 'bg-red-600 text-white border-red-700 shadow-lg shadow-red-200' : 'bg-primary/10 text-primary border-primary/10'}`}>
+                  <div className={`h-16 w-16 rounded-2xl flex items-center justify-center border transition-colors ${isLate ? 'bg-red-600 text-white border-red-700 shadow-lg' : 'bg-primary/10 text-primary border-primary/10'}`}>
                     <span className="text-4xl font-black">{p.qty}</span>
                   </div>
                 </div>
                 <div className="flex gap-3">
                   {p.status === 'pendente' ? (
-                    <Button className="flex-1 h-14 font-black uppercase tracking-widest text-xs" variant="secondary" onClick={() => handleIniciar(p.item_id)}>
+                    <Button className="w-full h-14 font-black uppercase tracking-widest text-xs shadow-lg" variant="secondary" onClick={() => handleIniciar(p.item_id)}>
                       <Play className="h-4 w-4 mr-2" /> Iniciar Preparo
                     </Button>
                   ) : (
-                    <Button className={`flex-1 h-14 font-black uppercase tracking-widest text-xs transition-all ${isLate ? 'bg-red-600 hover:bg-red-700 shadow-xl shadow-red-300' : 'bg-slate-950 hover:bg-slate-900 shadow-lg shadow-primary/10'}`} onClick={() => handleConcluir(p.item_id)}>
-                      <CheckCircle2 className="h-4 w-4 mr-2" /> Finalizar Item
+                    <Button className={`w-full h-14 font-black uppercase tracking-widest text-xs transition-all shadow-xl ${isLate ? 'bg-red-600 hover:bg-red-700' : 'bg-slate-950 hover:bg-slate-900'}`} onClick={() => handleConcluir(p.item_id)}>
+                      <CheckCircle2 className="h-4 w-4 mr-2" /> Concluir Item
                     </Button>
                   )}
                 </div>
