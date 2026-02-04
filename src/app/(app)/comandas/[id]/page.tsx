@@ -3,7 +3,7 @@
 
 /**
  * @fileOverview Detalhe da Comanda - Fluxo de Fechamento e Pagamento.
- * Corrigido para carregar dados exclusivamente pelo ID da rota, sem travas de contexto global.
+ * Corrigido para usar RPC no lançamento de itens e garantir visibilidade imediata.
  */
 
 import { useEffect, useState, useCallback } from 'react';
@@ -29,7 +29,6 @@ import {
   Printer,
   CircleDollarSign,
   QrCode,
-  X,
   AlertCircle
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -60,7 +59,6 @@ export default function ComandaDetailsPage() {
   
   const [isClosing, setIsClosing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isClosingInProgress, setIsClosingInProgress] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!id || id === 'undefined') {
@@ -70,35 +68,40 @@ export default function ComandaDetailsPage() {
     }
 
     try {
-      // Busca dados usando o ID da rota. RLS cuidará para que apenas membros da loja vejam os dados.
-      const [comandaRes, itemsRes] = await Promise.all([
+      // Busca dados combinando a VIEW de totais e a tabela base para garantir o carregamento do número
+      const [comandaRes, baseRes, itemsRes] = await Promise.all([
         supabase.from('v_comandas_totais').select('*').eq('id', id).maybeSingle(),
+        supabase.from('comandas').select('*').eq('id', id).maybeSingle(),
         supabase.from('comanda_itens').select('*').eq('comanda_id', id).order('created_at', { ascending: false })
       ]);
 
-      if (comandaRes.error) {
-        console.error('[QUERY_ERROR]', comandaRes.error);
-        throw comandaRes.error;
-      }
+      if (baseRes.error) throw baseRes.error;
 
-      if (!comandaRes.data) {
+      if (!baseRes.data) {
         setNotFound(true);
         return;
       }
 
-      setComanda(comandaRes.data);
+      // Merge de dados: Prioriza o total da View, mas garante o numero da tabela base
+      setComanda({
+        ...comandaRes.data,
+        id: baseRes.data.id,
+        numero: baseRes.data.numero,
+        mesa: baseRes.data.mesa,
+        status: baseRes.data.status,
+        cliente_nome: baseRes.data.cliente_nome,
+        total: comandaRes.data?.total || 0
+      });
+
       setItems(itemsRes.data || []);
       setNotFound(false);
 
-      // Busca dados do cliente se houver vínculo
-      const { data: baseComanda } = await supabase.from('comandas').select('customer_id').eq('id', id).single();
-      if (baseComanda?.customer_id) {
-        const { data: custData } = await supabase.from('customers').select('*').eq('id', baseComanda.customer_id).single();
+      if (baseRes.data.customer_id) {
+        const { data: custData } = await supabase.from('customers').select('*').eq('id', baseRes.data.customer_id).single();
         setCustomer(custData);
       }
     } catch (err) {
       console.error('[FETCH_ERROR]', err);
-      // Não marca como notFound em erros de rede/conexão, apenas em 404 real
     } finally {
       setLoading(false);
     }
@@ -107,7 +110,6 @@ export default function ComandaDetailsPage() {
   useEffect(() => {
     fetchData();
 
-    // Sincronização em Tempo Real baseada apenas no ID da comanda
     const channel = supabase.channel(`sync_comanda_${id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'comanda_itens', filter: `comanda_id=eq.${id}` }, () => fetchData())
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'comandas', filter: `id=eq.${id}` }, () => fetchData())
@@ -128,25 +130,27 @@ export default function ComandaDetailsPage() {
     if (tempItems.length === 0 || isSubmitting) return;
     setIsSubmitting(true);
     try {
-      const inserts = tempItems.map(i => ({
-        comanda_id: id,
+      // OBRIGATÓRIO: Usar RPC para lançar itens, garantindo visibilidade e preparo
+      const payload = tempItems.map(i => ({
         product_id: i.product.id,
-        product_name: i.product.name,
-        quantidade: i.quantity,
-        preco_unitario: i.product.price_cents,
-        destino_preparo: i.product.production_target || 'nenhum',
-        status: 'pendente'
+        qty: i.quantity,
+        price: i.product.price_cents,
+        notes: ''
       }));
 
-      const { error } = await supabase.from('comanda_itens').insert(inserts);
+      const { error } = await supabase.rpc('add_itens_from_table_link', {
+        p_comanda_id: id,
+        p_items: payload
+      });
+
       if (error) throw error;
 
-      toast({ title: 'Pedido Enviado!', description: 'Itens registrados na comanda.' });
+      toast({ title: 'Pedido Lançado!', description: 'Itens adicionados com sucesso.' });
       setTempItems([]);
       setIsAdding(false);
       await fetchData();
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Erro', description: err.message });
+      toast({ variant: 'destructive', title: 'Erro ao Lançar', description: err.message });
     } finally {
       setIsSubmitting(false);
     }
@@ -155,7 +159,7 @@ export default function ComandaDetailsPage() {
   const handlePrint = () => {
     if (comanda && store) {
       const saleMock = {
-        total_cents: comanda.total * 100,
+        total_cents: (comanda.total || 0) * 100,
         payment_method: 'dinheiro',
         created_at: new Date().toISOString(),
         items: items.map(i => ({
@@ -165,7 +169,6 @@ export default function ComandaDetailsPage() {
           subtotal_cents: i.quantity * i.preco_unitario
         }))
       } as any;
-
       printReceipt(saleMock, store);
     }
   };
@@ -174,8 +177,6 @@ export default function ComandaDetailsPage() {
     if (!comanda || isSubmitting || !store) return;
     
     setIsSubmitting(true);
-    setIsClosingInProgress(true);
-    
     try {
       const { data, error } = await supabase.rpc('fechar_comanda', {
         p_comanda_id: comanda.id,
@@ -185,28 +186,15 @@ export default function ComandaDetailsPage() {
       if (error) throw error;
       
       const res = typeof data === 'string' ? JSON.parse(data) : data;
-      
-      if (!res || res.success === false) {
-        throw new Error(res?.message || 'O servidor recusou o fechamento da comanda.');
-      }
+      if (!res || res.success === false) throw new Error(res?.message || 'Erro no fechamento.');
 
-      toast({ 
-        title: 'Comanda Encerrada!', 
-        description: `Venda registrada via ${method.toUpperCase()}.` 
-      });
-      
+      toast({ title: 'Conta Fechada!', description: `Venda registrada com sucesso.` });
       handlePrint();
       await refreshStatus(); 
       router.push('/comandas');
     } catch (err: any) {
-      console.error('[CLOSE_ERROR]', err);
-      toast({ 
-        variant: 'destructive', 
-        title: 'Falha no Fechamento', 
-        description: err.message 
-      });
+      toast({ variant: 'destructive', title: 'Falha ao Fechar', description: err.message });
       setIsSubmitting(false);
-      setIsClosingInProgress(false);
     }
   };
 
@@ -224,7 +212,7 @@ export default function ComandaDetailsPage() {
       </div>
       <div className="space-y-2">
         <h2 className="text-xl font-black uppercase tracking-tight">Comanda Indisponível</h2>
-        <p className="text-sm text-muted-foreground max-w-xs mx-auto font-medium">Esta comanda pode ter sido encerrada ou não existe mais no sistema.</p>
+        <p className="text-sm text-muted-foreground max-w-xs mx-auto font-medium">Verifique se o ID está correto ou se a comanda já foi fechada.</p>
       </div>
       <Button variant="outline" onClick={() => router.push('/comandas')} className="font-black uppercase text-[10px] tracking-widest px-8">Voltar para Lista</Button>
     </div>
@@ -265,7 +253,7 @@ export default function ComandaDetailsPage() {
                 <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary shadow-inner"><User className="h-5 w-5" /></div>
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cliente Atendido</p>
-                  <p className="font-black text-sm uppercase tracking-tight">{customer?.name || comanda?.cliente_nome || 'Consumidor Final'}</p>
+                  <p className="font-black text-sm uppercase tracking-tight">{customer?.name || comanda?.cliente_nome || 'CONSUMIDOR FINAL'}</p>
                 </div>
               </div>
             </CardContent>
@@ -273,7 +261,7 @@ export default function ComandaDetailsPage() {
 
           {tempItems.length > 0 && (
             <Card className="border-primary bg-primary/5 shadow-2xl animate-in slide-in-from-top-2 duration-500 ring-2 ring-primary/20">
-              <CardHeader className="py-3 border-b border-primary/10"><CardTitle className="text-[10px] font-black uppercase text-primary flex items-center gap-2"><Plus className="h-3 w-3" /> Rascunho de Pedido</CardTitle></CardHeader>
+              <CardHeader className="py-3 border-b border-primary/10"><CardTitle className="text-[10px] font-black uppercase text-primary flex items-center gap-2"><Plus className="h-3 w-3" /> Itens para Lançar</CardTitle></CardHeader>
               <CardContent className="p-4 space-y-4">
                 <div className="space-y-2">
                   {tempItems.map(i => (
@@ -284,7 +272,7 @@ export default function ComandaDetailsPage() {
                   ))}
                 </div>
                 <Button className="w-full h-14 font-black uppercase tracking-widest shadow-xl shadow-primary/20" onClick={confirmOrder} disabled={isSubmitting}>
-                  {isSubmitting ? <Loader2 className="animate-spin mr-2 h-5 w-5" /> : <Send className="mr-2 h-4 w-4" />} Enviar para Produção
+                  {isSubmitting ? <Loader2 className="animate-spin mr-2 h-5 w-5" /> : <Send className="mr-2 h-4 w-4" />} Confirmar Lançamento
                 </Button>
               </CardContent>
             </Card>
@@ -389,13 +377,6 @@ export default function ComandaDetailsPage() {
               Cancelar
             </Button>
           </div>
-
-          {isSubmitting && (
-            <div className="absolute inset-0 bg-background/90 backdrop-blur-sm flex flex-col items-center justify-center z-50 animate-in fade-in">
-              <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-foreground">Finalizando Venda...</p>
-            </div>
-          )}
         </DialogContent>
       </Dialog>
 
