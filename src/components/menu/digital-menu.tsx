@@ -1,14 +1,17 @@
 'use client';
 
 /**
- * @fileOverview Cardápio Digital (Autoatendimento)
+ * @fileOverview Cardápio Digital (CONTRATO IMUTÁVEL)
  * 
- * Fluxo de Pedido Transacional (Frontend) corrigido com validação de UUID.
+ * Fluxo de Pedido Transacional:
+ * 1. get_store_access_status (boolean)
+ * 2. abrir_comanda (uuid)
+ * 3. register_customer_on_table (void)
+ * 4. add_items_from_table_link (void)
  */
 
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase/client';
-import { isValidUUID } from '@/lib/utils';
 import type { Product, TableInfo, Store, CartItem } from '@/lib/types';
 import { 
   Plus, 
@@ -32,8 +35,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { addComandaItemById } from '@/lib/add-comanda-item';
 import { cn } from '@/lib/utils';
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((value || 0) / 100);
@@ -43,7 +47,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [cart, setCart] = useState<CartItem[]>([]);
+  const [cart, setCart] = useState<any[]>([]);
   const [isSending, setIsSending] = useState(false);
   const [submissionError, setSubmissionError] = useState<{ message: string; type: 'error' | 'warning' } | null>(null);
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -54,11 +58,8 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
 
   useEffect(() => {
     const loadProducts = async () => {
+      if (!store?.id || !UUID_REGEX.test(store.id)) return;
       try {
-        if (!isValidUUID(store.id)) {
-          console.error('[DIGITAL_MENU] Store ID inválido');
-          return;
-        }
         const { data } = await supabase
           .from('products')
           .select('*')
@@ -95,8 +96,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
         product_name_snapshot: product.name, 
         qty: 1, 
         unit_price_cents: product.price_cents, 
-        subtotal_cents: product.price_cents, 
-        stock_qty: product.stock_qty
+        subtotal_cents: product.price_cents
       }];
     });
   };
@@ -114,35 +114,25 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
     });
   };
 
-  const handleProceedToIdentification = () => {
-    if (!isValidUUID(store?.id)) {
-      toast({ variant: 'destructive', title: 'Contexto Inválido', description: 'Por favor, recarregue o cardápio.' });
-      return;
-    }
-    setIsCartOpen(false);
-    setShowIdModal(true);
-  };
-
   const executeOrderSubmission = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isSending || cart.length === 0 || !isValidUUID(store?.id)) return;
+    if (isSending || cart.length === 0 || !store?.id) return;
 
     setIsSending(true);
     setSubmissionError(null);
 
     try {
-      // 1. Validar Acesso da Loja
-      const { data: accessRes, error: accessError } = await supabase.rpc('get_store_access_status', { p_store_id: store.id });
+      // 1. Validar Acesso (Boolean)
+      const { data: isAllowed, error: accessError } = await supabase.rpc('get_store_access_status', { 
+        p_store_id: store.id 
+      });
       
-      if (accessError) throw new Error('FALHA_CONEXAO');
-
-      const access = Array.isArray(accessRes) ? accessRes[0] : accessRes;
-      if (access && access.acesso_liberado === false) {
+      if (accessError || isAllowed !== true) {
         throw new Error('LOJA_BLOQUEADA');
       }
 
-      // 2. Abrir/Resolver Comanda
-      const { data: comandaData, error: comandaError } = await supabase.rpc('abrir_comanda', {
+      // 2. Abrir Comanda (Retorna UUID)
+      const { data: comandaUuid, error: openError } = await supabase.rpc('abrir_comanda', {
         p_store_id: store.id,
         p_mesa: table.number.toString(),
         p_cliente_nome: customerData.name,
@@ -150,50 +140,49 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
         p_cliente_cpf: customerData.cpf || null
       });
 
-      if (comandaError) throw comandaError;
-
-      const comandaId = typeof comandaData === 'string' 
-        ? comandaData 
-        : (comandaData as any)?.id || (comandaData as any)?.comanda_id;
-
-      if (!isValidUUID(comandaId)) {
-        throw new Error('IDENTIFICACAO_FALHOU');
+      if (openError || !comandaUuid || !UUID_REGEX.test(comandaUuid)) {
+        throw new Error('FALHA_COMAND_ID');
       }
 
-      // 3. Lançamento Sequencial de Itens
-      for (const item of cart) {
-        const prod = products.find(p => p.id === item.product_id);
-        await addComandaItemById({
-          comandaId,
-          productId: item.product_id,
-          productName: item.product_name_snapshot,
-          qty: item.qty,
-          unitPrice: item.unit_price_cents,
-          destino: prod?.production_target || 'nenhum'
-        });
-      }
+      // 3. Registrar Cliente (Obrigatório p_store_id conforme assinatura)
+      const { error: customerError } = await supabase.rpc('register_customer_on_table', {
+        p_comanda_id: comandaUuid,
+        p_name: customerData.name,
+        p_phone: customerData.phone,
+        p_cpf: customerData.cpf || null,
+        p_store_id: store.id
+      });
 
+      if (customerError) console.warn('[NON_FATAL] Falha ao registrar cliente nos registros globais.');
+
+      // 4. Adicionar Itens
+      const itemsPayload = cart.map(i => ({
+        product_id: i.product_id,
+        product_name: i.product_name_snapshot,
+        qty: i.qty,
+        unit_price: i.unit_price_cents
+      }));
+
+      const { error: itemsError } = await supabase.rpc('add_items_from_table_link', {
+        p_comanda_id: comandaUuid,
+        p_items: itemsPayload
+      });
+
+      if (itemsError) throw itemsError;
+
+      // Sucesso
       setCart([]);
       setShowIdModal(false);
       setOrderSuccess(true);
-      toast({ title: 'Pedido Confirmado!', description: 'Seus itens foram enviados para a produção.' });
+      toast({ title: 'Pedido Enviado!', description: 'Seu pedido já está em preparo.' });
       setTimeout(() => setOrderSuccess(false), 5000);
 
     } catch (err: any) {
-      console.error('[ORDER_SUBMISSION_FATAL]', err);
+      console.error('[ORDER_SUBMISSION_ERROR]', err);
+      let msg = "Falha ao processar pedido. Tente novamente.";
+      if (err.message === 'LOJA_BLOQUEADA') msg = "Esta unidade não está aceitando pedidos digitais no momento.";
+      if (err.message === 'FALHA_COMAND_ID') msg = "Erro ao gerar identificador de mesa. Chame o garçom.";
       
-      let msg = "Não foi possível enviar seu pedido agora. Verifique sua conexão.";
-      
-      if (err.message === 'LOJA_BLOQUEADA') {
-        msg = "O atendimento digital desta loja está temporariamente suspenso. Fale com um atendente.";
-      } else if (err.message === 'IDENTIFICACAO_FALHOU') {
-        msg = "Falha ao identificar sua mesa. Por favor, recarregue a página.";
-      } else if (err.message?.includes('check_store_access')) {
-        msg = "Assinatura da loja expirada. O pedido não pôde ser processado.";
-      } else if (err.code === '400') {
-        msg = "Erro de integridade de dados. Recarregue a página e tente novamente.";
-      }
-
       setSubmissionError({ type: 'error', message: msg });
     } finally {
       setIsSending(false);
@@ -333,7 +322,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
             </div>
             <Button 
               className="w-full h-20 text-sm font-black uppercase tracking-[0.2em] shadow-2xl rounded-[24px] bg-primary text-white" 
-              onClick={handleProceedToIdentification} 
+              onClick={() => { setIsCartOpen(false); setShowIdModal(true); }} 
             >
               Identificar e Pedir <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
@@ -401,7 +390,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
                 {isSending ? (
                   <>
                     <Loader2 className="h-6 w-6 animate-spin mr-3" />
-                    Processando...
+                    Enviando...
                   </>
                 ) : (
                   <>Confirmar e Enviar Pedido <CheckCircle2 className="h-5 w-5 ml-2" /></>

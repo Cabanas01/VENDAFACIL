@@ -1,10 +1,11 @@
 'use client';
 
 /**
- * @fileOverview AuthProvider (DATA SYNC & RESILIENT RPC)
+ * @fileOverview AuthProvider (CONTRATO IMUTÁVEL)
  * 
- * Responsável por manter os dados da loja em sincronia e normalizar
- * as respostas dos RPCs do Supabase para evitar erros de formato.
+ * Responsável pela sincronização de dados seguindo estritamente o backend:
+ * - get_store_access_status retorna BOOLEAN.
+ * - Tabelas usam created_at (não criada_em).
  */
 
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
@@ -52,50 +53,7 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-function normalizeAccessStatus(raw: any): StoreAccessStatus | null {
-  const defaultInactive: StoreAccessStatus = {
-    acesso_liberado: false,
-    data_fim_acesso: null,
-    plano_nome: 'Sem plano',
-    plano_tipo: null,
-    mensagem: 'Acesso não liberado.'
-  };
-
-  if (raw == null) return null;
-
-  if (Array.isArray(raw)) {
-    const row = raw[0];
-    if (!row || typeof row !== 'object') return defaultInactive;
-    return {
-      acesso_liberado: !!row.acesso_liberado,
-      data_fim_acesso: row.data_fim_acesso ?? null,
-      plano_nome: row.plano_nome ?? 'Plano',
-      plano_tipo: row.plano_tipo ?? null,
-      mensagem: row.mensagem ?? ''
-    };
-  }
-
-  if (typeof raw === 'boolean') {
-    return {
-      ...defaultInactive,
-      acesso_liberado: raw,
-      plano_nome: raw ? 'Ativo' : 'Inativo',
-      mensagem: raw ? 'Acesso liberado.' : 'Seu acesso não está ativo.'
-    };
-  }
-
-  if (typeof raw === 'object') {
-    return {
-      acesso_liberado: !!raw.acesso_liberado,
-      data_fim_acesso: raw.data_fim_acesso ?? null,
-      plano_nome: raw.plano_nome ?? 'Plano',
-      plano_tipo: raw.plano_tipo ?? null,
-      mensagem: raw.mensagem ?? ''
-    };
-  }
-
-  return defaultInactive;
-}
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -112,7 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchAppData = useCallback(async (userId: string) => {
-    if (!userId) return;
+    if (!userId || !UUID_REGEX.test(userId)) return;
     
     try {
       const { data: ownerStore } = await supabase.from('stores').select('id').eq('user_id', userId).maybeSingle();
@@ -123,9 +81,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         storeId = memberEntry?.store_id;
       }
 
-      if (storeId && isValidUUID(storeId)) {
-        const [accessRes, storeRes, prodRes, salesRes, cashRes, custRes] = await Promise.all([
-          supabase.rpc('get_store_access_status', { p_store_id: storeId }),
+      if (storeId && UUID_REGEX.test(storeId)) {
+        // 1. Validar Acesso (Retorna BOOLEAN puro)
+        const { data: isAllowed } = await supabase.rpc('get_store_access_status', { p_store_id: storeId });
+
+        setAccessStatus({
+          acesso_liberado: isAllowed === true,
+          data_fim_acesso: null,
+          plano_nome: isAllowed === true ? 'Plano Ativo' : 'Acesso Restrito',
+          plano_tipo: null,
+          mensagem: isAllowed === true ? 'Seu acesso está liberado.' : 'Sua assinatura expirou ou está inativa.'
+        });
+
+        const [storeRes, prodRes, salesRes, cashRes, custRes] = await Promise.all([
           supabase.from('stores').select('*').eq('id', storeId).single(),
           supabase.from('products').select('*').eq('store_id', storeId).order('name'),
           supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeId).order('created_at', { ascending: false }),
@@ -133,7 +101,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           supabase.from('customers').select('*').eq('store_id', storeId).order('name'),
         ]);
 
-        setAccessStatus(normalizeAccessStatus(accessRes.data));
         setStore(storeRes.data || null);
         setProducts(prodRes.data || []);
         setSales(salesRes.data || []);
@@ -179,30 +146,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, [fetchAppData]);
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    
-    const isBillingPath = pathname?.includes('/billing') || pathname?.includes('/admin/billing');
-    
-    if (isBillingPath && user?.id && storeStatus === 'ready') {
-      if (!pollingRef.current) {
-        pollingRef.current = setInterval(refreshStatus, 30000);
-      }
-    } else {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-        pollingRef.current = null;
-      }
-    }
-
-    return () => {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-        pollingRef.current = null;
-      }
-    };
-  }, [pathname, user?.id, storeStatus, refreshStatus]);
-
   const logout = async () => {
     await supabase.auth.signOut();
     window.location.href = '/login';
@@ -211,8 +154,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const createStore = async (storeData: any) => {
     const { data: { user: authUser } } = await supabase.auth.getUser();
     if (!authUser) throw new Error('Sessão expirada.');
-
-    await supabase.from('users').upsert({ id: authUser.id, email: authUser.email }, { onConflict: 'id' });
 
     const { error: rpcError } = await supabase.rpc('create_new_store', {
       p_name: storeData.name,
