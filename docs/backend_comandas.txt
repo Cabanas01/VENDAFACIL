@@ -1,10 +1,12 @@
 -- =============================================================================
--- DOMÍNIO: COMANDAS - VENDAFÁCIL BRASIL
--- VERSÃO: 5.0 (FIX: ALTER TABLE PARA COLUNAS FALTANTES)
+-- DOMÍNIO: INFRAESTRUTURA COMPLETA - VENDAFÁCIL BRASIL
+-- VERSÃO: 6.0 (Sincronização Total: PDV + KDS + Estoque + Governança)
 -- =============================================================================
 
--- 0. GARANTIA DE ESTRUTURA (Previne erros se a tabela já existir sem a coluna)
+-- 0. GARANTIA DE ESTRUTURA (TABELAS E COLUNAS)
 -- -----------------------------------------------------------------------------
+
+-- Tabela: Comandas (Cabeçalho de Atendimento)
 CREATE TABLE IF NOT EXISTS public.comandas (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     store_id UUID NOT NULL REFERENCES public.stores(id) ON DELETE CASCADE,
@@ -13,56 +15,21 @@ CREATE TABLE IF NOT EXISTS public.comandas (
     status TEXT NOT NULL DEFAULT 'aberta' CHECK (status IN ('aberta', 'aguardando_pagamento', 'fechada')),
     total_cents INTEGER DEFAULT 0,
     forma_pagamento TEXT CHECK (forma_pagamento IN ('dinheiro', 'pix', 'cartao')),
+    cliente_nome TEXT,
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Força a existência da coluna caso o IF NOT EXISTS acima tenha pulado a criação da tabela
+-- Forçar colunas necessárias se a tabela já existir
 ALTER TABLE public.comandas ADD COLUMN IF NOT EXISTS cliente_nome TEXT;
+ALTER TABLE public.comandas ADD COLUMN IF NOT EXISTS total_cents INTEGER DEFAULT 0;
 
--- 1. LIMPEZA DE FUNÇÕES LEGADAS
+-- Tabela: Itens da Comanda / Venda (Produção)
+-- Nota: Estas colunas devem existir na tabela sale_items para o KDS/BDS funcionar
+ALTER TABLE public.sale_items ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pendente' CHECK (status IN ('pendente', 'em_preparo', 'pronto', 'entregue'));
+ALTER TABLE public.sale_items ADD COLUMN IF NOT EXISTS destino_preparo TEXT DEFAULT 'nenhum' CHECK (destino_preparo IN ('cozinha', 'bar', 'nenhum'));
+
+-- 1. FUNÇÕES DE OPERAÇÃO COMERCIAL (RPCs)
 -- -----------------------------------------------------------------------------
-DROP FUNCTION IF EXISTS public.abrir_comanda(uuid, text);
-DROP FUNCTION IF EXISTS public.abrir_comanda(uuid, text, text, text, text);
-DROP FUNCTION IF EXISTS public.register_customer_on_table(uuid, text, text);
-DROP FUNCTION IF EXISTS public.register_customer_on_table(uuid, text, text, text);
-DROP FUNCTION IF EXISTS public.fechar_comanda(uuid, text);
-
--- 2. DADOS DE CLIENTES E VENDAS
--- -----------------------------------------------------------------------------
-
-CREATE TABLE IF NOT EXISTS public.customers (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    store_id UUID REFERENCES public.stores(id) ON DELETE CASCADE,
-    comanda_id UUID REFERENCES public.comandas(id) ON DELETE CASCADE,
-    name TEXT NOT NULL,
-    phone TEXT,
-    cpf TEXT,
-    created_at TIMESTAMPTZ DEFAULT now()
-);
-
--- 3. FUNÇÕES E PROCEDIMENTOS (RPCs)
--- -----------------------------------------------------------------------------
-
--- Função: Registrar Cliente
-CREATE OR REPLACE FUNCTION public.register_customer_on_table(
-    p_comanda_id UUID, 
-    p_name TEXT, 
-    p_phone TEXT,
-    p_cpf TEXT DEFAULT NULL
-) RETURNS BOOLEAN AS $$
-DECLARE
-    v_store_id UUID;
-BEGIN
-    SELECT store_id INTO v_store_id FROM public.comandas WHERE id = p_comanda_id;
-    
-    INSERT INTO public.customers (store_id, comanda_id, name, phone, cpf)
-    VALUES (v_store_id, p_comanda_id, p_name, p_phone, p_cpf);
-    
-    RETURN TRUE;
-EXCEPTION WHEN OTHERS THEN
-    RETURN FALSE;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Função: Abrir Comanda
 CREATE OR REPLACE FUNCTION public.abrir_comanda(
@@ -77,7 +44,7 @@ DECLARE
     v_numero INTEGER;
     v_comanda_id UUID;
 BEGIN
-    -- Numeração sequencial simples por loja
+    -- Numeração sequencial simples por loja (Mesa ou Comanda)
     SELECT COALESCE(MAX(numero), 0) + 1 INTO v_numero 
     FROM public.comandas 
     WHERE store_id = p_store_id;
@@ -86,16 +53,11 @@ BEGIN
     VALUES (p_store_id, v_numero, p_mesa, 'aberta', p_cliente_nome)
     RETURNING id INTO v_comanda_id;
 
-    -- Registro opcional no CRM
-    IF p_cliente_nome IS NOT NULL THEN
-        PERFORM public.register_customer_on_table(v_comanda_id, p_cliente_nome, p_cliente_telefone, p_cliente_cpf);
-    END IF;
-
     RETURN v_comanda_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Função: Fechar Comanda
+-- Função: Fechar Comanda (Pagamento)
 CREATE OR REPLACE FUNCTION public.fechar_comanda(
     p_comanda_id UUID, 
     p_forma_pagamento TEXT
@@ -120,6 +82,134 @@ BEGIN
     WHERE comanda_id = p_comanda_id;
 
     RETURN v_result;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Função: Baixa de Estoque
+CREATE OR REPLACE FUNCTION public.decrement_stock(p_product_id UUID, p_quantity INTEGER)
+RETURNS VOID AS $$
+BEGIN
+    UPDATE public.products
+    SET stock_qty = stock_qty - p_quantity
+    WHERE id = p_product_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 2. FUNÇÕES DE PRODUÇÃO (KDS / BDS)
+-- -----------------------------------------------------------------------------
+
+-- Função: Iniciar Preparo
+CREATE OR REPLACE FUNCTION public.iniciar_preparo_item(p_item_id UUID)
+RETURNS VOID AS $$
+BEGIN
+    UPDATE public.sale_items
+    SET status = 'em_preparo'
+    WHERE id = p_item_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Função: Finalizar Preparo
+CREATE OR REPLACE FUNCTION public.finalizar_preparo_item(p_item_id UUID)
+RETURNS VOID AS $$
+BEGIN
+    UPDATE public.sale_items
+    SET status = 'pronto'
+    WHERE id = p_item_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 3. FUNÇÕES DE GOVERNANÇA E ACESSO (SECURITY)
+-- -----------------------------------------------------------------------------
+
+-- Função: Status de Bootstrap (Decide destino do usuário no login)
+CREATE OR REPLACE FUNCTION public.get_user_bootstrap_status()
+RETURNS JSONB AS $$
+DECLARE
+    v_user_id UUID := auth.uid();
+    v_has_store BOOLEAN;
+    v_is_member BOOLEAN;
+    v_is_admin BOOLEAN;
+BEGIN
+    SELECT EXISTS (SELECT 1 FROM public.stores WHERE user_id = v_user_id) INTO v_has_store;
+    SELECT EXISTS (SELECT 1 FROM public.store_members WHERE user_id = v_user_id) INTO v_is_member;
+    SELECT is_admin FROM public.users WHERE id = v_user_id INTO v_is_admin;
+
+    RETURN jsonb_build_object(
+        'has_store', v_has_store,
+        'is_member', v_is_member,
+        'is_admin', COALESCE(v_is_admin, false)
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Função: Status de Licenciamento
+CREATE OR REPLACE FUNCTION public.get_store_access_status(p_store_id UUID)
+RETURNS JSONB AS $$
+DECLARE
+    v_access RECORD;
+BEGIN
+    SELECT * INTO v_access FROM public.store_access WHERE store_id = p_store_id LIMIT 1;
+
+    IF v_access IS NULL THEN
+        RETURN jsonb_build_object(
+            'acesso_liberado', false,
+            'plano_nome', 'Sem Plano',
+            'mensagem', 'Escolha um plano para começar.'
+        );
+    END IF;
+
+    RETURN jsonb_build_object(
+        'acesso_liberado', (v_access.status_acesso = 'ativo' AND v_access.data_fim_acesso > now()),
+        'data_fim_acesso', v_access.data_fim_acesso,
+        'plano_nome', v_access.plano_nome,
+        'plano_tipo', v_access.plano_tipo,
+        'mensagem', CASE 
+            WHEN v_access.data_fim_acesso < now() THEN 'Seu plano expirou.'
+            ELSE 'Acesso liberado.'
+        END
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Função: Conceder Plano (Admin Manual)
+CREATE OR REPLACE FUNCTION public.admin_grant_store_access(
+    p_store_id UUID, 
+    p_plano_tipo TEXT, 
+    p_duracao_dias INTEGER,
+    p_origem TEXT,
+    p_renovavel BOOLEAN
+) RETURNS VOID AS $$
+BEGIN
+    -- Validação básica de permissão no banco
+    IF NOT (SELECT is_admin FROM public.users WHERE id = auth.uid()) THEN
+        RAISE EXCEPTION 'not admin';
+    END IF;
+
+    INSERT INTO public.store_access (
+        store_id, 
+        plano_tipo, 
+        plano_nome, 
+        data_fim_acesso, 
+        status_acesso, 
+        origem, 
+        renovavel
+    )
+    VALUES (
+        p_store_id, 
+        p_plano_tipo, 
+        initcap(p_plano_tipo), 
+        now() + (p_duracao_dias || ' days')::interval, 
+        'ativo', 
+        p_origem, 
+        p_renovavel
+    )
+    ON CONFLICT (store_id) DO UPDATE SET
+        plano_tipo = EXCLUDED.plano_tipo,
+        plano_nome = EXCLUDED.plano_nome,
+        data_fim_acesso = EXCLUDED.data_fim_acesso,
+        status_acesso = 'ativo',
+        origem = EXCLUDED.origem,
+        renovavel = EXCLUDED.renovavel;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -171,12 +261,17 @@ JOIN public.sales s ON si.sale_id = s.id
 JOIN public.comandas c ON s.comanda_id = c.id
 WHERE si.destino_preparo = 'bar' AND si.status != 'pronto' AND c.status != 'fechada';
 
--- 5. PERMISSÕES
+-- 5. PERMISSÕES FINAIS
 -- -----------------------------------------------------------------------------
 
 GRANT EXECUTE ON FUNCTION public.abrir_comanda(uuid, text, text, text, text) TO anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.register_customer_on_table(uuid, text, text, text) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.fechar_comanda(uuid, text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.decrement_stock(uuid, integer) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.iniciar_preparo_item(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.finalizar_preparo_item(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_user_bootstrap_status() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_store_access_status(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_grant_store_access(uuid, text, integer, text, boolean) TO authenticated;
 
 GRANT SELECT ON public.v_painel_cozinha TO authenticated;
 GRANT SELECT ON public.v_painel_bar TO authenticated;
