@@ -12,6 +12,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
   ArrowLeft, 
   Plus, 
+  Minus,
   Trash2, 
   Loader2, 
   CheckCircle2, 
@@ -107,6 +108,7 @@ export default function ComandaDetailsPage() {
     return () => { supabase.removeChannel(channel); };
   }, [id, fetchData]);
 
+  // ADIÇÃO IMUTÁVEL DE ITENS TEMPORÁRIOS
   const addTempItem = (product: Product) => {
     setTempItems(prev => {
       const existing = prev.find(i => i.product.id === product.id);
@@ -114,6 +116,16 @@ export default function ComandaDetailsPage() {
         return prev.map(i => i.product.id === product.id ? { ...i, quantity: i.quantity + 1 } : i);
       }
       return [...prev, { product, quantity: 1 }];
+    });
+  };
+
+  const removeTempItem = (productId: string) => {
+    setTempItems(prev => {
+      const existing = prev.find(i => i.product.id === productId);
+      if (existing && existing.quantity > 1) {
+        return prev.map(i => i.product.id === productId ? { ...i, quantity: i.quantity - 1 } : i);
+      }
+      return prev.filter(i => i.product.id !== productId);
     });
   };
 
@@ -127,14 +139,15 @@ export default function ComandaDetailsPage() {
           productId: i.product.id,
           productName: i.product.name,
           qty: i.quantity,
-          unit_price: i.product.price_cents,
+          unitPrice: i.product.price_cents,
           destino: i.product.production_target || 'nenhum'
         });
       }
 
       await supabase.from('comandas')
         .update({ status: 'em_preparo' })
-        .eq('id', comanda.id);
+        .eq('id', comanda.id)
+        .in('status', ['aberta', 'em_preparo']);
 
       toast({ title: 'Itens Lançados!' });
       setTempItems([]);
@@ -151,7 +164,6 @@ export default function ComandaDetailsPage() {
     if (!comanda) return;
     setIsSubmitting(true);
     try {
-      // REGRA: Garante o estado correto antes de processar o faturamento
       await supabase.from('comandas')
         .update({ status: 'aguardando_pagamento' })
         .eq('id', comanda.id)
@@ -159,7 +171,7 @@ export default function ComandaDetailsPage() {
       
       setIsClosing(true);
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Erro no Fluxo', description: 'Não foi possível preparar a comanda para pagamento.' });
+      toast({ variant: 'destructive', title: 'Erro no Fluxo', description: 'Falha ao preparar para pagamento.' });
     } finally {
       setIsSubmitting(false);
     }
@@ -170,11 +182,6 @@ export default function ComandaDetailsPage() {
     
     setIsSubmitting(true);
     try {
-      // 1. Double check de integridade
-      await supabase.from('comandas')
-        .update({ status: 'aguardando_pagamento' })
-        .eq('id', comanda.id);
-
       const cartItems: CartItem[] = items.map(i => ({
         product_id: i.product_id,
         product_name_snapshot: i.product_name,
@@ -185,31 +192,19 @@ export default function ComandaDetailsPage() {
       }));
 
       const normalizedMethod = method === 'dinheiro' ? 'cash' : (method === 'cartao' ? 'card' : method);
-      
-      // 2. Processar Venda (PDV)
       const result = await addSale(cartItems, normalizedMethod, customer?.id || null);
       
-      if (!result.success) {
-        throw new Error(result.error);
-      }
+      if (!result.success) throw new Error(result.error);
 
-      // 3. Encerrar Atendimento
-      const { error: finalError } = await supabase.from('comandas').update({ 
+      await supabase.from('comandas').update({ 
         status: 'fechada', 
         closed_at: new Date().toISOString() 
       }).eq('id', comanda.id).eq('status', 'aguardando_pagamento');
 
-      if (finalError) throw finalError;
-
-      toast({ title: 'Atendimento Concluído!', description: 'Venda registrada no histórico financeiro.' });
+      toast({ title: 'Venda Concluída!' });
       router.push('/comandas');
     } catch (err: any) {
-      console.error('[FECHAMENTO_ERROR]', err);
-      toast({ 
-        variant: 'destructive', 
-        title: 'Não foi possível fechar a comanda', 
-        description: 'A comanda não está no estado correto para receber pagamento.' 
-      });
+      toast({ variant: 'destructive', title: 'Falha ao Fechar', description: err.message });
     } finally {
       setIsSubmitting(false);
     }
@@ -218,15 +213,15 @@ export default function ComandaDetailsPage() {
   if (loading && !comanda) return (
     <div className="h-[60vh] flex flex-col items-center justify-center gap-4">
       <Loader2 className="animate-spin h-8 w-8 text-primary" />
-      <p className="font-black uppercase text-[10px] tracking-widest text-muted-foreground">Sincronizando Atendimento...</p>
+      <p className="font-black uppercase text-[10px] tracking-widest text-muted-foreground animate-pulse">Sincronizando...</p>
     </div>
   );
 
   if (notFound) return (
-    <div className="h-[60vh] flex flex-col items-center justify-center gap-6 text-center px-8">
+    <div className="h-[60vh] flex flex-col items-center justify-center gap-6 text-center">
       <AlertCircle className="h-12 w-12 text-muted-foreground opacity-40" />
-      <h2 className="text-xl font-black uppercase tracking-tight">Comanda Indisponível</h2>
-      <Button variant="outline" onClick={() => router.push('/comandas')}>Voltar para Lista</Button>
+      <h2 className="text-xl font-black uppercase">Atendimento não localizado</h2>
+      <Button variant="outline" onClick={() => router.push('/comandas')}>Voltar</Button>
     </div>
   );
 
@@ -249,7 +244,7 @@ export default function ComandaDetailsPage() {
         </div>
 
         <div className="bg-background p-5 rounded-2xl border border-primary/10 shadow-sm flex flex-col items-end">
-          <p className="text-[9px] font-black uppercase text-muted-foreground tracking-widest mb-1 opacity-60">Consumo Acumulado</p>
+          <p className="text-[9px] font-black uppercase text-muted-foreground tracking-widest mb-1 opacity-60">Acumulado</p>
           <p className="text-4xl font-black text-primary tracking-tighter">{formatCurrency(calculatedTotal)}</p>
         </div>
       </div>
@@ -258,13 +253,23 @@ export default function ComandaDetailsPage() {
         <div className="lg:col-span-2 space-y-6">
           {tempItems.length > 0 && (
             <Card className="border-primary bg-primary/5 shadow-2xl">
-              <CardHeader className="py-3"><CardTitle className="text-[10px] font-black uppercase text-primary">Novos Lançamentos</CardTitle></CardHeader>
+              <CardHeader className="py-3"><CardTitle className="text-[10px] font-black uppercase text-primary">Lançamento Pendente</CardTitle></CardHeader>
               <CardContent className="p-4 space-y-4">
                 <div className="space-y-2">
                   {tempItems.map(i => (
-                    <div key={i.product.id} className="flex justify-between items-center font-bold text-sm bg-background p-2 rounded-lg border">
-                      <span className="uppercase text-xs"><Badge variant="secondary" className="mr-2">x{i.quantity}</Badge>{i.product.name}</span>
-                      <Button variant="ghost" size="icon" onClick={() => setTempItems(prev => prev.filter(x => x.product.id !== i.product.id))}><Trash2 className="h-4 w-4" /></Button>
+                    <div key={i.product.id} className="flex justify-between items-center font-bold text-sm bg-background p-3 rounded-xl border">
+                      <div className="flex flex-col">
+                        <span className="uppercase text-xs font-black">{i.product.name}</span>
+                        <span className="text-[10px] text-muted-foreground">{formatCurrency(i.product.price_cents)}/un</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center border rounded-lg h-8 bg-muted/20">
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeTempItem(i.product.id)}><Minus className="h-3 w-3" /></Button>
+                          <span className="w-6 text-center text-xs font-black">{i.quantity}</span>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => addTempItem(i.product.product || i.product as any)}><Plus className="h-3 w-3" /></Button>
+                        </div>
+                        <Button variant="ghost" size="icon" onClick={() => setTempItems(prev => prev.filter(x => x.product.id !== i.product.id))} className="text-destructive"><Trash2 className="h-4 w-4" /></Button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -277,8 +282,8 @@ export default function ComandaDetailsPage() {
 
           <Card className="border-none shadow-sm overflow-hidden">
             <CardHeader className="flex flex-row justify-between items-center bg-muted/10 border-b py-4 px-6">
-              <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Consumo</CardTitle>
-              <Button size="sm" onClick={() => setIsAdding(true)} className="h-9 px-4 font-black uppercase text-[10px]"><Plus className="h-3 w-3 mr-1.5" /> Lançar</Button>
+              <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Consumo Atual</CardTitle>
+              <Button size="sm" onClick={() => setIsAdding(true)} className="h-9 px-4 font-black uppercase text-[10px]"><Plus className="h-3 w-3 mr-1.5" /> Adicionar Item</Button>
             </CardHeader>
             <div className="p-0">
               <Table>
@@ -296,6 +301,11 @@ export default function ComandaDetailsPage() {
                       <TableCell className="text-right font-black text-primary px-6">{formatCurrency(item.qty * item.unit_price)}</TableCell>
                     </TableRow>
                   ))}
+                  {items.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-center py-12 text-muted-foreground text-xs font-bold uppercase opacity-50">Sem consumos registrados</TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </div>
@@ -305,15 +315,15 @@ export default function ComandaDetailsPage() {
         <div className="space-y-6">
           <Card className="border-primary/20 bg-primary/5 shadow-2xl overflow-hidden sticky top-24">
             <CardHeader className="bg-primary/10 text-center py-6">
-              <CardTitle className="text-xs font-black uppercase tracking-widest text-primary">Conclusão</CardTitle>
+              <CardTitle className="text-xs font-black uppercase tracking-widest text-primary">Encerramento</CardTitle>
             </CardHeader>
             <CardContent className="p-8 space-y-6">
               <div className="text-center space-y-1 py-6 bg-background rounded-2xl border">
-                <p className="text-[10px] font-black uppercase text-muted-foreground">Total da Conta</p>
+                <p className="text-[10px] font-black uppercase text-muted-foreground">Valor Final</p>
                 <p className="text-5xl font-black text-foreground tracking-tighter">{formatCurrency(calculatedTotal)}</p>
               </div>
               <Button className="w-full h-20 text-lg font-black uppercase tracking-widest" onClick={handleStartClosing} disabled={calculatedTotal <= 0 || isSubmitting}>
-                {isSubmitting ? <Loader2 className="h-7 w-7 animate-spin mr-3" /> : <CheckCircle2 className="h-7 w-7 mr-3" />} Fechar Conta
+                {isSubmitting ? <Loader2 className="h-7 w-7 animate-spin mr-3" /> : <CheckCircle2 className="h-7 w-7 mr-3" />} Fechar Turno
               </Button>
             </CardContent>
           </Card>
@@ -322,17 +332,18 @@ export default function ComandaDetailsPage() {
 
       <Dialog open={isClosing} onOpenChange={(open) => !isSubmitting && setIsClosing(open)}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl">
-          <div className="bg-muted/30 px-6 py-8 text-center border-b">
-            <h2 className="text-3xl font-black font-headline uppercase tracking-tighter">PAGAMENTO</h2>
+          <div className="bg-slate-950 text-white px-6 py-8 text-center border-b">
+            <h2 className="text-3xl font-black font-headline uppercase tracking-tighter">Pagamento</h2>
+            <p className="text-[10px] font-bold uppercase tracking-widest opacity-60">Selecione o meio para faturar</p>
           </div>
-          <div className="p-6 space-y-3">
-            <Button type="button" variant="outline" className="w-full h-16 justify-start text-sm font-black uppercase tracking-widest gap-4 border-2" onClick={() => handleCloseComandaFinal('dinheiro')} disabled={isSubmitting}>
+          <div className="p-6 space-y-3 bg-background">
+            <Button type="button" variant="outline" className="w-full h-16 justify-start text-sm font-black uppercase tracking-widest gap-4 border-2 hover:border-primary" onClick={() => handleCloseComandaFinal('dinheiro')} disabled={isSubmitting}>
               <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center"><CircleDollarSign className="h-6 w-6 text-green-600" /></div> Dinheiro
             </Button>
-            <Button type="button" variant="outline" className="w-full h-16 justify-start text-sm font-black uppercase tracking-widest gap-4 border-2" onClick={() => handleCloseComandaFinal('pix')} disabled={isSubmitting}>
+            <Button type="button" variant="outline" className="w-full h-16 justify-start text-sm font-black uppercase tracking-widest gap-4 border-2 hover:border-primary" onClick={() => handleCloseComandaFinal('pix')} disabled={isSubmitting}>
               <div className="h-10 w-10 rounded-full bg-cyan-100 flex items-center justify-center"><QrCode className="h-6 w-6 text-cyan-600" /></div> PIX
             </Button>
-            <Button type="button" variant="outline" className="w-full h-16 justify-start text-sm font-black uppercase tracking-widest gap-4 border-2" onClick={() => handleCloseComandaFinal('cartao')} disabled={isSubmitting}>
+            <Button type="button" variant="outline" className="w-full h-16 justify-start text-sm font-black uppercase tracking-widest gap-4 border-2 hover:border-primary" onClick={() => handleCloseComandaFinal('cartao')} disabled={isSubmitting}>
               <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center"><CreditCard className="h-6 w-6 text-blue-600" /></div> Cartão
             </Button>
           </div>
@@ -344,15 +355,15 @@ export default function ComandaDetailsPage() {
           <div className="p-6 space-y-6">
             <div className="relative">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Pesquisar..." value={search} onChange={e => setSearch(e.target.value)} className="h-14 pl-11 text-lg font-bold" autoFocus />
+              <Input placeholder="Pesquisar produto..." value={search} onChange={e => setSearch(e.target.value)} className="h-14 pl-11 text-lg font-bold" autoFocus />
             </div>
             <ScrollArea className="h-[50vh] pr-4">
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 {products
                   .filter(p => p.active && p.name.toLowerCase().includes(search.toLowerCase()))
                   .map(p => (
-                    <Button key={p.id} variant="outline" className="h-24 flex flex-col items-start gap-1 justify-center px-5" onClick={() => addTempItem(p)}>
-                      <span className="font-black text-[11px] uppercase leading-tight text-left">{p.name}</span>
+                    <Button key={p.id} variant="outline" className="h-24 flex flex-col items-start gap-1 justify-center px-5 border-2 hover:border-primary transition-all" onClick={() => addTempItem(p)}>
+                      <span className="font-black text-[11px] uppercase leading-tight text-left line-clamp-2">{p.name}</span>
                       <span className="text-[10px] font-black text-primary">{formatCurrency(p.price_cents)}</span>
                     </Button>
                   ))}
@@ -360,7 +371,7 @@ export default function ComandaDetailsPage() {
             </ScrollArea>
           </div>
           <DialogFooter className="p-6 bg-muted/30 border-t">
-            <Button className="w-full h-12 font-black uppercase text-xs tracking-widest" onClick={() => setIsAdding(false)}>Voltar</Button>
+            <Button className="w-full h-12 font-black uppercase text-xs tracking-widest" onClick={() => setIsAdding(false)}>Fechar Pesquisa</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
