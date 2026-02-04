@@ -1,0 +1,278 @@
+-- =============================================================================
+-- DOMÍNIO: COMANDAS - VENDAFÁCIL BRASIL
+-- VERSÃO: 2.0 (ESTÁVEL)
+-- =============================================================================
+
+-- 1. ESTRUTURA DE TABELAS
+-- -----------------------------------------------------------------------------
+
+-- Comandas
+CREATE TABLE IF NOT EXISTS public.comandas (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    store_id UUID NOT NULL REFERENCES public.stores(id) ON DELETE CASCADE,
+    numero INTEGER NOT NULL,
+    mesa TEXT,
+    status TEXT NOT NULL DEFAULT 'aberta' CHECK (status IN ('aberta', 'aguardando_pagamento', 'fechada')),
+    total NUMERIC(15,2) DEFAULT 0,
+    forma_pagamento TEXT CHECK (forma_pagamento IN ('dinheiro', 'pix', 'cartao')),
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Clientes da Comanda (Dados de identificação local)
+CREATE TABLE IF NOT EXISTS public.customers (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    comanda_id UUID NOT NULL REFERENCES public.comandas(id) ON DELETE CASCADE,
+    nome TEXT NOT NULL,
+    telefone TEXT,
+    UNIQUE(comanda_id)
+);
+
+-- Vendas vinculadas (Uma comanda pode ter múltiplos lançamentos de venda)
+CREATE TABLE IF NOT EXISTS public.sales (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    store_id UUID NOT NULL REFERENCES public.stores(id) ON DELETE CASCADE,
+    comanda_id UUID REFERENCES public.comandas(id) ON DELETE SET NULL,
+    total_cents INTEGER NOT NULL DEFAULT 0, -- Armazenamos em cents internamente para precisão
+    payment_method TEXT CHECK (payment_method IN ('cash', 'pix', 'card')),
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Itens de produção e venda
+CREATE TABLE IF NOT EXISTS public.sale_items (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    sale_id UUID NOT NULL REFERENCES public.sales(id) ON DELETE CASCADE,
+    product_id UUID NOT NULL REFERENCES public.products(id) ON DELETE RESTRICT,
+    product_name_snapshot TEXT NOT NULL,
+    quantity INTEGER NOT NULL CHECK (quantity > 0),
+    unit_price_cents INTEGER NOT NULL,
+    subtotal_cents INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente', 'em_preparo', 'pronto')),
+    destino_preparo TEXT NOT NULL CHECK (destino_preparo IN ('cozinha', 'bar', 'nenhum')),
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- 2. VIEWS DE PRODUÇÃO E GESTÃO
+-- -----------------------------------------------------------------------------
+
+-- View para Painel de Cozinha (KDS)
+CREATE OR REPLACE VIEW public.v_painel_cozinha AS
+SELECT 
+    si.id AS item_id,
+    c.id AS comanda_id,
+    c.numero AS comanda_numero,
+    c.mesa,
+    si.product_name_snapshot AS produto,
+    si.quantity AS qty,
+    si.status,
+    si.created_at,
+    p.prep_time_minutes,
+    c.store_id
+FROM public.sale_items si
+JOIN public.sales s ON si.sale_id = s.id
+JOIN public.comandas c ON s.comanda_id = c.id
+JOIN public.products p ON si.product_id = p.id
+WHERE si.destino_preparo = 'cozinha' AND si.status != 'pronto' AND c.status != 'fechada';
+
+-- View para Painel de Bar (BDS)
+CREATE OR REPLACE VIEW public.v_painel_bar AS
+SELECT 
+    si.id AS item_id,
+    c.id AS comanda_id,
+    c.numero AS comanda_numero,
+    c.mesa,
+    si.product_name_snapshot AS produto,
+    si.quantity AS qty,
+    si.status,
+    si.created_at,
+    p.prep_time_minutes,
+    c.store_id
+FROM public.sale_items si
+JOIN public.sales s ON si.sale_id = s.id
+JOIN public.comandas c ON s.comanda_id = c.id
+JOIN public.products p ON si.product_id = p.id
+WHERE si.destino_preparo = 'bar' AND si.status != 'pronto' AND c.status != 'fechada';
+
+-- View Consolidada de Comandas
+CREATE OR REPLACE VIEW public.v_comandas_totais AS
+SELECT 
+    c.id,
+    c.store_id,
+    c.numero,
+    c.mesa,
+    c.status,
+    cust.nome AS cliente_nome,
+    COALESCE(SUM(s.total_cents), 0) AS total_cents
+FROM public.comandas c
+LEFT JOIN public.customers cust ON c.id = cust.comanda_id
+LEFT JOIN public.sales s ON c.id = s.comanda_id
+GROUP BY c.id, cust.nome;
+
+-- 3. FUNÇÕES E PROCEDIMENTOS (RPCs)
+-- -----------------------------------------------------------------------------
+
+-- Função: Abrir Comanda (Gera número sequencial por loja)
+CREATE OR REPLACE FUNCTION public.abrir_comanda(p_store_id UUID, p_mesa TEXT)
+RETURNS UUID AS $$
+DECLARE
+    v_numero INTEGER;
+    v_comanda_id UUID;
+BEGIN
+    SELECT COALESCE(MAX(numero), 0) + 1 INTO v_numero 
+    FROM public.comandas 
+    WHERE store_id = p_store_id AND created_at >= start_of_day(now()); -- Numeração reseta por dia (opcional)
+
+    INSERT INTO public.comandas (store_id, numero, mesa, status)
+    VALUES (p_store_id, v_numero, p_mesa, 'aberta')
+    RETURNING id INTO v_comanda_id;
+
+    RETURN v_comanda_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Função: Registrar Cliente na Comanda
+CREATE OR REPLACE FUNCTION public.register_customer_on_table(
+    p_comanda_id UUID, 
+    p_nome TEXT, 
+    p_telefone TEXT
+) RETURNS BOOLEAN AS $$
+BEGIN
+    INSERT INTO public.customers (comanda_id, nome, telefone)
+    VALUES (p_comanda_id, p_nome, p_telefone)
+    ON CONFLICT (comanda_id) DO UPDATE 
+    SET nome = EXCLUDED.nome, telefone = EXCLUDED.telefone;
+    RETURN TRUE;
+EXCEPTION WHEN OTHERS THEN
+    RETURN FALSE;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Função: Recalcular Total da Comanda
+CREATE OR REPLACE FUNCTION public.recalculate_comanda_total(p_comanda_id UUID)
+RETURNS NUMERIC AS $$
+DECLARE
+    v_total_cents INTEGER;
+BEGIN
+    SELECT COALESCE(SUM(total_cents), 0) INTO v_total_cents
+    FROM public.sales
+    WHERE comanda_id = p_comanda_id;
+
+    UPDATE public.comandas 
+    SET total = (v_total_cents::NUMERIC / 100)
+    WHERE id = p_comanda_id;
+
+    RETURN (v_total_cents::NUMERIC / 100);
+END;
+$$ LANGUAGE plpgsql;
+
+-- Função: Adicionar Itens do Cardápio Digital (QR Code)
+CREATE OR REPLACE FUNCTION public.add_items_from_table_link(
+    p_comanda_id UUID, 
+    p_items JSONB
+) RETURNS BOOLEAN AS $$
+DECLARE
+    v_sale_id UUID;
+    v_store_id UUID;
+    v_total_cents INTEGER := 0;
+    v_item RECORD;
+BEGIN
+    SELECT store_id INTO v_store_id FROM public.comandas WHERE id = p_comanda_id;
+    
+    IF v_store_id IS NULL THEN RETURN FALSE; END IF;
+
+    -- Cria registro de venda
+    INSERT INTO public.sales (store_id, comanda_id, total_cents)
+    VALUES (v_store_id, p_comanda_id, 0)
+    RETURNING id INTO v_sale_id;
+
+    -- Processa itens do JSON
+    FOR v_item IN SELECT * FROM jsonb_to_recordset(p_items) AS x(product_id UUID, qty INTEGER)
+    LOOP
+        INSERT INTO public.sale_items (
+            sale_id, product_id, product_name_snapshot, quantity, unit_price_cents, subtotal_cents, destino_preparo
+        )
+        SELECT 
+            v_sale_id, p.id, p.name, v_item.qty, p.price_cents, (p.price_cents * v_item.qty), p.production_target
+        FROM public.products p
+        WHERE p.id = v_item.product_id;
+
+        v_total_cents := v_total_cents + (SELECT subtotal_cents FROM public.sale_items WHERE sale_id = v_sale_id ORDER BY created_at DESC LIMIT 1);
+    END LOOP;
+
+    -- Atualiza total da venda e da comanda
+    UPDATE public.sales SET total_cents = v_total_cents WHERE id = v_sale_id;
+    PERFORM public.recalculate_comanda_total(p_comanda_id);
+
+    RETURN TRUE;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Funções de Status de Preparo
+CREATE OR REPLACE FUNCTION public.iniciar_preparo_item(p_item_id UUID)
+RETURNS BOOLEAN AS $$
+BEGIN
+    UPDATE public.sale_items SET status = 'em_preparo' WHERE id = p_item_id;
+    RETURN TRUE;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION public.finalizar_preparo_item(p_item_id UUID)
+RETURNS BOOLEAN AS $$
+BEGIN
+    UPDATE public.sale_items SET status = 'pronto' WHERE id = p_item_id;
+    RETURN TRUE;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Função: Fechar Comanda (Faturamento)
+CREATE OR REPLACE FUNCTION public.fechar_comanda(
+    p_comanda_id UUID, 
+    p_forma_pagamento TEXT
+) RETURNS BOOLEAN AS $$
+BEGIN
+    UPDATE public.comandas 
+    SET status = 'fechada',
+        forma_pagamento = p_forma_pagamento
+    WHERE id = p_comanda_id;
+
+    -- Sincroniza o meio de pagamento em todas as vendas da comanda
+    UPDATE public.sales 
+    SET payment_method = CASE 
+        WHEN p_forma_pagamento = 'dinheiro' THEN 'cash'
+        WHEN p_forma_pagamento = 'pix' THEN 'pix'
+        WHEN p_forma_pagamento = 'cartao' THEN 'card'
+        ELSE 'cash'
+    END
+    WHERE comanda_id = p_comanda_id;
+
+    RETURN TRUE;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 4. SEGURANÇA (RLS & PERMISSÕES)
+-- -----------------------------------------------------------------------------
+
+ALTER TABLE public.comandas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.sales ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.sale_items ENABLE ROW LEVEL SECURITY;
+
+-- Políticas para Membros da Loja (Authenticated)
+CREATE POLICY "Membros podem gerir comandas" ON public.comandas
+    FOR ALL TO authenticated USING (store_id IN (SELECT store_id FROM public.store_members WHERE user_id = auth.uid()));
+
+CREATE POLICY "Membros podem gerir itens" ON public.sale_items
+    FOR ALL TO authenticated USING (sale_id IN (SELECT id FROM public.sales WHERE store_id IN (SELECT store_id FROM public.store_members WHERE user_id = auth.uid())));
+
+-- Permissões para Anon (QR Code Flow)
+GRANT EXECUTE ON FUNCTION public.abrir_comanda TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.register_customer_on_table TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.add_items_from_table_link TO anon, authenticated;
+
+-- Permissões gerais para Views
+GRANT SELECT ON public.v_painel_cozinha TO authenticated;
+GRANT SELECT ON public.v_painel_bar TO authenticated;
+GRANT SELECT ON public.v_comandas_totais TO authenticated;
+
+-- =============================================================================
+-- FIM DO SCRIPT
+-- =============================================================================
