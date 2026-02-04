@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * @fileOverview Cardápio Digital Público.
+ * @fileOverview Cardápio Digital Público com Fluxo de 3 Etapas (Step-by-Step).
  */
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -17,7 +17,8 @@ import {
   Clock,
   UserCheck,
   CheckCircle2,
-  Send
+  Send,
+  ChevronRight
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -27,7 +28,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { addComandaItemByNumero } from '@/lib/add-comanda-item';
+import { addComandaItem } from '@/lib/add-comanda-item';
 
 const formatCurrency = (val: number) => 
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((val || 0) / 100);
@@ -37,11 +38,13 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [cart, setCart] = useState<(CartItem & { notes?: string })[]>([]);
+  const [cart, setCart] = useState<CartItem[]>([]);
   const [isSending, setIsSending] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
   
+  // Controle de Fluxo Final (Definitivo)
+  const [orderStep, setOrderStep] = useState<1 | 2 | 3>(1);
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [showIdModal, setShowIdModal] = useState(false);
   const [customerData, setCustomerData] = useState({ name: '', phone: '', cpf: '' });
@@ -63,12 +66,14 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
 
   useEffect(() => {
     loadProducts();
-    const savedId = localStorage.getItem(`vf_cust_${store.id}`);
-    if (savedId) setCustomerId(savedId);
-  }, [loadProducts, store.id]);
+    // Removido useEffect de identificação automática via localStorage para garantir fluxo limpo
+  }, [loadProducts]);
 
   const categories = useMemo(() => Array.from(new Set(products.map(p => p.category || 'Geral'))), [products]);
-  const filteredProducts = products.filter(p => p.name.toLowerCase().includes(search.toLowerCase()) || p.category?.toLowerCase().includes(search.toLowerCase()));
+  const filteredProducts = products.filter(p => 
+    p.name.toLowerCase().includes(search.toLowerCase()) || 
+    p.category?.toLowerCase().includes(search.toLowerCase())
+  );
   const cartTotal = cart.reduce((acc, item) => acc + item.subtotal_cents, 0);
 
   const addToCart = (product: Product) => {
@@ -83,8 +88,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
         qty: 1, 
         unit_price_cents: product.price_cents, 
         subtotal_cents: product.price_cents, 
-        stock_qty: product.stock_qty, 
-        notes: '' 
+        stock_qty: product.stock_qty
       }];
     });
   };
@@ -99,58 +103,31 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
     });
   };
 
-  const executeOrderSubmission = async (resolvedCustId: string) => {
-    setIsSending(true);
-    try {
-      let resolvedComandaId: string | null = null;
-
-      // 1. Lançar itens via número de mesa
-      for (const item of cart) {
-        const product = products.find(p => p.id === item.product_id);
-        const cid = await addComandaItemByNumero({
-          storeId: store.id,
-          numeroComanda: table.number,
-          productId: item.product_id,
-          productName: item.product_name_snapshot,
-          qty: item.qty,
-          unitPrice: item.unit_price_cents,
-          destino: product?.production_target || 'nenhum'
-        });
-        if (!resolvedComandaId) resolvedComandaId = cid;
-      }
-
-      // 2. Transicionar status da comanda para preparo
-      if (resolvedComandaId) {
-        await supabase
-          .from('comandas')
-          .update({ status: 'em_preparo' })
-          .eq('id', resolvedComandaId)
-          .in('status', ['aberta', 'em_preparo']);
-      }
-
-      setCart([]);
-      setIsCartOpen(false);
-      setOrderSuccess(true);
-      setTimeout(() => setOrderSuccess(false), 5000);
-      toast({ title: 'Pedido Enviado!', description: 'Já estamos preparando para você.' });
-    } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Erro no Pedido', description: err.message });
-    } finally {
-      setIsSending(false);
+  /**
+   * Controlador Principal de Ações (Switch de Fluxo)
+   */
+  const handleMainAction = async () => {
+    // 🥇 1º CLIQUE — CONFIRMAÇÃO VISUAL
+    if (orderStep === 1) {
+      setIsCartOpen(true);
+      setOrderStep(2);
+      return;
     }
-  };
 
-  const handleCheckoutProcess = async () => {
-    if (cart.length === 0 || isSending) return;
-    
-    // Se não houver cliente identificado, abre o modal. 
-    // O fluxo continuará após o sucesso da identificação.
-    if (!customerId) { 
-      setShowIdModal(true); 
-      return; 
+    // 🥈 2º CLIQUE — CADASTRO / LOGIN
+    if (orderStep === 2) {
+      if (!customerId) {
+        setShowIdModal(true);
+      } else {
+        setOrderStep(3); // Se já tiver ID em memória, avança direto
+      }
+      return;
     }
-    
-    await executeOrderSubmission(customerId);
+
+    // 🥉 3º CLIQUE — CONFIRMA PEDIDO (ENVIO REAL)
+    if (orderStep === 3) {
+      await executeOrderSubmission();
+    }
   };
 
   const handleIdentifyCustomer = async (e: React.FormEvent) => {
@@ -159,14 +136,14 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
     
     setIsIdentifying(true);
     try {
-      // 1. Garantir que existe uma comanda aberta para esta mesa
+      // 1. Garantir que existe uma comanda aberta para esta mesa antes de vincular o cliente
       const { data: comRes, error: comErr } = await supabase.rpc('get_or_create_comanda_by_table', { p_table_id: table.id });
       if (comErr) throw comErr;
       
       const rawCom = Array.isArray(comRes) ? comRes[0] : comRes;
       const finalComId = rawCom?.comanda_id || rawCom?.id;
 
-      if (!finalComId) throw new Error('Não foi possível gerar seu atendimento.');
+      if (!finalComId) throw new Error('Não foi possível inicializar seu atendimento.');
 
       // 2. Registrar cliente vinculado à comanda
       const { data: custRes, error: custErr } = await supabase.rpc('register_customer_on_table', {
@@ -183,14 +160,11 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
 
       if (!finalCustId) throw new Error('Erro ao salvar identificação.');
 
-      // 3. Persistir localmente e seguir fluxo
+      // 3. Sucesso: Atualiza estado e avança para o Passo 3
       setCustomerId(finalCustId);
-      localStorage.setItem(`vf_cust_${store.id}`, finalCustId);
       setShowIdModal(false);
-      
-      // CONTINUAÇÃO AUTOMÁTICA DO PEDIDO
-      await executeOrderSubmission(finalCustId);
-      
+      setOrderStep(3);
+      toast({ title: 'Identificado com sucesso!' });
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Falha na Identificação', description: err.message });
     } finally {
@@ -198,27 +172,84 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
     }
   };
 
-  if (loading) return <div className="h-screen flex flex-col items-center justify-center bg-white gap-4"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="font-black text-[10px] uppercase tracking-widest">Carregando Cardápio...</p></div>;
+  const executeOrderSubmission = async () => {
+    if (orderStep !== 3 || isSending) return;
+
+    setIsSending(true);
+    try {
+      let comandaId: string | null = null;
+
+      // Lançar itens via número de mesa (Passo 3 Real)
+      for (const item of cart) {
+        const product = products.find(p => p.id === item.product_id);
+        const cid = await addComandaItem({
+          storeId: store.id,
+          numeroComanda: table.number,
+          productId: item.product_id,
+          productName: item.product_name_snapshot,
+          qty: item.qty,
+          unitPrice: item.unit_price_cents,
+          destino: product?.production_target || 'nenhum'
+        });
+        if (!comandaId) comandaId = cid;
+      }
+
+      // Transicionar status da comanda para preparo (apenas agora)
+      if (comandaId) {
+        await supabase
+          .from('comandas')
+          .update({ status: 'em_preparo' })
+          .eq('id', comandaId)
+          .eq('status', 'aberta');
+      }
+
+      // Limpeza Total
+      setCart([]);
+      setIsCartOpen(false);
+      setOrderStep(1); // Volta para o início do fluxo
+      setOrderSuccess(true);
+      setTimeout(() => setOrderSuccess(false), 5000);
+      toast({ title: 'Pedido Enviado!', description: 'Estamos preparando para você.' });
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Erro no Pedido', description: err.message });
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  if (loading) return (
+    <div className="h-screen flex flex-col items-center justify-center bg-white gap-4">
+      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <p className="font-black text-[10px] uppercase tracking-widest">Carregando Cardápio...</p>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-32">
       <header className="bg-white border-b sticky top-0 z-40 px-6 py-4 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-3">
           <Avatar className="h-10 w-10 rounded-xl border border-primary/10">
-            <AvatarFallback className="bg-primary text-white font-black text-xs">{store.name?.substring(0,2).toUpperCase()}</AvatarFallback>
+            <AvatarFallback className="bg-primary text-white font-black text-xs">
+              {store.name?.substring(0,2).toUpperCase()}
+            </AvatarFallback>
           </Avatar>
           <div className="flex flex-col">
             <h1 className="text-sm font-black uppercase tracking-tighter leading-none">{store.name}</h1>
             <span className="text-[10px] font-black uppercase text-primary tracking-widest mt-1">Mesa #{table.number}</span>
           </div>
         </div>
-        <Badge variant="outline" className="text-[8px] font-black uppercase text-green-600 bg-green-50">Digital</Badge>
+        <Badge variant="outline" className="text-[8px] font-black uppercase text-green-600 bg-green-50">Atendimento Ativo</Badge>
       </header>
 
       <div className="p-6 space-y-6">
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Buscar no cardápio..." value={search} onChange={(e) => setSearch(e.target.value)} className="h-14 pl-12 rounded-2xl border-none shadow-xl" />
+          <Input 
+            placeholder="O que vamos pedir agora?" 
+            value={search} 
+            onChange={(e) => setSearch(e.target.value)} 
+            className="h-14 pl-12 rounded-2xl border-none shadow-xl bg-white" 
+          />
         </div>
 
         <div className="space-y-12">
@@ -243,9 +274,9 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
                               <span className="text-primary font-black text-lg tracking-tighter">{formatCurrency(product.price_cents)}</span>
                               {cartItem ? (
                                 <div className="flex items-center gap-3 bg-primary text-white rounded-full px-1 py-1 shadow-lg">
-                                  <Button size="icon" variant="ghost" className="h-8 w-8 text-white" onClick={(e) => { e.stopPropagation(); removeFromCart(product.id); }}><Minus className="h-4 w-4" /></Button>
+                                  <Button size="icon" variant="ghost" className="h-8 w-8 text-white hover:bg-transparent" onClick={(e) => { e.stopPropagation(); removeFromCart(product.id); }}><Minus className="h-4 w-4" /></Button>
                                   <span className="text-xs font-black w-4 text-center">{cartItem.qty}</span>
-                                  <Button size="icon" variant="ghost" className="h-8 w-8 text-white" onClick={(e) => { e.stopPropagation(); addToCart(product); }}><Plus className="h-4 w-4" /></Button>
+                                  <Button size="icon" variant="ghost" className="h-8 w-8 text-white hover:bg-transparent" onClick={(e) => { e.stopPropagation(); addToCart(product); }}><Plus className="h-4 w-4" /></Button>
                                 </div>
                               ) : <div className="h-10 w-10 rounded-full bg-slate-50 flex items-center justify-center border text-slate-400"><Plus className="h-5 w-5" /></div>}
                             </div>
@@ -262,21 +293,24 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
       </div>
 
       {orderSuccess && (
-        <div className="fixed top-24 inset-x-6 z-50 animate-in slide-in-from-top-4">
-          <div className="bg-green-600 text-white p-4 rounded-2xl shadow-2xl flex items-center gap-4">
+        <div className="fixed top-24 inset-x-6 z-50 animate-in slide-in-from-top-4 duration-500">
+          <div className="bg-green-600 text-white p-4 rounded-2xl shadow-2xl flex items-center gap-4 border-2 border-white/20">
             <CheckCircle2 className="h-6 w-6" />
             <div>
               <p className="text-[10px] font-black uppercase tracking-widest">Pedido Enviado!</p>
-              <p className="text-[10px] font-bold opacity-80 uppercase">Em preparo na cozinha/bar.</p>
+              <p className="text-[10px] font-bold opacity-80 uppercase leading-tight">Já estamos preparando tudo para você.</p>
             </div>
           </div>
         </div>
       )}
 
       {cart.length > 0 && !isCartOpen && (
-        <div className="fixed bottom-8 inset-x-6 z-50 animate-in slide-in-from-bottom-4">
-          <Button className="w-full h-16 rounded-2xl font-black uppercase text-[10px] tracking-[0.25em] shadow-2xl gap-4 flex justify-between px-8" onClick={() => setIsCartOpen(true)}>
-            <div className="flex items-center gap-3"><ShoppingCart className="h-4 w-4" /> <span>Carrinho</span></div>
+        <div className="fixed bottom-8 inset-x-6 z-50 animate-in slide-in-from-bottom-4 duration-500">
+          <Button 
+            className="w-full h-16 rounded-2xl font-black uppercase text-[10px] tracking-[0.25em] shadow-2xl gap-4 flex justify-between px-8 bg-slate-950 text-white hover:bg-slate-900" 
+            onClick={handleMainAction}
+          >
+            <div className="flex items-center gap-3"><ShoppingCart className="h-4 w-4" /> <span>Ver Meu Pedido</span></div>
             <span className="text-base tracking-tighter">{formatCurrency(cartTotal)}</span>
           </Button>
         </div>
@@ -284,20 +318,23 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
 
       {isCartOpen && (
         <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-[100] flex flex-col justify-end">
-          <div className="bg-white rounded-t-[40px] max-h-[90vh] flex flex-col animate-in slide-in-from-bottom-8">
+          <div className="bg-white rounded-t-[40px] max-h-[90vh] flex flex-col animate-in slide-in-from-bottom-8 duration-500">
             <div className="p-8 border-b flex items-center justify-between">
               <div className="space-y-1">
-                <h2 className="text-2xl font-black font-headline uppercase tracking-tighter">Meu Pedido</h2>
-                <p className="text-[10px] font-black uppercase text-primary tracking-widest">Resumo</p>
+                <h2 className="text-2xl font-black font-headline uppercase tracking-tighter">Resumo do Pedido</h2>
+                <p className="text-[10px] font-black uppercase text-primary tracking-widest">Confirme os itens abaixo</p>
               </div>
-              <Button variant="ghost" size="icon" className="h-12 w-12 rounded-full" onClick={() => setIsCartOpen(false)}><X className="h-6 w-6" /></Button>
+              <Button variant="ghost" size="icon" className="h-12 w-12 rounded-full" onClick={() => { setIsCartOpen(false); setOrderStep(1); }}><X className="h-6 w-6" /></Button>
             </div>
             <ScrollArea className="flex-1 px-8 py-6">
               <div className="space-y-8">
                 {cart.map(item => (
                   <div key={item.product_id} className="space-y-3">
                     <div className="flex justify-between items-center">
-                      <div className="flex-1"><h5 className="font-black text-sm uppercase tracking-tight">{item.product_name_snapshot}</h5><p className="text-[10px] font-bold text-muted-foreground uppercase">{formatCurrency(item.unit_price_cents)}/un</p></div>
+                      <div className="flex-1">
+                        <h5 className="font-black text-sm uppercase tracking-tight">{item.product_name_snapshot}</h5>
+                        <p className="text-[10px] font-bold text-muted-foreground uppercase">{formatCurrency(item.unit_price_cents)}/un</p>
+                      </div>
                       <div className="flex items-center bg-slate-50 rounded-xl h-10 p-1 border">
                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeFromCart(item.product_id)}><Minus className="h-3.5 w-3.5" /></Button>
                         <span className="w-8 text-center text-xs font-black">{item.qty}</span>
@@ -309,9 +346,22 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
               </div>
             </ScrollArea>
             <div className="p-8 bg-slate-50 border-t space-y-6">
-              <div className="flex justify-between items-end px-2"><span className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Total</span><span className="text-4xl font-black tracking-tighter text-primary">{formatCurrency(cartTotal)}</span></div>
-              <Button className="w-full h-20 text-sm font-black uppercase tracking-[0.2em] shadow-2xl rounded-[24px]" onClick={handleCheckoutProcess} disabled={isSending}>
-                {isSending ? <Loader2 className="h-6 w-6 animate-spin mr-3" /> : <><Send className="h-5 w-5 mr-3" /> Enviar Pedido</>}
+              <div className="flex justify-between items-end px-2">
+                <span className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Total Acumulado</span>
+                <span className="text-4xl font-black tracking-tighter text-slate-950">{formatCurrency(cartTotal)}</span>
+              </div>
+              <Button 
+                className="w-full h-20 text-sm font-black uppercase tracking-[0.2em] shadow-2xl rounded-[24px]" 
+                onClick={handleMainAction} 
+                disabled={isSending}
+              >
+                {isSending ? (
+                  <Loader2 className="h-6 w-6 animate-spin mr-3" />
+                ) : orderStep === 2 ? (
+                  <><UserCheck className="h-5 w-5 mr-3" /> Identificar-se para Pedir</>
+                ) : (
+                  <><Send className="h-5 w-5 mr-3" /> Confirmar e Enviar Pedido</>
+                )}
               </Button>
             </div>
           </div>
@@ -321,16 +371,45 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
       <Dialog open={showIdModal} onOpenChange={(open) => !isIdentifying && !isSending && setShowIdModal(open)}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl rounded-[32px]">
           <div className="bg-primary/5 p-10 text-center space-y-4 border-b border-primary/10">
-            <div className="mx-auto h-16 w-16 rounded-3xl bg-white shadow-xl flex items-center justify-center text-primary"><UserCheck className="h-8 w-8" /></div>
-            <div className="space-y-1"><h1 className="text-2xl font-black font-headline uppercase tracking-tighter">Identificação</h1></div>
+            <div className="mx-auto h-16 w-16 rounded-3xl bg-white shadow-xl flex items-center justify-center text-primary">
+              <UserCheck className="h-8 w-8" />
+            </div>
+            <div className="space-y-1">
+              <h1 className="text-2xl font-black font-headline uppercase tracking-tighter">Quase lá!</h1>
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Informe seus dados para o atendimento</p>
+            </div>
           </div>
           <div className="p-8">
             <form onSubmit={handleIdentifyCustomer} className="space-y-6">
               <div className="space-y-4">
-                <Input placeholder="Seu Nome" value={customerData.name} onChange={e => setCustomerData({...customerData, name: e.target.value})} className="h-14 font-bold rounded-2xl" required />
-                <Input placeholder="WhatsApp" value={customerData.phone} onChange={e => setCustomerData({...customerData, phone: e.target.value})} className="h-14 font-bold rounded-2xl" required />
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground ml-1">Seu Nome *</label>
+                  <Input 
+                    placeholder="Como devemos te chamar?" 
+                    value={customerData.name} 
+                    onChange={e => setCustomerData({...customerData, name: e.target.value})} 
+                    className="h-14 font-bold rounded-2xl bg-slate-50 border-none shadow-inner" 
+                    required 
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground ml-1">Seu WhatsApp *</label>
+                  <Input 
+                    placeholder="(00) 00000-0000" 
+                    value={customerData.phone} 
+                    onChange={e => setCustomerData({...customerData, phone: e.target.value})} 
+                    className="h-14 font-bold rounded-2xl bg-slate-50 border-none shadow-inner" 
+                    required 
+                  />
+                </div>
               </div>
-              <Button type="submit" className="w-full h-16 rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl shadow-primary/20" disabled={isIdentifying || isSending}>{isIdentifying ? <Loader2 className="animate-spin h-5 w-5" /> : 'Finalizar e Enviar Pedido'}</Button>
+              <Button 
+                type="submit" 
+                className="w-full h-16 rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl shadow-primary/20" 
+                disabled={isIdentifying || isSending}
+              >
+                {isIdentifying ? <Loader2 className="animate-spin h-5 w-5 mr-2" /> : <><CheckCircle2 className="h-5 w-5 mr-2" /> Salvar e Continuar</>}
+              </Button>
             </form>
           </div>
         </DialogContent>
