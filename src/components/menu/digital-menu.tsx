@@ -1,10 +1,11 @@
 'use client';
 
 /**
- * @fileOverview Cardápio Digital (Autoatendimento) - Fluxo sob demanda.
+ * @fileOverview Cardápio Digital (Autoatendimento) - Fluxo Contínuo e Identificado.
  * 
- * - Navegação pública livre de produtos.
- * - Identificação e criação de comanda ocorrem apenas no checkout.
+ * - Navegação pública.
+ * - Identificação e criação de comanda ocorrem no checkout.
+ * - Fluxo: Confirmar -> Identificar -> Enviar.
  */
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -15,14 +16,11 @@ import {
   Minus, 
   ShoppingCart, 
   Search, 
-  ChevronRight, 
   Loader2,
   X,
-  UtensilsCrossed,
   Clock,
   UserCheck,
   CheckCircle2,
-  AlertCircle,
   Send
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
@@ -47,7 +45,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
   
-  // Controle de Transação
+  // Controle de Identidade
   const [comandaId, setComandaId] = useState<string | null>(null);
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [showIdModal, setShowIdModal] = useState(false);
@@ -71,7 +69,6 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
 
   useEffect(() => {
     loadProducts();
-    // Recuperar identificação persistida para esta loja
     const savedId = localStorage.getItem(`vf_cust_${store.id}`);
     if (savedId) setCustomerId(savedId);
   }, [loadProducts, store.id]);
@@ -122,41 +119,11 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
   };
 
   /**
-   * Fluxo de Finalização de Pedido
-   * 1. Identificar cliente (se necessário)
-   * 2. Resolver comanda da mesa
-   * 3. Enviar itens
+   * Envio de Pedido - Processo Final
    */
-  const handleCheckoutProcess = async (forcedCustomerId?: string) => {
-    const finalCustomerId = forcedCustomerId || customerId;
-
-    if (cart.length === 0 || isSending) return;
-
-    // A. Identificação é o primeiro passo
-    if (!finalCustomerId) {
-      setShowIdModal(true);
-      return;
-    }
-
+  const executeOrderSubmission = async (targetCustomerId: string, targetComandaId: string) => {
     setIsSending(true);
     try {
-      // B. Resolver Comanda (Sincronização Just-in-Time)
-      let currentComandaId = comandaId;
-      if (!currentComandaId) {
-        const { data: comRes, error: comErr } = await supabase.rpc('get_or_create_comanda_by_table', {
-          p_table_id: table.id
-        });
-        
-        if (comErr) throw comErr;
-        
-        const rawCom = Array.isArray(comRes) ? comRes[0] : comRes;
-        currentComandaId = typeof rawCom === 'string' ? rawCom : (rawCom?.comanda_id || rawCom?.id);
-        
-        if (!currentComandaId) throw new Error('Não foi possível abrir o atendimento na mesa.');
-        setComandaId(currentComandaId);
-      }
-
-      // C. Enviar Itens via RPC
       const payload = cart.map(i => ({
         product_id: i.product_id,
         qty: i.quantity,
@@ -165,13 +132,12 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
       }));
 
       const { error: orderErr } = await supabase.rpc('add_itens_from_table_link', {
-        p_comanda_id: currentComandaId,
+        p_comanda_id: targetComandaId,
         p_items: payload
       });
 
       if (orderErr) throw orderErr;
 
-      // Sucesso
       setCart([]);
       setIsCartOpen(false);
       setOrderSuccess(true);
@@ -179,20 +145,56 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
       toast({ title: 'Pedido Enviado!', description: 'Sua solicitação está sendo preparada.' });
 
     } catch (err: any) {
-      console.error('[ORDER_FLOW_ERROR]', err);
-      toast({ variant: 'destructive', title: 'Erro ao Enviar', description: err.message || 'Falha ao processar o envio.' });
+      toast({ variant: 'destructive', title: 'Erro ao enviar pedido', description: err.message });
     } finally {
       setIsSending(false);
     }
   };
 
+  /**
+   * Gatilho de Checkout
+   */
+  const handleCheckoutProcess = async () => {
+    if (cart.length === 0 || isSending) return;
+
+    // Se não identificado, abre modal e para por aqui (o modal continuará o fluxo)
+    if (!customerId) {
+      setShowIdModal(true);
+      return;
+    }
+
+    setIsSending(true);
+    try {
+      // Resolver Comanda
+      let currentComandaId = comandaId;
+      if (!currentComandaId) {
+        const { data: comRes, error: comErr } = await supabase.rpc('get_or_create_comanda_by_table', {
+          p_table_id: table.id
+        });
+        if (comErr) throw comErr;
+        const rawCom = Array.isArray(comRes) ? comRes[0] : comRes;
+        currentComandaId = typeof rawCom === 'string' ? rawCom : (rawCom?.comanda_id || rawCom?.id);
+        if (!currentComandaId) throw new Error('Falha ao abrir atendimento.');
+        setComandaId(currentComandaId);
+      }
+
+      await executeOrderSubmission(customerId, currentComandaId);
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Erro de Sincronização', description: err.message });
+      setIsSending(false);
+    }
+  };
+
+  /**
+   * Identificação do Cliente (Modal)
+   */
   const handleIdentifyCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerData.name || !customerData.phone || isIdentifying) return;
 
     setIsIdentifying(true);
     try {
-      // Garantir que temos uma comanda para vincular o cliente
+      // 1. Garantir Comanda
       let currentComandaId = comandaId;
       if (!currentComandaId) {
         const { data: comRes } = await supabase.rpc('get_or_create_comanda_by_table', { p_table_id: table.id });
@@ -201,8 +203,9 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
         setComandaId(currentComandaId);
       }
 
-      if (!currentComandaId) throw new Error('Falha ao abrir comanda para identificação.');
+      if (!currentComandaId) throw new Error('Não foi possível abrir o atendimento na mesa.');
 
+      // 2. Registrar Cliente
       const { data: custRes, error: custErr } = await supabase.rpc('register_customer_on_table', {
         p_comanda_id: currentComandaId,
         p_name: customerData.name,
@@ -213,20 +216,20 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
       if (custErr) throw custErr;
 
       const rawCust = Array.isArray(custRes) ? custRes[0] : custRes;
-      const finalId = typeof rawCust === 'string' ? rawCust : (rawCust?.customer_id || rawCust?.id);
+      const finalCustId = typeof rawCust === 'string' ? rawCust : (rawCust?.customer_id || rawCust?.id);
       
-      if (!finalId) throw new Error('Falha ao registrar identificação do cliente.');
+      if (!finalCustId) throw new Error('Falha ao gerar identificação.');
 
-      setCustomerId(finalId);
-      localStorage.setItem(`vf_cust_${store.id}`, finalId);
+      // 3. Persistir e fechar modal
+      setCustomerId(finalCustId);
+      localStorage.setItem(`vf_cust_${store.id}`, finalCustId);
       setShowIdModal(false);
       
-      // Prossegue automaticamente com o envio do pedido usando o novo ID
-      toast({ title: 'Identificação concluída!' });
-      await handleCheckoutProcess(finalId);
+      // 4. CONTINUAR FLUXO AUTOMATICAMENTE
+      await executeOrderSubmission(finalCustId, currentComandaId);
 
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Falha na Identificação', description: err.message || 'Erro ao processar seus dados.' });
+      toast({ variant: 'destructive', title: 'Falha na Identificação', description: err.message });
     } finally {
       setIsIdentifying(false);
     }
@@ -235,7 +238,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
   if (loading) return (
     <div className="h-screen flex flex-col items-center justify-center bg-white gap-4">
       <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      <p className="font-black uppercase text-[10px] tracking-widest text-muted-foreground">Carregando Itens...</p>
+      <p className="font-black uppercase text-[10px] tracking-widest text-muted-foreground">Carregando Cardápio...</p>
     </div>
   );
 
@@ -251,14 +254,14 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
             <span className="text-[10px] font-black uppercase text-primary tracking-widest mt-1">Mesa #{table.number}</span>
           </div>
         </div>
-        <Badge variant="outline" className="text-[8px] font-black uppercase text-green-600 bg-green-50 border-green-100">Cardápio Digital</Badge>
+        <Badge variant="outline" className="text-[8px] font-black uppercase text-green-600 bg-green-50 border-green-100">Digital</Badge>
       </header>
 
       <div className="p-6 space-y-6">
         <div className="relative group">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input 
-            placeholder="O que você deseja pedir?" 
+            placeholder="O que vamos pedir?" 
             value={search} 
             onChange={(e) => setSearch(e.target.value)} 
             className="h-14 pl-12 rounded-2xl border-none shadow-xl shadow-slate-200/50 text-base"
@@ -322,7 +325,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
             <CheckCircle2 className="h-6 w-6" />
             <div>
               <p className="text-[10px] font-black uppercase tracking-widest">Pedido Enviado!</p>
-              <p className="text-[10px] font-bold opacity-80 uppercase">Já estamos preparando sua solicitação.</p>
+              <p className="text-[10px] font-bold opacity-80 uppercase">Já estamos preparando tudo.</p>
             </div>
           </div>
         </div>
@@ -336,7 +339,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
           >
             <div className="flex items-center gap-3">
               <ShoppingCart className="h-4 w-4" />
-              <span>Ver meu pedido</span>
+              <span>Meu Carrinho</span>
             </div>
             <span className="text-base tracking-tighter">{formatCurrency(cartTotal)}</span>
           </Button>
@@ -370,7 +373,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
                       </div>
                     </div>
                     <Input 
-                      placeholder="Alguma observação? (Ex: sem gelo)" 
+                      placeholder="Obs? (Ex: sem gelo)" 
                       value={item.notes}
                       onChange={(e) => setCart(prev => prev.map(i => i.product_id === item.product_id ? { ...i, notes: e.target.value } : i))}
                       className="h-10 text-[11px] font-bold border-dashed bg-slate-50/50"
@@ -387,7 +390,7 @@ export function DigitalMenu({ table, store }: { table: TableInfo; store: Store }
               </div>
               <Button 
                 className="w-full h-20 text-sm font-black uppercase tracking-[0.2em] shadow-2xl rounded-[24px]"
-                onClick={() => handleCheckoutProcess()}
+                onClick={handleCheckoutProcess}
                 disabled={isSending}
               >
                 {isSending ? <Loader2 className="h-6 w-6 animate-spin mr-3" /> : <><Send className="h-5 w-5 mr-3" /> Confirmar e Enviar Pedido</>}

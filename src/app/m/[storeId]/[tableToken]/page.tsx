@@ -5,7 +5,6 @@
  * 
  * - Valida a existência da mesa via link público.
  * - Libera o cardápio IMEDIATAMENTE após validação da mesa.
- * - Não exige comanda aberta para visualização.
  */
 
 import { useEffect, useState, useCallback } from 'react';
@@ -37,18 +36,16 @@ export default function TableMenuPage() {
 
     try {
       // 1. Validar Mesa (Acesso Público)
-      // O frontend deve ser resiliente ao formato de retorno da RPC
       const { data: tableData, error: tableError } = await supabase.rpc('get_table_by_token', {
         p_store_id: storeId,
         p_table_token: tableToken
       });
 
       if (tableError || !tableData) {
-        console.error('[TABLE_VALIDATION_FAILED]', tableError);
         throw new Error('Mesa não localizada. Verifique o QR Code ou chame o atendente.');
       }
 
-      // Tratar retorno como objeto único
+      // Tratar retorno como objeto único resiliente
       const resolvedTable = Array.isArray(tableData) ? tableData[0] : tableData;
       
       if (!resolvedTable) {
@@ -63,7 +60,7 @@ export default function TableMenuPage() {
         public_token: tableToken
       });
 
-      // 2. Buscar Dados da Loja (Branding)
+      // 2. Buscar Dados da Loja
       const { data: storeData, error: storeErr } = await supabase
         .from('stores')
         .select('*')
@@ -77,7 +74,7 @@ export default function TableMenuPage() {
 
     } catch (err: any) {
       console.error('[BOOTSTRAP_FATAL]', err);
-      setError(err.message || 'Erro de conexão com o restaurante.');
+      setError(err.message || 'Erro de conexão com o estabelecimento.');
     } finally {
       setLoading(false);
     }
