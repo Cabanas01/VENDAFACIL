@@ -68,28 +68,34 @@ export type Product = {
   prep_time_minutes: number;
 };
 
+export type OrderItemStatus = 'pending' | 'queued' | 'in_progress' | 'done' | 'canceled';
+
+export type OrderItem = {
+  id: string;
+  store_id: string;
+  product_id: string;
+  comanda_id?: string | null;
+  sale_id?: string | null;
+  quantity: number;
+  unit_price: number;
+  line_total: number;
+  status: OrderItemStatus;
+  created_at: string;
+  updated_at: string;
+  // Snapshots para as views legadas
+  product_name_snapshot?: string;
+  product_barcode_snapshot?: string;
+};
+
 export type Sale = {
   id: string;
   store_id: string;
   customer_id?: string | null;
   comanda_id?: string | null;
   created_at: string;
-  total_cents: number;
-  payment_method: 'cash' | 'pix' | 'card';
-  items: SaleItem[];
-};
-
-export type SaleItem = {
-  id: string;
-  sale_id: string;
-  product_id: string;
-  product_name_snapshot: string;
-  product_barcode_snapshot?: string | null;
-  quantity: number;
-  unit_price_cents: number;
-  subtotal_cents: number;
-  status?: 'pendente' | 'em_preparo' | 'pronto';
-  destino_preparo?: 'cozinha' | 'bar' | 'nenhum';
+  total_amount: number;
+  payment_method_id?: string | null;
+  items?: OrderItem[];
 };
 
 export type CartItem = {
@@ -103,12 +109,15 @@ export type CartItem = {
 };
 
 export type CashRegister = {
-  id:string;
+  id: string;
   store_id: string;
+  opened_by: string;
+  closed_by?: string | null;
   opened_at: string;
   closed_at: string | null;
-  opening_amount_cents: number;
-  closing_amount_cents: number | null;
+  opening_amount: number;
+  closing_amount: number | null;
+  status: 'open' | 'closed';
 };
 
 export type Customer = {
@@ -126,7 +135,7 @@ export type ComandaTotalView = {
   store_id: string;
   numero: number;
   mesa: string | null;
-  status: 'aberta' | 'aguardando_pagamento' | 'fechada';
+  status: string;
   cliente_nome: string | null;
   total_cents: number;
 };
@@ -138,7 +147,7 @@ export type PainelProducaoView = {
   mesa: string | null;
   produto: string;
   qty: number;
-  status: 'pendente' | 'em_preparo' | 'pronto';
+  status: OrderItemStatus;
   created_at: string;
   store_id: string;
 };
