@@ -12,7 +12,8 @@ export async function processSaleAction(
   storeId: string, 
   cart: CartItem[], 
   paymentMethod: string,
-  customerId?: string | null
+  customerId?: string | null,
+  comandaId?: string | null
 ) {
   const supabase = await createSupabaseServerClient();
   const supabaseAdmin = getSupabaseAdmin();
@@ -45,6 +46,7 @@ export async function processSaleAction(
       .insert({
         store_id: storeId,
         customer_id: customerId || null,
+        comanda_id: comandaId || null,
         total_cents: totalCents,
         payment_method: paymentMethod as any
       })

@@ -1,4 +1,3 @@
-
 'use client';
 
 /**
@@ -36,7 +35,7 @@ type AuthContextType = {
   updateStore: (data: any) => Promise<void>;
   addProduct: (product: any) => Promise<void>;
   addCustomer: (customer: any) => Promise<void>;
-  addSale: (cart: CartItem[], method: any, customerId?: string | null) => Promise<any>;
+  addSale: (cart: CartItem[], method: any, customerId?: string | null, comandaId?: string | null) => Promise<any>;
   setCashRegisters: (action: any) => Promise<void>;
   logout: () => Promise<void>;
 };
@@ -171,9 +170,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.location.href = '/dashboard';
   };
 
-  const addSale = useCallback(async (cart: CartItem[], method: any, customerId?: string | null) => {
+  const addSale = useCallback(async (cart: CartItem[], method: any, customerId?: string | null, comandaId?: string | null) => {
     if (!store?.id) throw new Error('Loja não identificada.');
-    const result = await processSaleAction(store.id, cart, method, customerId);
+    const result = await processSaleAction(store.id, cart, method, customerId, comandaId);
     if (!result.success) throw new Error(result.error);
     await refreshStatus();
     return result;

@@ -57,7 +57,7 @@ export default function ComandaDetailsPage() {
   const [search, setSearch] = useState('');
   const [localCart, setLocalCart] = useState<CartItem[]>([]);
 
-  const calculatedTotal = useMemo(() => items.reduce((acc, item) => acc + item.subtotal_cents, 0), [items]);
+  const calculatedTotal = useMemo(() => items.reduce((acc, item) => acc + (Number(item.subtotal_cents) || 0), 0), [items]);
 
   const fetchData = useCallback(async () => {
     if (!id || !isValidUUID(id as string) || !store?.id) return;
@@ -100,8 +100,8 @@ export default function ComandaDetailsPage() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const filteredProducts = useMemo(() => {
-    const term = search.toLowerCase();
-    return (products || []).filter(p => p.active && p.name.toLowerCase().includes(term));
+    const term = (search || '').toLowerCase();
+    return (products || []).filter(p => p.active && (p.name || '').toLowerCase().includes(term));
   }, [products, search]);
 
   const addToLocalCart = (product: Product) => {
@@ -127,10 +127,10 @@ export default function ComandaDetailsPage() {
     if (localCart.length === 0 || !comanda || !store) return;
     setIsSubmitting(true);
     try {
-      const result = await addSale(localCart, 'cash', null);
+      // Passamos o ID da comanda para a Server Action vincular a venda
+      const result = await addSale(localCart, 'cash', null, comanda.id);
       
-      if (result?.success && result.saleId) {
-        await supabase.from('sales').update({ comanda_id: comanda.id }).eq('id', result.saleId);
+      if (result?.success) {
         toast({ title: 'Itens adicionados!' });
         setLocalCart([]);
         setIsAddingItems(false);
@@ -139,7 +139,11 @@ export default function ComandaDetailsPage() {
         throw new Error(result?.error || 'Erro ao processar itens.');
       }
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Erro ao salvar', description: err.message });
+      toast({ 
+        variant: 'destructive', 
+        title: 'Erro ao salvar', 
+        description: err.message || 'A venda foi estornada para segurança dos dados.' 
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -350,7 +354,7 @@ export default function ComandaDetailsPage() {
                 <div className="flex justify-between items-end">
                   <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">SUBTOTAL</span>
                   <span className="text-4xl font-black text-primary tracking-tighter">
-                    {formatCurrency(localCart.reduce((acc, i) => acc + i.subtotal_cents, 0))}
+                    {formatCurrency(localCart.reduce((acc, i) => acc + (Number(i.subtotal_cents) || 0), 0))}
                   </span>
                 </div>
                 <Button 
@@ -369,18 +373,18 @@ export default function ComandaDetailsPage() {
       <Dialog open={isClosing} onOpenChange={setIsClosing}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl rounded-[32px]">
           <DialogHeader className="bg-[#0f172a] text-white px-6 py-12 text-center">
-            <DialogTitle className="text-3xl font-black uppercase tracking-tighter text-white">Pagamento</DialogTitle>
+            <DialogTitle className="text-3xl font-black uppercase tracking-tighter text-white">FORMA DE PAGAMENTO</DialogTitle>
             <DialogDescription className="text-white/60 font-bold uppercase text-[10px]">Selecione a forma de faturamento</DialogDescription>
           </DialogHeader>
           <div className="p-8 space-y-4 bg-slate-50">
-            <Button variant="outline" className="w-full h-20 justify-start gap-6 border-2 font-black uppercase text-xs hover:border-green-500 hover:bg-green-50 transition-all" onClick={() => handleCloseComandaFinal('cash')}>
+            <Button variant="outline" className="w-full h-20 justify-start gap-6 border-none bg-white shadow-sm font-black uppercase text-xs hover:bg-slate-100 transition-all px-8 rounded-3xl" onClick={() => handleCloseComandaFinal('cash')}>
               <div className="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center"><CircleDollarSign className="text-green-600" /></div> Dinheiro
             </Button>
-            <Button variant="outline" className="w-full h-20 justify-start gap-6 border-2 font-black uppercase text-xs hover:border-cyan-500 hover:bg-cyan-50 transition-all" onClick={() => handleCloseComandaFinal('pix')}>
-              <div className="h-12 w-12 rounded-full bg-cyan-100 flex items-center justify-center"><QrCode className="text-cyan-600" /></div> Pix
+            <Button className="w-full h-20 justify-start gap-6 border-none bg-cyan-400 text-white shadow-xl shadow-cyan-400/20 font-black uppercase text-xs hover:bg-cyan-500 transition-all px-8 rounded-3xl" onClick={() => handleCloseComandaFinal('pix')}>
+              <div className="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center"><QrCode className="text-white" /></div> Pix QR Code
             </Button>
-            <Button className="w-full h-20 justify-start gap-6 font-black uppercase text-xs bg-accent hover:bg-accent/90 shadow-xl shadow-accent/20" onClick={() => handleCloseComandaFinal('card')}>
-              <div className="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center"><CreditCard className="text-white" /></div> Cartão
+            <Button variant="outline" className="w-full h-20 justify-start gap-6 border-none bg-white shadow-sm font-black uppercase text-xs hover:bg-slate-100 transition-all px-8 rounded-3xl" onClick={() => handleCloseComandaFinal('card')}>
+              <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center"><CreditCard className="text-blue-600" /></div> Cartão
             </Button>
           </div>
         </DialogContent>
