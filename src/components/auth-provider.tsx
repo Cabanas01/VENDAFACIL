@@ -43,7 +43,7 @@ type AuthContextType = {
   updateProductStock: (id: string, qty: number) => Promise<void>;
   removeProduct: (id: string) => Promise<void>;
   findProductByBarcode: (barcode: string) => Promise<Product | null>;
-  addSale: (cart: CartItem[], paymentMethod: 'cash' | 'pix' | 'card' | 'dinheiro' | 'cartao') => Promise<any>;
+  addSale: (cart: CartItem[], paymentMethod: any, customerId?: string | null) => Promise<any>;
   setCashRegisters: (action: any) => Promise<void>;
   deleteAccount: () => Promise<{ error: any }>;
   logout: () => Promise<void>;
@@ -188,16 +188,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.location.href = '/dashboard';
   };
 
-  const addSale = useCallback(async (cart: CartItem[], method: any) => {
+  const addSale = useCallback(async (cart: CartItem[], method: any, customerId?: string | null) => {
     if (!store?.id) throw new Error('Loja não identificada.');
     
-    // Normalização de métodos legados para o padrão do PDV
     const normalizedMethod = method === 'dinheiro' ? 'cash' : (method === 'cartao' ? 'card' : method);
     
-    const result = await processSaleAction(store.id, cart, normalizedMethod);
+    const result = await processSaleAction(store.id, cart, normalizedMethod, customerId);
     if (!result.success) throw new Error(result.error);
     await refreshStatus();
-    return result; // Retorna o objeto da venda completo para impressão imediata
+    return result;
   }, [store, refreshStatus]);
 
   const updateStore = async (data: any) => { if (store) { await supabase.from('stores').update(data).eq('id', store.id); await refreshStatus(); } };

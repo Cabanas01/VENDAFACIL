@@ -4,13 +4,19 @@
  * @fileOverview Server Action definitiva para Processamento de Vendas (PDV).
  * 
  * Retorna o objeto completo da venda para permitir impressão imediata no frontend.
+ * Adicionado suporte a customer_id para vínculo com comandas e CRM.
  */
 
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { getSupabaseAdmin } from '@/lib/supabase/admin';
 import type { CartItem } from '@/lib/types';
 
-export async function processSaleAction(storeId: string, cart: CartItem[], paymentMethod: string) {
+export async function processSaleAction(
+  storeId: string, 
+  cart: CartItem[], 
+  paymentMethod: string,
+  customerId?: string | null
+) {
   const supabase = await createSupabaseServerClient();
 
   const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -31,6 +37,7 @@ export async function processSaleAction(storeId: string, cart: CartItem[], payme
     .from('sales')
     .insert({
       store_id: storeId,
+      customer_id: customerId || null,
       total_cents: totalCents,
       payment_method: paymentMethod as any
     })
@@ -38,7 +45,7 @@ export async function processSaleAction(storeId: string, cart: CartItem[], payme
     .single();
 
   if (saleError) {
-    console.error('[SERVER_ACTION] Erro 42501 ou Política Violada:', {
+    console.error('[SERVER_ACTION] Erro ao criar venda:', {
       code: saleError.code,
       message: saleError.message,
       storeId,
@@ -70,6 +77,7 @@ export async function processSaleAction(storeId: string, cart: CartItem[], payme
     const { error: itemsError } = await supabase.from('sale_items').insert(itemsToInsert);
     if (itemsError) throw itemsError;
 
+    // Baixa de estoque via RPC
     for (const item of cart) {
       await supabase.rpc('decrement_stock', {
         p_product_id: item.product_id,
@@ -77,7 +85,6 @@ export async function processSaleAction(storeId: string, cart: CartItem[], payme
       });
     }
 
-    // Retorna o objeto completo para o frontend para impressão sem race conditions
     return { 
       success: true, 
       saleId: sale.id,
@@ -86,6 +93,7 @@ export async function processSaleAction(storeId: string, cart: CartItem[], payme
 
   } catch (err: any) {
     console.error('[SERVER_ACTION] Erro na transação de itens:', err);
+    // Rollback manual do registro da venda em caso de falha nos itens
     const supabaseAdmin = getSupabaseAdmin();
     await supabaseAdmin.from('sales').delete().eq('id', sale.id);
     return { success: false, error: 'Erro ao processar itens da venda. Estorno realizado.' };

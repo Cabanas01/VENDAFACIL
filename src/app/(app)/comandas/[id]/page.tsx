@@ -1,9 +1,8 @@
-
 'use client';
 
 /**
  * @fileOverview Detalhe da Comanda - Fluxo de Fechamento e Pagamento.
- * Corrigido para calcular o total no frontend e garantir exibição correta dos preços individuais.
+ * Corrigido erro de "column comanda_id does not exist" ao realizar fechamento manual.
  */
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
@@ -34,7 +33,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import type { ComandaItem, Product, ComandaTotalView, Customer } from '@/lib/types';
+import type { ComandaItem, Product, ComandaTotalView, Customer, CartItem } from '@/lib/types';
 import { printReceipt } from '@/lib/print-receipt';
 
 const formatCurrency = (val: number) => 
@@ -43,7 +42,7 @@ const formatCurrency = (val: number) =>
 export default function ComandaDetailsPage() {
   const params = useParams();
   const id = params?.id as string;
-  const { products, refreshStatus, store } = useAuth();
+  const { products, refreshStatus, store, addSale } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -60,7 +59,6 @@ export default function ComandaDetailsPage() {
   const [isClosing, setIsClosing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // CÁLCULO EM TEMPO REAL: Garante que o total reflita os itens carregados
   const calculatedTotal = useMemo(() => {
     return items.reduce((acc, item) => acc + (item.quantidade * item.preco_unitario), 0);
   }, [items]);
@@ -158,9 +156,9 @@ export default function ComandaDetailsPage() {
     }
   };
 
-  const handlePrint = () => {
+  const handlePrint = (sale?: any) => {
     if (comanda && store) {
-      const saleMock = {
+      const saleToPrint = sale || {
         total_cents: calculatedTotal,
         payment_method: 'dinheiro',
         created_at: new Date().toISOString(),
@@ -170,32 +168,59 @@ export default function ComandaDetailsPage() {
           unit_price_cents: i.preco_unitario,
           subtotal_cents: i.quantidade * i.preco_unitario
         }))
-      } as any;
-      printReceipt(saleMock, store);
+      };
+      
+      printReceipt(saleToPrint, store, '80mm', {
+        numero: comanda.numero,
+        mesa: comanda.mesa || 'Balcão',
+        cliente: customer?.name || comanda.cliente_nome || 'Consumidor'
+      });
     }
   };
 
   const handleCloseComanda = async (method: 'dinheiro' | 'pix' | 'cartao') => {
-    if (!comanda || isSubmitting || !store) return;
+    if (!comanda || isSubmitting || !store || items.length === 0) return;
     
     setIsSubmitting(true);
     try {
-      const { data, error } = await supabase.rpc('fechar_comanda', {
-        p_comanda_id: comanda.id,
-        p_payment_method: method
-      });
+      // 1. Mapear itens para o formato de venda principal (PDV)
+      const cartItems: CartItem[] = items.map(i => ({
+        product_id: i.product_id,
+        product_name_snapshot: i.product_name,
+        quantity: i.quantidade,
+        unit_price_cents: i.preco_unitario,
+        subtotal_cents: i.quantidade * i.preco_unitario,
+        stock_qty: 999 // Ignora validação de estoque no fechamento pois os itens já saíram
+      }));
 
-      if (error) throw error;
+      // 2. Registrar a venda no histórico oficial através do motor de vendas
+      const result = await addSale(cartItems, method, customer?.id || null);
       
-      const res = typeof data === 'string' ? JSON.parse(data) : data;
-      if (!res || res.success === false) throw new Error(res?.message || 'Erro no fechamento.');
+      if (!result.success) throw new Error(result.error);
 
-      toast({ title: 'Conta Fechada!', description: `Venda registrada com sucesso.` });
-      handlePrint();
-      await refreshStatus(); 
+      // 3. Marcar a comanda como fechada no banco de dados (Manual Fallback)
+      const { error: updateError } = await supabase
+        .from('comandas')
+        .update({ status: 'fechada', closed_at: new Date().toISOString() })
+        .eq('id', comanda.id);
+
+      if (updateError) {
+        console.warn('[CLOSE_STATUS_SYNC_FAIL] Venda salva, mas falha ao atualizar status da comanda.', updateError);
+      }
+
+      toast({ title: 'Comanda Encerrada!', description: `Venda registrada no histórico com sucesso.` });
+      
+      // Impressão com os dados reais retornados
+      handlePrint(result.sale);
+      
       router.push('/comandas');
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Falha ao Fechar', description: err.message });
+      console.error('[CLOSE_FATAL]', err);
+      toast({ 
+        variant: 'destructive', 
+        title: 'Erro no Fechamento', 
+        description: err.message || 'Não foi possível enviar a venda para o histórico.' 
+      });
       setIsSubmitting(false);
     }
   };
@@ -237,7 +262,7 @@ export default function ComandaDetailsPage() {
         </div>
 
         <div className="flex items-center gap-4">
-          <Button variant="outline" size="icon" onClick={handlePrint} className="h-12 w-12 rounded-xl">
+          <Button variant="outline" size="icon" onClick={() => handlePrint()} className="h-12 w-12 rounded-xl">
             <Printer className="h-5 w-5" />
           </Button>
           <div className="bg-background p-5 rounded-2xl border border-primary/10 shadow-sm flex flex-col items-end ring-4 ring-primary/5">
