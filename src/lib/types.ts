@@ -82,7 +82,6 @@ export type OrderItem = {
   status: OrderItemStatus;
   created_at: string;
   updated_at: string;
-  // Snapshots para as views legadas
   product_name_snapshot?: string;
   product_barcode_snapshot?: string;
 };
@@ -133,7 +132,7 @@ export type Customer = {
 export type ComandaTotalView = {
   id: string;
   store_id: string;
-  numero: number;
+  numero: string; // 🔴 Ajustado para string conforme banco real
   mesa: string | null;
   status: string;
   cliente_nome: string | null;
@@ -143,7 +142,7 @@ export type ComandaTotalView = {
 export type PainelProducaoView = {
   item_id: string;
   comanda_id: string;
-  comanda_numero: number;
+  comanda_numero: string;
   mesa: string | null;
   produto: string;
   qty: number;

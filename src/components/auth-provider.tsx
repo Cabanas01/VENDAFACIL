@@ -2,8 +2,7 @@
 
 /**
  * @fileOverview AuthProvider - Fonte Única da Verdade para o Frontend.
- * Sincronizado com a arquitetura order_items e RPCs transacionais.
- * Versão: 2.1 (Correção de Not-Null Constraint em Comandas)
+ * Sincronizado com a arquitetura definitiva: numero (text) e status ('open').
  */
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -17,8 +16,7 @@ import type {
   CartItem,
   Customer,
   User,
-  ComandaTotalView,
-  OrderItem
+  ComandaTotalView
 } from '@/lib/types';
 
 type AuthContextType = {
@@ -35,8 +33,8 @@ type AuthContextType = {
   refreshStatus: () => Promise<void>;
   createStore: (storeData: any) => Promise<void>;
   
-  // RPCs Transacionais (Arquitetura order_items)
-  abrirComanda: (mesa: string, cliente: string, telefone?: string, cpf?: string) => Promise<string>;
+  // Operações Alinhadas com Backend (Direct Insert & RPC)
+  abrirComanda: (mesa: string, cliente: string, telefone?: string) => Promise<string>;
   adicionarItem: (comandaId: string, productId: string, quantity: number) => Promise<void>;
   fecharComanda: (comandaId: string, paymentMethodId: string) => Promise<void>;
   marcarItemConcluido: (itemId: string) => Promise<void>;
@@ -72,7 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const [storeRes, prodRes, cmdRes, custRes, accessRes, salesRes, cashRes] = await Promise.all([
           supabase.from('stores').select('*').eq('id', storeId).single(),
           supabase.from('products').select('*').eq('store_id', storeId).order('name'),
-          supabase.from('v_comandas_totais').select('*').eq('store_id', storeId).neq('status', 'fechada'),
+          supabase.from('v_comandas_totais').select('*').eq('store_id', storeId).neq('status', 'closed'),
           supabase.from('customers').select('*').eq('store_id', storeId).order('name'),
           supabase.rpc('get_store_access_status', { p_store_id: storeId }),
           supabase.from('sales').select('*').eq('store_id', storeId).order('created_at', { ascending: false }).limit(50),
@@ -111,35 +109,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, [fetchAppData]);
 
-  // 1. ABRIR COMANDA (INSERT DIRETO)
-  const abrirComanda = async (mesa: string, cliente: string, telefone?: string, cpf?: string) => {
+  // 1. ABRIR COMANDA (INSERT DIRETO ALINHADO COM CONSTRAINTS)
+  const abrirComanda = async (mesa: string, cliente: string, telefone?: string) => {
     if (!store?.id) throw new Error('Contexto de loja ausente.');
     
     const identificacao = mesa?.toString().trim();
     if (!identificacao) throw new Error('Identificação da comanda é obrigatória');
 
-    // Converte para número se possível para satisfazer a constraint de integer, 
-    // ou usa 0 se for identificação textual (ex: "Balcão")
-    const numeroComanda = parseInt(identificacao.replace(/\D/g, '')) || 0;
-
     const { data, error } = await supabase
       .from('comandas')
       .insert({
         store_id: store.id,
-        numero: numeroComanda, // 🔴 Campo OBRIGATÓRIO (NOT NULL)
-        mesa: identificacao,
+        numero: identificacao,     // 🔴 OBRIGATÓRIO (NOT NULL / text)
+        mesa: identificacao,       // Alinhado com o campo de identificação
         cliente_nome: cliente,
-        status: 'open'
+        cliente_telefone: telefone || null,
+        status: 'open'             // 🔴 OBRIGATÓRIO (CHECK constraint)
       })
       .select('id')
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('[INSERT_COMANDA_ERROR]', error);
+      throw error;
+    }
+    
     await refreshStatus();
     return data.id;
   };
 
-  // 2. ADICIONAR ITEM (RPC TRANSACIONAL)
+  // 2. ADICIONAR ITEM (RPC TRANSACIONAL UNIFICADA)
   const adicionarItem = async (comandaId: string, productId: string, quantity: number) => {
     const { error } = await supabase.rpc('rpc_add_item_to_comanda', {
       p_comanda_id: comandaId,
@@ -151,7 +150,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await refreshStatus();
   };
 
-  // 3. FECHAR COMANDA (RPC ATÔMICA)
+  // 3. FECHAR COMANDA (RPC ATÔMICA FINANCEIRA)
   const fecharComanda = async (comandaId: string, paymentMethodId: string) => {
     const cashRegister = cashRegisters.find(cr => !cr.closed_at);
     
@@ -165,27 +164,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await refreshStatus();
   };
 
-  // 4. PDV RÁPIDO (FLUXO HÍBRIDO)
+  // 4. PDV RÁPIDO (FLUXO HÍBRIDO SEGURO)
   const addSale = async (cart: CartItem[], paymentMethod: string) => {
     if (!store?.id) throw new Error('Loja não identificada.');
 
     try {
-      // Abre uma comanda temporária para o PDV. numero: 0 identifica vendas diretas.
-      const comandaId = await abrirComanda('0', 'Consumidor');
+      // Abre uma comanda temporária para o PDV seguindo as constraints
+      const comandaId = await abrirComanda('0', 'Consumidor Final');
 
-      // Lança os itens
+      // Lança os itens na estrutura unificada
       for (const item of cart) {
         await adicionarItem(comandaId, item.product_id, item.qty);
       }
 
-      // Fecha e fatura
+      // Fecha e fatura via RPC (Soma itens, cria sale, associa tudo)
       await fecharComanda(comandaId, paymentMethod);
       
       const { data: lastSale } = await supabase
         .from('sales')
         .select('*, items:order_items(*)')
         .eq('comanda_id', comandaId)
-        .single();
+        .maybeSingle();
 
       return lastSale as Sale;
     } catch (err: any) {
@@ -194,7 +193,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // 5. CONCLUIR ITEM NO KDS/BDS
+  // 5. PRODUÇÃO (MARCAR CONCLUÍDO)
   const marcarItemConcluido = async (itemId: string) => {
     const { error } = await supabase.rpc('rpc_mark_order_item_done', {
       p_item_id: itemId
