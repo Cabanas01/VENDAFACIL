@@ -1,6 +1,11 @@
 
 'use client';
 
+/**
+ * @fileOverview Gestão de Comandas.
+ * Ajustado para consumir o status 'open' do novo backend.
+ */
+
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useAuth } from '@/components/auth-provider';
 import { supabase } from '@/lib/supabase/client';
@@ -8,7 +13,6 @@ import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Plus, 
   Search, 
@@ -16,8 +20,6 @@ import {
   ClipboardList,
   MapPin,
   User,
-  Copy,
-  ExternalLink,
   RefreshCw
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -31,58 +33,26 @@ const formatCurrency = (val: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((val || 0) / 100);
 
 export default function ComandasPage() {
-  const { store } = useAuth();
+  const { store, refreshStatus, comandas } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
   
-  const [comandas, setComandas] = useState<ComandaTotalView[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [activeTab, setActiveTab] = useState('abertas');
-  
   const [isNewComandaOpen, setIsNewComandaOpen] = useState(false);
 
-  const fetchData = useCallback(async (silent = false) => {
-    if (!store?.id) return;
-    if (!silent) setLoading(true);
-
-    try {
-      const { data: comandasData, error: cmdErr } = await supabase
-        .from('v_comandas_totais')
-        .select('*')
-        .eq('store_id', store.id)
-        .in('status', ['aberta', 'em_preparo', 'pronta', 'aguardando_pagamento'])
-        .order('numero', { ascending: true });
-
-      if (cmdErr) throw cmdErr;
-      setComandas(comandasData || []);
-    } catch (err: any) {
-      console.error('[FETCH_COMANDAS_ERROR]', err.message);
-      toast({ variant: 'destructive', title: 'Erro de Sincronização', description: 'Não foi possível carregar as comandas.' });
-    } finally {
-      setLoading(false);
-    }
-  }, [store?.id, toast]);
-
   useEffect(() => {
-    if (store?.id) {
-      fetchData();
+    refreshStatus().finally(() => setLoading(false));
+  }, [refreshStatus]);
 
-      const channel = supabase
-        .channel('comandas_realtime')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'comandas', filter: `store_id=eq.${store.id}` }, () => fetchData(true))
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'sale_items' }, () => fetchData(true))
-        .subscribe();
-
-      return () => { supabase.removeChannel(channel); };
-    }
-  }, [store?.id, fetchData]);
-
+  // Filtro inteligente baseado no novo schema
   const filteredComandas = useMemo(() => 
     comandas.filter(c => 
-      c.numero?.toString().includes(search) || 
-      (c.mesa || '').toLowerCase().includes(search.toLowerCase()) ||
-      (c.cliente_nome || '').toLowerCase().includes(search.toLowerCase())
+      c.status === 'open' && (
+        c.numero?.toString().includes(search) || 
+        (c.mesa || '').toLowerCase().includes(search.toLowerCase()) ||
+        (c.cliente_nome || '').toLowerCase().includes(search.toLowerCase())
+      )
     )
   , [comandas, search]);
 
@@ -90,7 +60,7 @@ export default function ComandasPage() {
     <div className="space-y-8 animate-in fade-in duration-500">
       <PageHeader title="Atendimento" subtitle="Gestão de comandas e mesas em tempo real.">
         <div className="flex gap-2">
-          <Button variant="outline" size="icon" onClick={() => fetchData()} disabled={loading} className="h-12 w-12 rounded-xl">
+          <Button variant="outline" size="icon" onClick={() => refreshStatus()} disabled={loading} className="h-12 w-12 rounded-xl">
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
           <Button onClick={() => setIsNewComandaOpen(true)} className="h-12 font-black uppercase text-xs tracking-widest shadow-lg shadow-primary/20">
@@ -122,8 +92,8 @@ export default function ComandasPage() {
             <CardHeader className="bg-muted/20 border-b py-4">
               <div className="flex justify-between items-start">
                 <CardTitle className="text-3xl font-black tracking-tighter">#{comanda.numero}</CardTitle>
-                <Badge variant={comanda.status === 'aguardando_pagamento' ? 'destructive' : 'outline'} className="text-[8px] font-black uppercase bg-background border-primary/20">
-                  {comanda.status?.replace('_', ' ')}
+                <Badge variant="outline" className="text-[8px] font-black uppercase bg-background border-primary/20 text-primary">
+                  {comanda.status}
                 </Badge>
               </div>
               <div className="flex flex-col gap-1 mt-2">
@@ -152,7 +122,7 @@ export default function ComandasPage() {
         {!loading && filteredComandas.length === 0 && (
           <div className="col-span-full py-20 text-center border-2 border-dashed rounded-[40px] opacity-30 flex flex-col items-center gap-4">
             <ClipboardList className="h-12 w-12" />
-            <p className="text-sm font-black uppercase tracking-widest">Nenhuma comanda aberta nesta visualização</p>
+            <p className="text-sm font-black uppercase tracking-widest">Nenhuma comanda aberta no momento</p>
           </div>
         )}
       </div>
@@ -160,7 +130,7 @@ export default function ComandasPage() {
       <CreateComandaDialog 
         isOpen={isNewComandaOpen} 
         onOpenChange={setIsNewComandaOpen} 
-        onSuccess={() => fetchData(true)} 
+        onSuccess={() => refreshStatus()} 
       />
     </div>
   );

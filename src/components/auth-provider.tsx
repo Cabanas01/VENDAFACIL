@@ -1,8 +1,9 @@
+
 'use client';
 
 /**
  * @fileOverview AuthProvider - Fonte Única da Verdade para o Frontend.
- * Sincronizado com a arquitetura definitiva: numero (text) e status ('open').
+ * Sincronizado com as regras de ouro: NUNCA atualiza status manualmente.
  */
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -33,7 +34,6 @@ type AuthContextType = {
   refreshStatus: () => Promise<void>;
   createStore: (storeData: any) => Promise<void>;
   
-  // Operações Alinhadas com Backend (Direct Insert & RPC)
   abrirComanda: (mesa: string, cliente: string) => Promise<string>;
   adicionarItem: (comandaId: string, productId: string, quantity: number) => Promise<void>;
   fecharComanda: (comandaId: string, paymentMethodId: string) => Promise<void>;
@@ -70,7 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const [storeRes, prodRes, cmdRes, custRes, accessRes, salesRes, cashRes] = await Promise.all([
           supabase.from('stores').select('*').eq('id', storeId).single(),
           supabase.from('products').select('*').eq('store_id', storeId).order('name'),
-          supabase.from('v_comandas_totais').select('*').eq('store_id', storeId).neq('status', 'closed'),
+          supabase.from('v_comandas_totais').select('*').eq('store_id', storeId).order('numero', { ascending: true }),
           supabase.from('customers').select('*').eq('store_id', storeId).order('name'),
           supabase.rpc('get_store_access_status', { p_store_id: storeId }),
           supabase.from('sales').select('*').eq('store_id', storeId).order('created_at', { ascending: false }).limit(50),
@@ -127,10 +127,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .select('id')
       .single();
 
-    if (error) {
-      console.error('[INSERT_COMANDA_ERROR]', error);
-      throw error;
-    }
+    if (error) throw error;
     
     await refreshStatus();
     return data.id;
@@ -150,6 +147,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fecharComanda = async (comandaId: string, paymentMethodId: string) => {
     const cashRegister = cashRegisters.find(cr => !cr.closed_at);
     
+    // REGRA DE OURO: O fechamento é 100% via RPC.
     const { error } = await supabase.rpc('rpc_close_comanda_to_sale', {
       p_comanda_id: comandaId,
       p_payment_method_id: paymentMethodId,
@@ -164,6 +162,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!store?.id) throw new Error('Loja não identificada.');
 
     try {
+      // Abre comanda com status 'open' (único aceito no schema real)
       const comandaId = await abrirComanda('0', 'Consumidor Final');
 
       for (const item of cart) {
