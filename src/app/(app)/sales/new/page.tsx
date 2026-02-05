@@ -2,8 +2,7 @@
 'use client';
 
 /**
- * @fileOverview Tela de Nova Venda / PDV com design fiel à imagem premium.
- * Corrigido erro de processamento e sincronizado com o backend.
+ * @fileOverview Tela de Nova Venda / PDV com design premium fiel à imagem.
  */
 
 import { useState, useMemo } from 'react';
@@ -15,7 +14,6 @@ import {
   Trash2, 
   CreditCard, 
   Coins, 
-  PiggyBank, 
   Loader2, 
   ArrowRight,
   History,
@@ -137,8 +135,7 @@ export default function NewSalePage() {
         setIsFinalizing(false);
       }
     } catch (error: any) {
-      const errorMessage = error.message || 'Falha ao processar venda no banco de dados.';
-      toast({ variant: 'destructive', title: 'Erro na Venda', description: errorMessage });
+      toast({ variant: 'destructive', title: 'Erro na Venda', description: error.message });
     } finally {
       setIsSubmitting(false);
     }
@@ -277,7 +274,7 @@ export default function NewSalePage() {
         </Card>
       </div>
 
-      {/* MODAL DE PAGAMENTO (DESIGN PREMIUM DA IMAGEM) */}
+      {/* MODAL DE PAGAMENTO (DESIGN PREMIUM FIEL À IMAGEM) */}
       <Dialog open={isFinalizing} onOpenChange={setIsFinalizing}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl rounded-[40px]">
           <div className="p-10 bg-white relative">

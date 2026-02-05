@@ -116,7 +116,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const identificacao = mesa?.toString().trim();
     if (!identificacao) throw new Error('Identificação da comanda é obrigatória');
 
-    // REGRA DE OURO: INSERT com status 'aberta' para cumprir check constraint do banco real
     const { data, error } = await supabase
       .from('comandas')
       .insert({
@@ -136,10 +135,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const adicionarItem = async (comandaId: string, productId: string, quantity: number) => {
+    const product = products.find(p => p.id === productId);
+    
+    // Corrigido: Agora enviamos o p_unit_price para evitar erro de assinatura no PostgREST
     const { error } = await supabase.rpc('rpc_add_item_to_comanda', {
       p_comanda_id: comandaId,
       p_product_id: productId,
-      p_quantity: quantity
+      p_quantity: quantity,
+      p_unit_price: product?.price_cents || 0
     });
     
     if (error) throw error;
@@ -163,7 +166,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!store?.id) throw new Error('Loja não identificada.');
 
     try {
-      // Cria comanda temporária com status 'aberta'
       const comandaId = await abrirComanda('0', 'Consumidor Final');
 
       for (const item of cart) {
