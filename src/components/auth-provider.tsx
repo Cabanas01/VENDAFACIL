@@ -1,10 +1,8 @@
-
 'use client';
 
 /**
  * @fileOverview AuthProvider - Fonte Única da Verdade para o Frontend.
  * Sincronizado com as regras de ouro: NUNCA atualiza status manualmente.
- * Ajustado para 'aberta'/'fechada' conforme constraints do banco e inclusão de p_unit_price na RPC.
  */
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -137,7 +135,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const adicionarItem = async (comandaId: string, productId: string, quantity: number) => {
     const product = products.find(p => p.id === productId);
     
-    // Corrigido: Agora enviamos o p_unit_price para evitar erro de assinatura no PostgREST
+    // Corrigido: Chamando a RPC com prefixo rpc_ conforme nova arquitetura
     const { error } = await supabase.rpc('rpc_add_item_to_comanda', {
       p_comanda_id: comandaId,
       p_product_id: productId,
@@ -166,15 +164,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!store?.id) throw new Error('Loja não identificada.');
 
     try {
-      // Abre uma comanda rápida '0' para o consumidor final
       const comandaId = await abrirComanda('0', 'Consumidor Final');
 
-      // Lança os itens um a um
       for (const item of cart) {
         await adicionarItem(comandaId, item.product_id, item.qty);
       }
 
-      // Fecha e fatura
       await fecharComanda(comandaId, paymentMethod);
       
       const { data: lastSale } = await supabase

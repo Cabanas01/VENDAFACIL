@@ -1,78 +1,23 @@
 -- =============================================================================
 -- DOMÍNIO: INFRAESTRUTURA DE COMANDAS E PRODUÇÃO - VENDAFÁCIL BRASIL
--- VERSÃO: 7.0 (Sincronização Total Backend/Frontend)
+-- VERSÃO: 8.0 (Sincronização com Option 01 - RPC Prefixes)
 -- =============================================================================
 
--- 1. LIMPEZA DE SEGURANÇA (VIEWS E FUNÇÕES)
--- -----------------------------------------------------------------------------
-DROP VIEW IF EXISTS public.v_painel_cozinha CASCADE;
-DROP VIEW IF EXISTS public.v_painel_bar CASCADE;
-DROP VIEW IF EXISTS public.v_comandas_totais CASCADE;
+-- 1. LIMPEZA DE SEGURANÇA
+DROP FUNCTION IF EXISTS public.rpc_add_item_to_comanda CASCADE;
+DROP FUNCTION IF EXISTS public.rpc_close_comanda_to_sale CASCADE;
+DROP FUNCTION IF EXISTS public.rpc_mark_order_item_done CASCADE;
 
-DROP FUNCTION IF EXISTS public.abrir_comanda(uuid, text, text, text, text);
-DROP FUNCTION IF EXISTS public.fechar_comanda(uuid, text);
-DROP FUNCTION IF EXISTS public.adicionar_item_comanda(uuid, uuid, integer);
-DROP FUNCTION IF EXISTS public.criar_venda_da_comanda(uuid);
-DROP FUNCTION IF EXISTS public.iniciar_preparo_item(uuid);
-DROP FUNCTION IF EXISTS public.finalizar_preparo_item(uuid);
+-- 2. FUNÇÕES RPC (LÓGICA OPERACIONAL PADRONIZADA)
 
--- 2. AJUSTES ESTRUTURAIS (TABELAS)
--- -----------------------------------------------------------------------------
-
--- Ajuste na Tabela Comandas (Flexibilidade de Pagamento)
-ALTER TABLE public.comandas DROP CONSTRAINT IF EXISTS comandas_status_check;
-ALTER TABLE public.comandas ADD CONSTRAINT comandas_status_check 
-    CHECK (status IN ('aberta', 'em_preparo', 'pronta', 'aguardando_pagamento', 'fechada'));
-
-ALTER TABLE public.comandas DROP CONSTRAINT IF EXISTS comandas_forma_pagamento_check;
-ALTER TABLE public.comandas ADD CONSTRAINT comandas_forma_pagamento_check 
-    CHECK (forma_pagamento IN ('dinheiro', 'pix', 'cartao', 'cash', 'card', 'qr_code'));
-
--- Ajuste na Tabela Sale Items (Vínculo Direto com Comanda para KDS/BDS)
-ALTER TABLE public.sale_items ADD COLUMN IF NOT EXISTS comanda_id UUID REFERENCES public.comandas(id) ON DELETE CASCADE;
-ALTER TABLE public.sale_items ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pendente' CHECK (status IN ('pendente', 'em_preparo', 'pronto', 'entregue'));
-ALTER TABLE public.sale_items ADD COLUMN IF NOT EXISTS destino_preparo TEXT DEFAULT 'nenhum' CHECK (destino_preparo IN ('cozinha', 'bar', 'nenhum'));
-
--- 3. FUNÇÕES RPC (LÓGICA OPERACIONAL)
--- -----------------------------------------------------------------------------
-
--- Função: Abrir Comanda
-CREATE OR REPLACE FUNCTION public.abrir_comanda(
-    p_store_id UUID, 
-    p_mesa TEXT,
-    p_cliente_nome TEXT DEFAULT NULL
-) RETURNS UUID AS $$
-DECLARE
-    v_numero INTEGER;
-    v_comanda_id UUID;
-BEGIN
-    -- Verifica se já existe comanda aberta para esta mesa
-    SELECT id INTO v_comanda_id FROM public.comandas 
-    WHERE store_id = p_store_id AND mesa = p_mesa AND status != 'fechada' LIMIT 1;
-
-    IF v_comanda_id IS NOT NULL THEN
-        RETURN v_comanda_id;
-    END IF;
-
-    -- Gera próximo número sequencial da loja
-    SELECT COALESCE(MAX(numero), 0) + 1 INTO v_numero FROM public.comandas WHERE store_id = p_store_id;
-
-    INSERT INTO public.comandas (store_id, numero, mesa, status, cliente_nome)
-    VALUES (p_store_id, v_numero, p_mesa, 'aberta', p_cliente_nome)
-    RETURNING id INTO v_comanda_id;
-
-    RETURN v_comanda_id;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Função: Adicionar Item à Comanda (Garante vínculo transacional)
-CREATE OR REPLACE FUNCTION public.adicionar_item_comanda(
+-- Função: Adicionar Item à Comanda
+CREATE OR REPLACE FUNCTION public.rpc_add_item_to_comanda(
     p_comanda_id UUID,
     p_product_id UUID,
-    p_quantity INTEGER
+    p_quantity INTEGER,
+    p_unit_price INTEGER DEFAULT NULL
 ) RETURNS VOID AS $$
 DECLARE
-    v_sale_id UUID;
     v_store_id UUID;
     v_prod_name TEXT;
     v_prod_price INTEGER;
@@ -82,129 +27,70 @@ BEGIN
     SELECT store_id, name, price_cents, production_target INTO v_store_id, v_prod_name, v_prod_price, v_prod_target 
     FROM public.products WHERE id = p_product_id;
 
-    -- Localiza ou cria uma 'venda' (agrupador) para esta comanda
-    SELECT id INTO v_sale_id FROM public.sales WHERE comanda_id = p_comanda_id AND payment_method = 'cash' LIMIT 1;
-    
-    IF v_sale_id IS NULL THEN
-        INSERT INTO public.sales (store_id, comanda_id, total_cents, payment_method)
-        VALUES (v_store_id, p_comanda_id, 0, 'cash')
-        RETURNING id INTO v_sale_id;
+    -- Usa o preço passado ou o preço atual do produto
+    IF p_unit_price IS NOT NULL THEN
+        v_prod_price := p_unit_price;
     END IF;
 
-    -- Insere o item vinculado à comanda e à venda
-    INSERT INTO public.sale_items (
-        sale_id, comanda_id, product_id, product_name_snapshot, 
-        quantity, unit_price_cents, subtotal_cents, status, destino_preparo
+    -- Insere o item vinculado à comanda (Tabela order_items)
+    INSERT INTO public.order_items (
+        store_id, comanda_id, product_id, product_name_snapshot, 
+        quantity, unit_price, line_total, status, destino_preparo
     ) VALUES (
-        v_sale_id, p_comanda_id, p_product_id, v_prod_name, 
-        p_quantity, v_prod_price, (v_prod_price * p_quantity), 'pendente', v_prod_target
+        v_store_id, p_comanda_id, p_product_id, v_prod_name, 
+        p_quantity, v_prod_price, (v_prod_price * p_quantity), 'pending', v_prod_target
     );
 
-    -- Baixa estoque
+    -- Baixa estoque via RPC existente
     PERFORM public.decrement_stock(p_product_id, p_quantity);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Função: Fechar Comanda (Pagamento e Finalização)
-CREATE OR REPLACE FUNCTION public.fechar_comanda(
-    p_comanda_id UUID, 
-    p_forma_pagamento TEXT
-) RETURNS JSONB AS $$
+-- Função: Marcar Item como Concluído
+CREATE OR REPLACE FUNCTION public.rpc_mark_order_item_done(p_item_id UUID) RETURNS BOOLEAN AS $$
 BEGIN
-    -- 1. Atualiza Cabeçalho
-    UPDATE public.comandas 
-    SET status = 'fechada', forma_pagamento = p_forma_pagamento
-    WHERE id = p_comanda_id;
+    UPDATE public.order_items SET status = 'done' WHERE id = p_item_id;
+    RETURN TRUE;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
-    -- 2. Sincroniza Vendas Vinculadas
-    UPDATE public.sales 
-    SET payment_method = CASE 
-        WHEN p_forma_pagamento IN ('dinheiro', 'cash') THEN 'cash'::public.sales.payment_method
-        WHEN p_forma_pagamento IN ('cartao', 'card') THEN 'card'::public.sales.payment_method
-        ELSE 'pix'::public.sales.payment_method
-    END
+-- Função: Fechar Comanda e Gerar Venda
+CREATE OR REPLACE FUNCTION public.rpc_close_comanda_to_sale(
+    p_comanda_id UUID, 
+    p_payment_method_id TEXT,
+    p_cash_register_id UUID DEFAULT NULL
+) RETURNS JSONB AS $$
+DECLARE
+    v_store_id UUID;
+    v_total INTEGER;
+    v_sale_id UUID;
+BEGIN
+    -- 1. Obter dados da comanda
+    SELECT store_id INTO v_store_id FROM public.comandas WHERE id = p_comanda_id;
+    
+    -- 2. Calcular total dos itens da comanda
+    SELECT COALESCE(SUM(line_total), 0) INTO v_total FROM public.order_items WHERE comanda_id = p_comanda_id;
+
+    -- 3. Criar a Venda
+    INSERT INTO public.sales (store_id, comanda_id, total_cents, payment_method, cash_register_id)
+    VALUES (v_store_id, p_comanda_id, v_total, p_payment_method_id::public.sales.payment_method, p_cash_register_id)
+    RETURNING id INTO v_sale_id;
+
+    -- 4. Vincular itens à venda e atualizar status
+    UPDATE public.order_items 
+    SET sale_id = v_sale_id, status = 'done'
     WHERE comanda_id = p_comanda_id;
 
-    -- 3. Finaliza Itens no KDS/BDS (Garante que saiam do painel)
-    UPDATE public.sale_items 
-    SET status = 'pronto' 
-    WHERE comanda_id = p_comanda_id AND status != 'pronto';
+    -- 5. Fechar Comanda
+    UPDATE public.comandas 
+    SET status = 'fechada'
+    WHERE id = p_comanda_id;
 
-    RETURN jsonb_build_object('success', true);
+    RETURN jsonb_build_object('success', true, 'sale_id', v_sale_id);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Funções de Produção
-CREATE OR REPLACE FUNCTION public.iniciar_preparo_item(p_item_id UUID) RETURNS VOID AS $$
-BEGIN
-    UPDATE public.sale_items SET status = 'em_preparo' WHERE id = p_item_id;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
-CREATE OR REPLACE FUNCTION public.finalizar_preparo_item(p_item_id UUID) RETURNS VOID AS $$
-BEGIN
-    UPDATE public.sale_items SET status = 'pronto' WHERE id = p_item_id;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- 4. VIEWS DE MONITORAMENTO
--- -----------------------------------------------------------------------------
-
-CREATE VIEW public.v_comandas_totais AS
-SELECT 
-    c.id,
-    c.store_id,
-    c.numero,
-    c.mesa,
-    c.status,
-    c.cliente_nome,
-    COALESCE(SUM(si.subtotal_cents), 0)::INTEGER AS total_cents
-FROM public.comandas c
-LEFT JOIN public.sale_items si ON c.id = si.comanda_id
-GROUP BY c.id, c.store_id, c.numero, c.mesa, c.status, c.cliente_nome;
-
-CREATE VIEW public.v_painel_cozinha AS
-SELECT 
-    si.id AS item_id,
-    c.id AS comanda_id,
-    c.numero AS comanda_numero,
-    c.mesa,
-    si.product_name_snapshot AS produto,
-    si.quantity AS qty,
-    si.status,
-    si.created_at,
-    c.store_id
-FROM public.sale_items si
-JOIN public.comandas c ON si.comanda_id = c.id
-WHERE si.destino_preparo = 'cozinha' 
-  AND si.status != 'pronto' 
-  AND c.status != 'fechada';
-
-CREATE VIEW public.v_painel_bar AS
-SELECT 
-    si.id AS item_id,
-    c.id AS comanda_id,
-    c.numero AS comanda_numero,
-    c.mesa,
-    si.product_name_snapshot AS produto,
-    si.quantity AS qty,
-    si.status,
-    si.created_at,
-    c.store_id
-FROM public.sale_items si
-JOIN public.comandas c ON si.comanda_id = c.id
-WHERE si.destino_preparo = 'bar' 
-  AND si.status != 'pronto' 
-  AND c.status != 'fechada';
-
--- 5. PERMISSÕES
--- -----------------------------------------------------------------------------
-GRANT EXECUTE ON FUNCTION public.abrir_comanda TO authenticated;
-GRANT EXECUTE ON FUNCTION public.adicionar_item_comanda TO authenticated, anon;
-GRANT EXECUTE ON FUNCTION public.fechar_comanda TO authenticated;
-GRANT EXECUTE ON FUNCTION public.iniciar_preparo_item TO authenticated;
-GRANT EXECUTE ON FUNCTION public.finalizar_preparo_item TO authenticated;
-
-GRANT SELECT ON public.v_comandas_totais TO authenticated;
-GRANT SELECT ON public.v_painel_cozinha TO authenticated;
-GRANT SELECT ON public.v_painel_bar TO authenticated;
+-- 3. PERMISSÕES
+GRANT EXECUTE ON FUNCTION public.rpc_add_item_to_comanda TO authenticated;
+GRANT EXECUTE ON FUNCTION public.rpc_mark_order_item_done TO authenticated;
+GRANT EXECUTE ON FUNCTION public.rpc_close_comanda_to_sale TO authenticated;

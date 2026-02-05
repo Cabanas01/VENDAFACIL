@@ -1,8 +1,8 @@
-
 'use client';
 
 /**
  * @fileOverview Tela de Nova Venda / PDV com design premium fiel à imagem.
+ * Corrigido: Erro de sintaxe JSX no fechamento de tags e organização de imports.
  */
 
 import { useState, useMemo } from 'react';
@@ -48,6 +48,7 @@ const formatCurrency = (value: number) =>
 export default function NewSalePage() {
   const { products, sales, addSale, store } = useAuth();
   const { toast } = useToast();
+  const router = useRouter();
   
   const [search, setSearch] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -274,7 +275,7 @@ export default function NewSalePage() {
               </ScrollArea>
             </TabsContent>
           </Tabs>
-        </div>
+        </Card>
       </div>
 
       {/* MODAL DE PAGAMENTO (DESIGN PREMIUM FIEL À IMAGEM) */}
