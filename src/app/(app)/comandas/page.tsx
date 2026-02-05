@@ -1,14 +1,12 @@
-
 'use client';
 
 /**
  * @fileOverview Gestão de Comandas.
- * Ajustado para consumir o status 'open' do novo backend.
+ * Ajustado para consumir estritamente o status 'open' do backend real.
  */
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useAuth } from '@/components/auth-provider';
-import { supabase } from '@/lib/supabase/client';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -25,9 +23,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { useRouter } from 'next/navigation';
 import { CreateComandaDialog } from '@/components/comandas/create-comanda-dialog';
-import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
-import type { ComandaTotalView } from '@/lib/types';
 
 const formatCurrency = (val: number) => 
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((val || 0) / 100);
@@ -35,7 +31,6 @@ const formatCurrency = (val: number) =>
 export default function ComandasPage() {
   const { store, refreshStatus, comandas } = useAuth();
   const router = useRouter();
-  const { toast } = useToast();
   
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -45,7 +40,7 @@ export default function ComandasPage() {
     refreshStatus().finally(() => setLoading(false));
   }, [refreshStatus]);
 
-  // Filtro inteligente baseado no novo schema
+  // Filtro alinhado ao novo schema (status 'open')
   const filteredComandas = useMemo(() => 
     comandas.filter(c => 
       c.status === 'open' && (

@@ -132,7 +132,7 @@ export type Customer = {
 export type ComandaTotalView = {
   id: string;
   store_id: string;
-  numero: string; // 🔴 Ajustado para string conforme banco real
+  numero: string; 
   mesa: string | null;
   status: string;
   cliente_nome: string | null;
