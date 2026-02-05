@@ -2,7 +2,7 @@
 
 /**
  * @fileOverview AuthProvider - Fonte Única da Verdade para o Frontend.
- * Refatorado para o padrão RPC-First conforme as regras de ouro do backend.
+ * 100% Sincronizado com o novo backend RPC-First.
  */
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -16,7 +16,8 @@ import type {
   CartItem,
   Customer,
   User,
-  ComandaTotalView
+  ComandaTotalView,
+  OrderItem
 } from '@/lib/types';
 
 type AuthContextType = {
@@ -114,7 +115,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const identificacao = mesa?.toString().trim();
     if (!identificacao) throw new Error('Identificação da comanda é obrigatória');
 
-    // INSERT DIRETO EM COMANDAS (Campos permitidos)
     const { data, error } = await supabase
       .from('comandas')
       .insert({
@@ -135,7 +135,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   /**
    * REGRA DE OURO: Adição de itens via RPC.
-   * Não enviamos line_total, destino_preparo ou store_id.
+   * O frontend NUNCA envia line_total. O banco calcula qty * price.
    */
   const adicionarItem = async (comandaId: string, productId: string, quantity: number) => {
     const product = products.find(p => p.id === productId);
@@ -152,13 +152,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   /**
-   * REGRA DE OURO: Fechamento via RPC.
+   * REGRA DE OURO: Fechamento ATÔMICO via RPC.
    * O banco soma os itens, cria a venda e vincula tudo atomicamente.
    */
   const fecharComanda = async (comandaId: string, paymentMethodId: string) => {
     const cashRegister = cashRegisters.find(cr => !cr.closed_at);
     
-    const { error } = await supabase.rpc('rpc_close_comanda_to_sale', {
+    const { data, error } = await supabase.rpc('rpc_close_comanda_to_sale', {
       p_comanda_id: comandaId,
       p_payment_method_id: paymentMethodId,
       p_cash_register_id: cashRegister?.id || null
@@ -170,24 +170,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   /**
    * Fluxo de PDV Rápido (Venda sem comanda prévia)
-   * Segue a sequência de RPCs para manter a integridade.
+   * Segue a sequência de RPCs para manter a integridade financeira e de estoque.
    */
   const addSale = async (cart: CartItem[], paymentMethod: string) => {
     if (!store?.id) throw new Error('Loja não identificada.');
 
     try {
-      // 1. Abre comanda temporária
+      // 1. Abre comanda temporária '0'
       const comandaId = await abrirComanda('0', 'Consumidor Final');
 
-      // 2. Lança itens via RPC
+      // 2. Lança itens um a um via RPC (Garante baixa de estoque e preço no momento)
       for (const item of cart) {
         await adicionarItem(comandaId, item.product_id, item.qty);
       }
 
-      // 3. Fecha comanda via RPC
+      // 3. Fecha comanda via RPC (Garante cálculo de total centralizado no banco)
       await fecharComanda(comandaId, paymentMethod);
       
-      // 4. Recupera a venda gerada para o recibo
+      // 4. Recupera a venda gerada para exibir o recibo
       const { data: lastSale } = await supabase
         .from('sales')
         .select('*, items:order_items(*)')

@@ -2,10 +2,10 @@
 
 /**
  * @fileOverview Gestão de Comanda Individual (PDV Operacional).
- * Delegando escrita estritamente para as RPCs.
+ * Alinhado ao backend RPC-First: line_total é somente leitura.
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/components/auth-provider';
 import { supabase } from '@/lib/supabase/client';
@@ -55,7 +55,7 @@ export default function ComandaDetailsPage() {
     if (!id) return;
     setLoading(true);
     try {
-      // LEITURA DOS DADOS (Vem das views e tabelas, mas sem line_total no frontend)
+      // Leitura da View de Totais e Itens (Fonte da Verdade)
       const [comandaRes, itemsRes] = await Promise.all([
         supabase.from('v_comandas_totais').select('*').eq('id', id).single(),
         supabase.from('order_items').select('*').eq('comanda_id', id)
@@ -73,11 +73,16 @@ export default function ComandaDetailsPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // Cálculo de total local apenas para conferência visual rápida (UI)
+  const cartTotal = useMemo(() => 
+    localCart.reduce((acc, i) => acc + (i.product.price_cents * i.qty), 0), 
+  [localCart]);
+
   const handleAddItemsFinal = async () => {
     if (localCart.length === 0 || isSubmitting) return;
     setIsSubmitting(true);
     try {
-      // Adiciona cada item via RPC
+      // Lançamento de itens um a um via RPC
       for (const item of localCart) {
         await adicionarItem(id as string, item.product.id, item.qty);
       }
@@ -96,7 +101,7 @@ export default function ComandaDetailsPage() {
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
-      // FECHAMENTO TRANSACIONAL VIA RPC
+      // Fechamento transacional: O banco soma line_total e cria a venda
       await fecharComanda(id as string, method);
       toast({ title: 'Atendimento Concluído!' });
       
@@ -124,7 +129,7 @@ export default function ComandaDetailsPage() {
           <Badge variant="outline" className="font-black uppercase border-primary/20 text-primary">{comanda?.status}</Badge>
         </div>
         <div className="text-right">
-          <p className="text-[10px] font-black uppercase text-muted-foreground">Subtotal</p>
+          <p className="text-[10px] font-black uppercase text-muted-foreground">Saldo da Conta</p>
           <p className="text-4xl font-black text-primary tracking-tighter">{formatCurrency(comanda?.total_cents || 0)}</p>
         </div>
       </div>
@@ -132,7 +137,7 @@ export default function ComandaDetailsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <Card className="lg:col-span-2 border-none shadow-sm overflow-hidden bg-background">
           <CardHeader className="bg-muted/10 border-b flex flex-row items-center justify-between py-4">
-            <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Itens da Conta</CardTitle>
+            <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Itens Lançados</CardTitle>
             <Button size="sm" className="font-black uppercase text-[10px] h-9" onClick={() => setIsAddingItems(true)}>+ Adicionar Produto</Button>
           </CardHeader>
           <Table>
@@ -148,7 +153,10 @@ export default function ComandaDetailsPage() {
                 <TableRow key={idx} className="hover:bg-muted/5 transition-colors">
                   <TableCell className="px-6 font-bold text-xs uppercase tracking-tight">{item.product_name_snapshot || 'Produto'}</TableCell>
                   <TableCell className="text-center font-black text-xs">x{item.quantity}</TableCell>
-                  <TableCell className="text-right px-6 font-black text-primary">{formatCurrency(item.line_total || 0)}</TableCell>
+                  <TableCell className="text-right px-6 font-black text-primary">
+                    {/* Exibe line_total calculado pelo banco */}
+                    {formatCurrency(item.line_total)}
+                  </TableCell>
                 </TableRow>
               ))}
               {items.length === 0 && (
@@ -162,7 +170,7 @@ export default function ComandaDetailsPage() {
 
         <Card className="border-primary/20 bg-primary/5 shadow-2xl h-fit rounded-[32px] overflow-hidden">
           <CardHeader className="text-center py-10 bg-primary/10">
-            <CardTitle className="text-[10px] font-black uppercase tracking-[0.3em] text-primary">Saldo a Receber</CardTitle>
+            <CardTitle className="text-[10px] font-black uppercase tracking-[0.3em] text-primary">Total a Receber</CardTitle>
             <p className="text-5xl font-black tracking-tighter mt-3 text-slate-900">{formatCurrency(comanda?.total_cents || 0)}</p>
           </CardHeader>
           <CardContent className="p-8">
@@ -171,7 +179,7 @@ export default function ComandaDetailsPage() {
               onClick={() => setIsClosing(true)} 
               disabled={!comanda || comanda.total_cents <= 0}
             >
-              <CheckCircle2 className="mr-3 h-6 w-6" /> Finalizar Conta
+              <CheckCircle2 className="mr-3 h-6 w-6" /> Receber Pagamento
             </Button>
           </CardContent>
         </Card>
@@ -208,10 +216,10 @@ export default function ComandaDetailsPage() {
               </ScrollArea>
             </div>
             <div className="w-80 flex flex-col bg-slate-50/50">
-              <div className="p-6 border-b font-black uppercase text-[10px] tracking-widest text-muted-foreground">Lançamento Atual</div>
+              <div className="p-6 border-b font-black uppercase text-[10px] tracking-widest text-muted-foreground">Pedido Atual</div>
               <ScrollArea className="flex-1 p-6">
                 {localCart.map((item, idx) => (
-                  <div key={idx} className="flex justify-between items-center mb-4 bg-white p-4 rounded-2xl shadow-sm animate-in slide-in-from-right-2">
+                  <div key={idx} className="flex justify-between items-center mb-4 bg-white p-4 rounded-2xl shadow-sm">
                     <div className="flex flex-col">
                       <span className="text-[10px] font-black uppercase truncate max-w-[120px]">{item.product.name}</span>
                       <span className="text-[9px] font-bold text-primary">x{item.qty}</span>
@@ -225,9 +233,13 @@ export default function ComandaDetailsPage() {
                   <div className="py-20 text-center opacity-20"><ShoppingCart className="mx-auto h-10 w-10" /></div>
                 )}
               </ScrollArea>
-              <div className="p-6 border-t bg-white">
+              <div className="p-6 border-t bg-white space-y-4">
+                <div className="flex justify-between items-center px-2">
+                  <span className="text-[9px] font-black uppercase text-muted-foreground">Total Pedido</span>
+                  <span className="font-black text-primary">{formatCurrency(cartTotal)}</span>
+                </div>
                 <Button className="w-full h-16 font-black uppercase text-xs tracking-[0.2em] rounded-2xl shadow-lg shadow-primary/20" disabled={localCart.length === 0 || isSubmitting} onClick={handleAddItemsFinal}>
-                  {isSubmitting ? <Loader2 className="animate-spin" /> : 'Confirmar Lançamento'}
+                  {isSubmitting ? <Loader2 className="animate-spin" /> : 'Lançar na Conta'}
                 </Button>
               </div>
             </div>
@@ -241,7 +253,7 @@ export default function ComandaDetailsPage() {
           <div className="p-10 bg-slate-900 text-white text-center relative">
             <button onClick={() => setIsClosing(false)} className="absolute right-6 top-6 h-10 w-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"><X className="h-5 w-5" /></button>
             <DialogTitle className="text-2xl font-black uppercase tracking-tighter">Receber Pagamento</DialogTitle>
-            <DialogDescription className="text-white/40 uppercase font-bold text-[10px] mt-2 tracking-widest">Total: {formatCurrency(comanda?.total_cents || 0)}</DialogDescription>
+            <DialogDescription className="text-white/40 uppercase font-bold text-[10px] mt-2 tracking-widest">Saldo Devedor: {formatCurrency(comanda?.total_cents || 0)}</DialogDescription>
           </div>
           <div className="p-10 space-y-4 bg-white">
             <Button variant="outline" className="w-full h-24 justify-start gap-8 border-none bg-slate-50 hover:bg-slate-100 rounded-[32px] px-10 transition-all group" onClick={() => handleFinalize('dinheiro')}>

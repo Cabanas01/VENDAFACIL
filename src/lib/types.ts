@@ -71,19 +71,19 @@ export type Product = {
 export type OrderItemStatus = 'pending' | 'queued' | 'in_progress' | 'done' | 'canceled';
 
 export type OrderItem = {
-  id: string;
-  store_id: string;
-  product_id: string;
-  comanda_id?: string | null;
-  sale_id?: string | null;
-  quantity: number;
-  unit_price: number;
-  line_total: number;
-  status: OrderItemStatus;
-  created_at: string;
-  updated_at: string;
-  product_name_snapshot?: string;
-  product_barcode_snapshot?: string;
+  readonly id: string;
+  readonly store_id: string;
+  readonly product_id: string;
+  readonly comanda_id?: string | null;
+  readonly sale_id?: string | null;
+  readonly quantity: number;
+  readonly unit_price: number;
+  readonly line_total: number; // GENERATED ALWAYS - Read only from DB
+  readonly status: OrderItemStatus;
+  readonly created_at: string;
+  readonly updated_at: string;
+  readonly product_name_snapshot?: string;
+  readonly product_barcode_snapshot?: string;
 };
 
 export type Sale = {
@@ -92,8 +92,8 @@ export type Sale = {
   customer_id?: string | null;
   comanda_id?: string | null;
   created_at: string;
-  total_amount: number;
-  payment_method_id?: string | null;
+  total_cents: number; // Sincronizado com o backend
+  payment_method: string | null;
   items?: OrderItem[];
 };
 
@@ -103,7 +103,7 @@ export type CartItem = {
   product_barcode_snapshot?: string | null;
   qty: number;
   unit_price_cents: number;
-  subtotal_cents: number;
+  subtotal_cents: number; // Somente para exibição UI
   stock_qty: number;
 };
 
@@ -114,9 +114,8 @@ export type CashRegister = {
   closed_by?: string | null;
   opened_at: string;
   closed_at: string | null;
-  opening_amount: number;
-  closing_amount: number | null;
-  status: 'open' | 'closed';
+  opening_amount_cents: number;
+  closing_amount_cents: number | null;
 };
 
 export type Customer = {

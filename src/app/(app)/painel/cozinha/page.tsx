@@ -2,8 +2,7 @@
 
 /**
  * @fileOverview Painel Cozinha (KDS).
- * Consome estritamente a tabela order_items para garantir integridade.
- * Utiliza rpc_mark_order_item_done para garantir que itens concluídos saiam da fila.
+ * Utiliza rpc_mark_order_item_done para garantir que itens concluídos saiam da fila de forma atômica.
  */
 
 import { useEffect, useState, useCallback } from 'react';
@@ -28,7 +27,7 @@ export default function CozinhaPage() {
   const fetchPedidos = useCallback(async () => {
     if (!store?.id) return;
     
-    // Filtramos apenas itens pendentes do destino cozinha
+    // Lista itens pendentes filtrados pela view sincronizada
     const { data, error } = await supabase
       .from('v_painel_cozinha')
       .select('*')
@@ -42,6 +41,7 @@ export default function CozinhaPage() {
 
   useEffect(() => {
     fetchPedidos();
+    // Escuta mudanças na order_items para atualização em tempo real
     const channel = supabase
       .channel('kds_sync')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => fetchPedidos())
@@ -52,9 +52,9 @@ export default function CozinhaPage() {
 
   const handleConcluir = async (itemId: string) => {
     try {
-      // RPC DE MARCAÇÃO DE CONCLUSÃO
+      // REGRA DE OURO: Marcação via RPC (única forma de escrita no painel)
       await marcarItemConcluido(itemId);
-      toast({ title: 'Pedido Concluído!', description: 'Item removido da fila de produção.' });
+      toast({ title: 'Pedido Concluído!', description: 'Item enviado para a mesa.' });
       await fetchPedidos();
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Erro', description: err.message });
@@ -71,7 +71,7 @@ export default function CozinhaPage() {
   return (
     <div className="space-y-10 animate-in fade-in duration-500">
       <div className="flex items-center justify-between">
-        <PageHeader title="Cozinha (KDS)" subtitle="Produção em tempo real." />
+        <PageHeader title="Cozinha (KDS)" subtitle="Monitor de produção acelerada." />
         <Badge variant="outline" className="h-10 px-4 gap-2 font-black uppercase text-xs border-primary/20 bg-primary/5 text-primary">
           <ChefHat className="h-4 w-4" /> {pedidos.length} Pedidos Pendentes
         </Badge>
@@ -93,13 +93,13 @@ export default function CozinhaPage() {
             <CardContent className="p-8 space-y-6">
               <div className="flex justify-between items-start">
                 <p className="text-3xl font-black leading-tight uppercase tracking-tight">{p.produto}</p>
-                <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center text-4xl font-black text-primary border border-primary/10 shadow-inner">
+                <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center text-4xl font-black text-primary border border-primary/10">
                   {p.qty}
                 </div>
               </div>
               
-              <Button className="w-full h-16 font-black uppercase text-xs tracking-widest shadow-xl shadow-primary/20" onClick={() => handleConcluir(p.item_id)}>
-                <CheckCircle2 className="mr-2 h-5 w-5" /> Concluir Preparo
+              <Button className="w-full h-16 font-black uppercase text-xs tracking-widest shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all" onClick={() => handleConcluir(p.item_id)}>
+                <CheckCircle2 className="mr-2 h-5 w-5" /> Confirmar Saída
               </Button>
             </CardContent>
           </Card>
@@ -107,7 +107,7 @@ export default function CozinhaPage() {
 
         {pedidos.length === 0 && (
           <div className="col-span-full py-40 text-center opacity-20 border-4 border-dashed rounded-[40px] font-black uppercase tracking-[0.3em]">
-            <History className="h-20 w-20 mx-auto mb-4" />
+            <ChefHat className="h-20 w-20 mx-auto mb-4" />
             Cozinha em Ordem
           </div>
         )}
