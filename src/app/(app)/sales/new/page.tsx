@@ -54,6 +54,7 @@ export default function NewSalePage() {
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Sincroniza vendas do dia para a aba "HOJE"
   const todaySales = useMemo(() => {
     const today = startOfToday();
     const safeSales = Array.isArray(sales) ? sales : [];
@@ -145,7 +146,7 @@ export default function NewSalePage() {
       <div className="mb-6 flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-headline font-black uppercase tracking-tighter">Ponto de Venda</h1>
-          <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">{store?.name || 'Carregando unidade...'}</p>
+          <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">{store?.name || 'VendaFácil'}</p>
         </div>
       </div>
 
