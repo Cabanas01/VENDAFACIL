@@ -1,9 +1,15 @@
+
 -- ======================================================
--- 🛠️ BACKEND DEFINITIVO: VENDAFÁCIL SAAS (REVISADO)
--- FOCO: BLINDAGEM DE COLUNAS GERADAS (line_total)
+-- 🛠️ BACKEND DEFINITIVO: VENDAFÁCIL BRASIL
+-- FOCO: ELIMINAR AMBIGUIDADE DE FUNÇÕES (BEST CANDIDATE)
 -- ======================================================
 
--- 1️⃣ FUNÇÃO: ADICIONAR ITEM À COMANDA (Transacional)
+-- 1️⃣ LIMPEZA: Removendo versões antigas para evitar "best candidate" error
+-- RODE ESTES COMANDOS NO SQL EDITOR DO SUPABASE
+DROP FUNCTION IF EXISTS public.rpc_add_item_to_comanda(uuid, uuid, integer, integer);
+DROP FUNCTION IF EXISTS public.rpc_add_item_to_comanda(uuid, uuid, numeric, numeric);
+
+-- 2️⃣ FUNÇÃO: ADICIONAR ITEM À COMANDA (Versão Única e Segura)
 -- line_total é omitido pois é GENERATED ALWAYS no banco.
 CREATE OR REPLACE FUNCTION public.rpc_add_item_to_comanda(
     p_comanda_id UUID,
@@ -21,7 +27,7 @@ BEGIN
     SELECT store_id INTO v_store_id FROM public.comandas WHERE id = p_comanda_id;
     SELECT name, production_target INTO v_prod_name, v_prod_target FROM public.products WHERE id = p_product_id;
     
-    -- 2. Resolver preço
+    -- 2. Resolver preço (Prioriza o enviado, senão busca o atual)
     IF p_unit_price IS NULL OR p_unit_price = 0 THEN
         SELECT price_cents INTO v_final_price FROM public.products WHERE id = p_product_id;
     ELSE
@@ -58,7 +64,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 2️⃣ FUNÇÃO: FECHAR COMANDA E GERAR VENDA (Atômica)
+-- 3️⃣ FUNÇÃO: FECHAR COMANDA E GERAR VENDA (Atômica)
 -- Utiliza SUM(line_total) para garantir precisão absoluta do cálculo do banco.
 CREATE OR REPLACE FUNCTION public.rpc_close_comanda_to_sale(
     p_comanda_id UUID,

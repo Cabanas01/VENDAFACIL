@@ -128,13 +128,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const product = products.find(p => p.id === productId);
     if (!product) throw new Error('Produto não encontrado.');
 
-    // Corrigindo a ambiguidade da RPC enviando tipos explícitos como inteiros
-    // O erro "Could not choose the best candidate function" ocorre quando há sobrecarga de funções no Postgres
+    // ✅ FORCE NUMERIC (parseFloat) para evitar o erro "best candidate function" no Postgres
     const { error } = await supabase.rpc('rpc_add_item_to_comanda', {
       p_comanda_id: comandaId,
       p_product_id: productId,
-      p_quantity: Math.floor(quantity),
-      p_unit_price: Math.floor(product.price_cents)
+      p_quantity: parseFloat(quantity.toString()),
+      p_unit_price: parseFloat(product.price_cents.toString())
     });
 
     if (error) {

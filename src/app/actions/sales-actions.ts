@@ -1,8 +1,9 @@
+
 'use server';
 
 /**
  * @fileOverview Server Action robusta para Processamento de Vendas.
- * Sincronizada para utilizar exclusivamente as RPCs transacionais.
+ * Sincronizada para utilizar exclusivamente as RPCs transacionais e forçar numeric.
  */
 
 import { createSupabaseServerClient } from '@/lib/supabase/server';
@@ -40,13 +41,13 @@ export async function processSaleAction(
 
     if (cmdErr) throw cmdErr;
 
-    // 2. Lançar itens via RPC (Garante line_total correto)
+    // 2. Lançar itens via RPC (Garante line_total correto e FORÇA numeric)
     for (const item of cart) {
       const { error: itemErr } = await supabaseAdmin.rpc('rpc_add_item_to_comanda', {
         p_comanda_id: comanda.id,
         p_product_id: item.product_id,
-        p_quantity: item.qty,
-        p_unit_price: item.unit_price_cents
+        p_quantity: parseFloat(item.qty.toString()),
+        p_unit_price: parseFloat(item.unit_price_cents.toString())
       });
       if (itemErr) throw itemErr;
     }
