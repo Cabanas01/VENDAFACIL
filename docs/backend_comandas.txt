@@ -1,96 +1,146 @@
--- =============================================================================
--- DOMÍNIO: INFRAESTRUTURA DE COMANDAS E PRODUÇÃO - VENDAFÁCIL BRASIL
--- VERSÃO: 8.0 (Sincronização com Option 01 - RPC Prefixes)
--- =============================================================================
+-- ======================================================
+-- 🛠️ BACKEND DEFINITIVO: VENDAFÁCIL SAAS (OPÇÃO 01)
+-- ESTE SCRIPT DEVE SER EXECUTADO NO SQL EDITOR DO SUPABASE
+-- ======================================================
 
--- 1. LIMPEZA DE SEGURANÇA
+-- 1️⃣ LIMPEZA DE LEGADO (CONTROLADA)
+DROP VIEW IF EXISTS public.v_comandas_totais CASCADE;
+DROP VIEW IF EXISTS public.v_painel_cozinha CASCADE;
+DROP VIEW IF EXISTS public.v_painel_bar CASCADE;
 DROP FUNCTION IF EXISTS public.rpc_add_item_to_comanda CASCADE;
-DROP FUNCTION IF EXISTS public.rpc_close_comanda_to_sale CASCADE;
 DROP FUNCTION IF EXISTS public.rpc_mark_order_item_done CASCADE;
+DROP FUNCTION IF EXISTS public.rpc_close_comanda_to_sale CASCADE;
 
--- 2. FUNÇÕES RPC (LÓGICA OPERACIONAL PADRONIZADA)
+-- 2️⃣ GARANTIR ESTRUTURA UNIFICADA (order_items)
+-- Caso a tabela não exista, ela deve ser a base única de consumo e venda.
+-- Se já existir views com nome sale_items ou comanda_itens, elas devem apontar para cá.
 
--- Função: Adicionar Item à Comanda
+-- 3️⃣ FUNÇÃO: ADICIONAR ITEM À COMANDA (Transacional)
 CREATE OR REPLACE FUNCTION public.rpc_add_item_to_comanda(
     p_comanda_id UUID,
     p_product_id UUID,
-    p_quantity INTEGER,
-    p_unit_price INTEGER DEFAULT NULL
-) RETURNS VOID AS $$
+    p_quantity NUMERIC,
+    p_unit_price NUMERIC DEFAULT NULL
+) RETURNS TEXT AS $$
 DECLARE
     v_store_id UUID;
-    v_prod_name TEXT;
-    v_prod_price INTEGER;
-    v_prod_target TEXT;
+    v_final_price NUMERIC;
 BEGIN
-    -- Coleta dados do produto
-    SELECT store_id, name, price_cents, production_target INTO v_store_id, v_prod_name, v_prod_price, v_prod_target 
-    FROM public.products WHERE id = p_product_id;
-
-    -- Usa o preço passado ou o preço atual do produto
-    IF p_unit_price IS NOT NULL THEN
-        v_prod_price := p_unit_price;
+    -- 1. Obter store_id da comanda
+    SELECT store_id INTO v_store_id FROM public.comandas WHERE id = p_comanda_id;
+    
+    -- 2. Resolver preço (se não enviado, busca o atual do produto)
+    IF p_unit_price IS NULL THEN
+        SELECT price_cents INTO v_final_price FROM public.products WHERE id = p_product_id;
+    ELSE
+        v_final_price := p_unit_price;
     END IF;
 
-    -- Insere o item vinculado à comanda (Tabela order_items)
+    -- 3. Inserir em order_items (Fonte Única)
     INSERT INTO public.order_items (
-        store_id, comanda_id, product_id, product_name_snapshot, 
-        quantity, unit_price, line_total, status, destino_preparo
+        store_id, comanda_id, product_id, quantity, unit_price, status
     ) VALUES (
-        v_store_id, p_comanda_id, p_product_id, v_prod_name, 
-        p_quantity, v_prod_price, (v_prod_price * p_quantity), 'pending', v_prod_target
+        v_store_id, p_comanda_id, p_product_id, p_quantity, v_final_price, 'pending'
     );
 
-    -- Baixa estoque via RPC existente
-    PERFORM public.decrement_stock(p_product_id, p_quantity);
+    RETURN 'Item adicionado com sucesso';
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Função: Marcar Item como Concluído
-CREATE OR REPLACE FUNCTION public.rpc_mark_order_item_done(p_item_id UUID) RETURNS BOOLEAN AS $$
+-- 4️⃣ FUNÇÃO: CONCLUIR ITEM (KDS / BDS)
+CREATE OR REPLACE FUNCTION public.rpc_mark_order_item_done(p_item_id UUID) 
+RETURNS BOOLEAN AS $$
 BEGIN
     UPDATE public.order_items SET status = 'done' WHERE id = p_item_id;
     RETURN TRUE;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Função: Fechar Comanda e Gerar Venda
+-- 5️⃣ FUNÇÃO: FECHAR COMANDA E GERAR VENDA (Atômica)
 CREATE OR REPLACE FUNCTION public.rpc_close_comanda_to_sale(
-    p_comanda_id UUID, 
+    p_comanda_id UUID,
     p_payment_method_id TEXT,
     p_cash_register_id UUID DEFAULT NULL
 ) RETURNS JSONB AS $$
 DECLARE
-    v_store_id UUID;
-    v_total INTEGER;
+    v_total_cents NUMERIC;
     v_sale_id UUID;
+    v_store_id UUID;
 BEGIN
-    -- 1. Obter dados da comanda
+    -- 1. Obter dados
     SELECT store_id INTO v_store_id FROM public.comandas WHERE id = p_comanda_id;
     
-    -- 2. Calcular total dos itens da comanda
-    SELECT COALESCE(SUM(line_total), 0) INTO v_total FROM public.order_items WHERE comanda_id = p_comanda_id;
+    -- 2. Calcular total real dos itens
+    SELECT COALESCE(SUM(unit_price * quantity), 0) INTO v_total_cents 
+    FROM public.order_items WHERE comanda_id = p_comanda_id;
 
     -- 3. Criar a Venda
-    INSERT INTO public.sales (store_id, comanda_id, total_cents, payment_method, cash_register_id)
-    VALUES (v_store_id, p_comanda_id, v_total, p_payment_method_id::public.sales.payment_method, p_cash_register_id)
-    RETURNING id INTO v_sale_id;
+    INSERT INTO public.sales (
+        store_id, comanda_id, total_cents, payment_method, cash_register_id
+    ) VALUES (
+        v_store_id, p_comanda_id, v_total_cents, p_payment_method_id::public.sales.payment_method, p_cash_register_id
+    ) RETURNING id INTO v_sale_id;
 
-    -- 4. Vincular itens à venda e atualizar status
-    UPDATE public.order_items 
-    SET sale_id = v_sale_id, status = 'done'
-    WHERE comanda_id = p_comanda_id;
-
-    -- 5. Fechar Comanda
-    UPDATE public.comandas 
-    SET status = 'fechada'
-    WHERE id = p_comanda_id;
+    -- 4. Atualizar itens e comanda
+    UPDATE public.order_items SET sale_id = v_sale_id, status = 'done' WHERE comanda_id = p_comanda_id;
+    UPDATE public.comandas SET status = 'fechada' WHERE id = p_comanda_id;
 
     RETURN jsonb_build_object('success', true, 'sale_id', v_sale_id);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 3. PERMISSÕES
+-- 6️⃣ VIEWS DE CONSUMO
+CREATE OR REPLACE VIEW public.v_comandas_totais AS
+SELECT 
+    c.id,
+    c.store_id,
+    c.numero,
+    c.mesa,
+    c.status,
+    c.cliente_nome,
+    COALESCE(SUM(oi.unit_price * oi.quantity), 0) as total_cents
+FROM public.comandas c
+LEFT JOIN public.order_items oi ON c.id = oi.comanda_id AND oi.status != 'canceled'
+GROUP BY c.id;
+
+CREATE OR REPLACE VIEW public.v_painel_cozinha AS
+SELECT 
+    oi.id as item_id,
+    c.numero as comanda_numero,
+    c.mesa,
+    p.name as produto,
+    oi.quantity as qty,
+    oi.status,
+    oi.created_at,
+    oi.store_id
+FROM public.order_items oi
+JOIN public.comandas c ON oi.comanda_id = c.id
+JOIN public.products p ON oi.product_id = p.id
+WHERE oi.status IN ('pending', 'queued', 'in_progress')
+AND p.production_target = 'cozinha'
+AND c.status = 'aberta';
+
+CREATE OR REPLACE VIEW public.v_painel_bar AS
+SELECT 
+    oi.id as item_id,
+    c.numero as comanda_numero,
+    c.mesa,
+    p.name as produto,
+    oi.quantity as qty,
+    oi.status,
+    oi.created_at,
+    oi.store_id
+FROM public.order_items oi
+JOIN public.comandas c ON oi.comanda_id = c.id
+JOIN public.products p ON oi.product_id = p.id
+WHERE oi.status IN ('pending', 'queued', 'in_progress')
+AND p.production_target = 'bar'
+AND c.status = 'aberta';
+
+-- 7️⃣ PERMISSÕES
 GRANT EXECUTE ON FUNCTION public.rpc_add_item_to_comanda TO authenticated;
 GRANT EXECUTE ON FUNCTION public.rpc_mark_order_item_done TO authenticated;
 GRANT EXECUTE ON FUNCTION public.rpc_close_comanda_to_sale TO authenticated;
+GRANT SELECT ON public.v_comandas_totais TO authenticated;
+GRANT SELECT ON public.v_painel_cozinha TO authenticated;
+GRANT SELECT ON public.v_painel_bar TO authenticated;

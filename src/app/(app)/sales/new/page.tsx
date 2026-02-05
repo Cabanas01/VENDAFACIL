@@ -1,10 +1,5 @@
 'use client';
 
-/**
- * @fileOverview Tela de Nova Venda / PDV com design premium fiel à imagem.
- * Corrigido: Erro de sintaxe JSX no fechamento de tags e organização de imports.
- */
-
 import { useState, useMemo } from 'react';
 import { 
   Search, 
@@ -23,7 +18,6 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/components/auth-provider';
 import { useToast } from '@/hooks/use-toast';
-import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -145,14 +139,14 @@ export default function NewSalePage() {
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)] animate-in fade-in duration-500">
       <div className="mb-6">
-        <h1 className="text-3xl font-headline font-bold tracking-tight">Ponto de Venda</h1>
+        <h1 className="text-3xl font-headline font-bold tracking-tight uppercase tracking-tighter">Ponto de Venda</h1>
         <p className="text-muted-foreground mt-1 font-medium">Operador: {store?.name || '...'}</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 overflow-hidden">
         
         {/* LADO ESQUERDO: CATÁLOGO */}
-        <div className="lg:col-span-2 flex flex-col space-y-4">
+        <div className="lg:col-span-2 flex flex-col space-y-4 overflow-hidden">
           <Card className="flex-none bg-background border-none shadow-sm">
             <CardContent className="p-4">
               <div className="relative">
