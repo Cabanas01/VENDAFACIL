@@ -1,6 +1,10 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+/**
+ * @fileOverview Ponto de Venda (PDV) - Design Premium Cyan
+ */
+
+import { useState, useMemo, useEffect } from 'react';
 import { 
   Search, 
   ShoppingCart, 
@@ -31,7 +35,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import type { Product, CartItem } from '@/lib/types';
+import type { Product, CartItem, Sale } from '@/lib/types';
 import { useRouter } from 'next/navigation';
 import { printReceipt } from '@/lib/print-receipt';
 import { startOfToday, isAfter } from 'date-fns';
@@ -116,16 +120,14 @@ export default function NewSalePage() {
     ));
   };
 
-  const handleFinalize = async (method: 'cash' | 'pix' | 'card') => {
+  const handleFinalize = async (method: string) => {
     if (cart.length === 0 || isSubmitting || !store) return;
 
     setIsSubmitting(true);
     try {
-      // addSale agora utiliza o fluxo correto de RPCs no AuthProvider
       const result = await addSale(cart, method);
-      
       if (result) {
-        toast({ title: 'Venda Concluída!', description: `Total de ${formatCurrency(cartTotal)} registrado.` });
+        toast({ title: 'Venda Concluída!' });
         printReceipt(result, store);
         setCart([]);
         setIsFinalizing(false);
@@ -139,21 +141,23 @@ export default function NewSalePage() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)] animate-in fade-in duration-500">
-      <div className="mb-6">
-        <h1 className="text-3xl font-headline font-bold tracking-tight uppercase tracking-tighter">Ponto de Venda</h1>
-        <p className="text-muted-foreground mt-1 font-medium">Operador: {store?.name || '...'}</p>
+      <div className="mb-6 flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-headline font-black uppercase tracking-tighter">Ponto de Venda</h1>
+          <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">{store?.name || 'Carregando unidade...'}</p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 overflow-hidden">
         
-        {/* LADO ESQUERDO: CATÁLOGO */}
+        {/* COLUNA ESQUERDA: CATÁLOGO */}
         <div className="lg:col-span-2 flex flex-col space-y-4 overflow-hidden">
           <Card className="flex-none bg-background border-none shadow-sm">
             <CardContent className="p-4">
               <div className="relative">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                 <Input 
-                  placeholder="Pesquisar produto por nome ou código..." 
+                  placeholder="Pesquisar produto ou bipar código..." 
                   className="pl-12 h-14 text-lg bg-slate-50 border-none shadow-inner rounded-2xl"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -167,14 +171,14 @@ export default function NewSalePage() {
               {filteredProducts.map(product => (
                 <Card 
                   key={product.id} 
-                  className="group cursor-pointer hover:border-primary transition-all active:scale-[0.98] shadow-sm border-primary/5 bg-background relative overflow-hidden"
+                  className="group cursor-pointer hover:border-primary transition-all active:scale-[0.98] shadow-sm border-primary/5 bg-background relative overflow-hidden h-36"
                   onClick={() => addToCart(product)}
                 >
-                  <CardContent className="p-5 flex flex-col justify-between h-32">
-                    <h3 className="font-black text-[11px] leading-tight line-clamp-2 h-8 uppercase tracking-tighter text-slate-900">{product.name}</h3>
+                  <CardContent className="p-5 flex flex-col justify-between h-full">
+                    <h3 className="font-black text-[11px] leading-tight line-clamp-2 uppercase tracking-tighter text-slate-900">{product.name}</h3>
                     <div className="flex items-end justify-between">
                       <span className="text-primary font-black text-xl tracking-tighter">{formatCurrency(product.price_cents)}</span>
-                      <span className="text-[10px] font-black text-slate-300 uppercase">{product.stock_qty}</span>
+                      <span className="text-[10px] font-black text-slate-300 uppercase">{product.stock_qty} un</span>
                     </div>
                   </CardContent>
                 </Card>
@@ -183,7 +187,7 @@ export default function NewSalePage() {
           </ScrollArea>
         </div>
 
-        {/* LADO DIREITO: CARRINHO */}
+        {/* COLUNA DIREITA: CARRINHO */}
         <Card className="flex flex-col h-full border-primary/10 shadow-2xl overflow-hidden rounded-[40px] bg-background">
           <Tabs defaultValue="cart" className="flex flex-col h-full">
             <CardHeader className="p-0 bg-muted/20">
@@ -201,13 +205,13 @@ export default function NewSalePage() {
               <ScrollArea className="flex-1">
                 <div className="p-8 space-y-8">
                   {cart.map(item => (
-                    <div key={item.product_id} className="flex flex-col space-y-4 animate-in slide-in-from-right-2">
+                    <div key={item.product_id} className="flex flex-col space-y-4">
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
                           <p className="text-[11px] font-black uppercase leading-tight tracking-tight text-slate-900">{item.product_name_snapshot}</p>
-                          <p className="text-[10px] text-muted-foreground font-bold uppercase mt-1 opacity-60">{formatCurrency(item.unit_price_cents)}/un</p>
+                          <p className="text-[10px] text-muted-foreground font-bold uppercase mt-1 opacity-60">{formatCurrency(item.unit_price_cents)}</p>
                         </div>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-red-400 hover:bg-red-50 hover:text-red-600 rounded-full" onClick={() => setCart(cart.filter(i => i.product_id !== item.product_id))}>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-red-400 hover:bg-red-50 rounded-full" onClick={() => setCart(cart.filter(i => i.product_id !== item.product_id))}>
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
@@ -273,6 +277,7 @@ export default function NewSalePage() {
         </Card>
       </div>
 
+      {/* MODAL DE PAGAMENTO (DESIGN PREMIUM FIEL À IMAGEM) */}
       <Dialog open={isFinalizing} onOpenChange={setIsFinalizing}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl rounded-[40px]">
           <div className="p-10 bg-white relative">
@@ -290,22 +295,22 @@ export default function NewSalePage() {
             <div className="grid grid-cols-1 gap-5">
               <Button 
                 variant="outline" 
-                className="h-24 justify-start text-[11px] font-black uppercase tracking-[0.2em] gap-8 border-none bg-slate-50 shadow-sm hover:bg-slate-100 transition-all px-10 rounded-[32px]" 
-                onClick={() => handleFinalize('cash')} 
+                className="h-24 justify-start text-[11px] font-black uppercase tracking-[0.2em] gap-8 border-none bg-slate-50 shadow-sm hover:bg-slate-100 transition-all px-10 rounded-[32px] group" 
+                onClick={() => handleFinalize('dinheiro')} 
                 disabled={isSubmitting}
               >
-                <div className="h-16 w-16 rounded-full bg-green-100 flex items-center justify-center shrink-0 shadow-inner">
+                <div className="h-16 w-16 rounded-full bg-green-100 flex items-center justify-center shrink-0 shadow-inner group-active:scale-95 transition-transform">
                   <Coins className="h-8 w-8 text-green-600" />
                 </div>
                 <span>DINHEIRO / TROCO</span>
               </Button>
 
               <Button 
-                className="h-24 justify-start text-[11px] font-black uppercase tracking-[0.2em] gap-8 border-none bg-cyan-400 text-white shadow-2xl shadow-cyan-400/30 hover:bg-cyan-500 transition-all px-10 rounded-[32px] ring-4 ring-cyan-400/10" 
+                className="h-24 justify-start text-[11px] font-black uppercase tracking-[0.2em] gap-8 border-none bg-cyan-400 text-white shadow-2xl shadow-cyan-400/30 hover:bg-cyan-500 transition-all px-10 rounded-[32px] ring-4 ring-cyan-400/10 group" 
                 onClick={() => handleFinalize('pix')} 
                 disabled={isSubmitting}
               >
-                <div className="h-16 w-16 rounded-full bg-white/20 flex items-center justify-center shrink-0 shadow-inner">
+                <div className="h-16 w-16 rounded-full bg-white/20 flex items-center justify-center shrink-0 shadow-inner group-active:scale-95 transition-transform">
                   <QrCode className="h-8 w-8 text-white" />
                 </div>
                 <span>PIX QR CODE</span>
@@ -313,11 +318,11 @@ export default function NewSalePage() {
 
               <Button 
                 variant="outline" 
-                className="h-24 justify-start text-[11px] font-black uppercase tracking-[0.2em] gap-8 border-none bg-slate-50 shadow-sm hover:bg-slate-100 transition-all px-10 rounded-[32px]" 
-                onClick={() => handleFinalize('card')} 
+                className="h-24 justify-start text-[11px] font-black uppercase tracking-[0.2em] gap-8 border-none bg-slate-50 shadow-sm hover:bg-slate-100 transition-all px-10 rounded-[32px] group" 
+                onClick={() => handleFinalize('credito')} 
                 disabled={isSubmitting}
               >
-                <div className="h-16 w-16 rounded-full bg-blue-100 flex items-center justify-center shrink-0 shadow-inner">
+                <div className="h-16 w-16 rounded-full bg-blue-100 flex items-center justify-center shrink-0 shadow-inner group-active:scale-95 transition-transform">
                   <CreditCard className="h-8 w-8 text-blue-600" />
                 </div>
                 <span>CARTÃO DÉBITO/CRÉDITO</span>

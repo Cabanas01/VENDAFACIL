@@ -1,7 +1,8 @@
 'use server';
 
 /**
- * @fileOverview Server Action robusta para Processamento de Vendas (PDV e Comandas).
+ * @fileOverview Server Action robusta para Processamento de Vendas.
+ * Sincronizada para utilizar exclusivamente as RPCs transacionais.
  */
 
 import { createSupabaseServerClient } from '@/lib/supabase/server';
@@ -12,8 +13,7 @@ export async function processSaleAction(
   storeId: string, 
   cart: CartItem[], 
   paymentMethod: string,
-  customerId?: string | null,
-  comandaId?: string | null
+  customerId?: string | null
 ) {
   const supabase = await createSupabaseServerClient();
   const supabaseAdmin = getSupabaseAdmin();
@@ -24,73 +24,51 @@ export async function processSaleAction(
     return { success: false, error: 'Sessão expirada. Faça login novamente.' };
   }
 
-  if (!storeId) {
-    return { success: false, error: 'Contexto de loja inválido.' };
-  }
-
   try {
-    // 1. Identificar produtos para mapear destinos de preparo
-    const productIds = cart.map(i => i.product_id);
-    const { data: productsData } = await supabaseAdmin
-      .from('products')
-      .select('id, production_target')
-      .in('id', productIds);
-
-    const productTargets = new Map((productsData || []).map(p => [p.id, p.production_target]));
-
-    const totalCents = Math.round(cart.reduce((sum, item) => sum + (Number(item.subtotal_cents) || 0), 0));
-
-    // 2. Inserir a Venda Principal
-    const { data: sale, error: saleError } = await supabaseAdmin
-      .from('sales')
-      .insert({
-        store_id: storeId,
-        customer_id: customerId || null,
-        comanda_id: comandaId || null,
-        total_cents: totalCents,
-        payment_method: paymentMethod as any
+    // 1. Criar comanda temporária para a venda
+    const { data: comanda, error: cmdErr } = await supabaseAdmin
+      .from('comandas')
+      .insert({ 
+        store_id: storeId, 
+        numero: '0', 
+        mesa: 'PDV', 
+        cliente_nome: 'Consumidor',
+        status: 'aberta' 
       })
-      .select()
+      .select('id')
       .single();
 
-    if (saleError) throw saleError;
+    if (cmdErr) throw cmdErr;
 
-    // 3. Inserir Itens da Venda com campos de produção
-    const itemsToInsert = cart.map(item => ({
-      sale_id: sale.id,
-      product_id: item.product_id,
-      product_name_snapshot: item.product_name_snapshot,
-      product_barcode_snapshot: item.product_barcode_snapshot || null,
-      quantity: Math.max(1, Number(item.qty) || 1), 
-      unit_price_cents: Math.round(Number(item.unit_price_cents) || 0),
-      subtotal_cents: Math.round(Number(item.subtotal_cents) || 0),
-      status: 'pendente',
-      destino_preparo: productTargets.get(item.product_id) || 'nenhum'
-    }));
-
-    const { error: itemsError } = await supabaseAdmin.from('sale_items').insert(itemsToInsert);
-    if (itemsError) throw itemsError;
-
-    // 4. Atualizar Estoque via RPC
+    // 2. Lançar itens via RPC (Garante line_total correto)
     for (const item of cart) {
-      await supabaseAdmin.rpc('decrement_stock', {
+      const { error: itemErr } = await supabaseAdmin.rpc('rpc_add_item_to_comanda', {
+        p_comanda_id: comanda.id,
         p_product_id: item.product_id,
-        p_quantity: Math.max(1, Number(item.qty) || 1)
+        p_quantity: item.qty,
+        p_unit_price: item.unit_price_cents
       });
+      if (itemErr) throw itemErr;
     }
+
+    // 3. Fechar via RPC (Garante criação de sale e vinculação atômica)
+    const { data: closeData, error: closeErr } = await supabaseAdmin.rpc('rpc_close_comanda_to_sale', {
+      p_comanda_id: comanda.id,
+      p_payment_method_id: paymentMethod
+    });
+
+    if (closeErr) throw closeErr;
 
     return { 
       success: true, 
-      saleId: sale.id,
-      sale: { ...sale, items: itemsToInsert }
+      saleId: (closeData as any)?.sale_id
     };
 
   } catch (err: any) {
-    console.error('[SERVER_ACTION] Erro crítico:', err);
+    console.error('[PROCESS_SALE_ACTION_FATAL]', err);
     return { 
       success: false, 
-      error: 'Falha ao processar itens. A venda foi estornada para segurança dos dados.',
-      details: err.message 
+      error: err.message || 'Falha ao processar venda via servidor.' 
     };
   }
 }

@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * @fileOverview AuthProvider - Sincronizado com Regras de Ouro.
- * Cálculo de line_total é exclusivo do banco via Generated Column.
+ * @fileOverview AuthProvider - Sincronizado com a Regra de Ouro.
+ * Cálculo de faturamento (line_total) é delegado exclusivamente ao banco.
  */
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -16,8 +16,7 @@ import type {
   CartItem,
   Customer,
   User,
-  ComandaTotalView,
-  OrderItem
+  ComandaTotalView
 } from '@/lib/types';
 
 type AuthContextType = {
@@ -127,7 +126,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const adicionarItem = async (comandaId: string, productId: string, quantity: number) => {
     const product = products.find(p => p.id === productId);
     
-    // NUNCA envia line_total. O backend calcula unit_price * quantity.
+    // NUNCA envia line_total. O backend calcula unit_price * quantity via generated column.
     const { error } = await supabase.rpc('rpc_add_item_to_comanda', {
       p_comanda_id: comandaId,
       p_product_id: productId,
@@ -141,13 +140,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fecharComanda = async (comandaId: string, paymentMethodId: string) => {
     const cashRegister = cashRegisters.find(cr => !cr.closed_at);
-    const methodMap: Record<string, string> = { 'cash': 'dinheiro', 'card': 'credito', 'pix': 'pix' };
-    const finalMethod = methodMap[paymentMethodId] || paymentMethodId;
-
-    // Backend calcula SUM(line_total) e encerra a conta.
+    
+    // REGRA DE OURO: Delega fechamento total para a RPC do banco
     const { error } = await supabase.rpc('rpc_close_comanda_to_sale', {
       p_comanda_id: comandaId,
-      p_payment_method_id: finalMethod,
+      p_payment_method_id: paymentMethodId,
       p_cash_register_id: cashRegister?.id || null
     });
 
@@ -158,14 +155,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const addSale = async (cart: CartItem[], paymentMethod: string) => {
     if (!store?.id) throw new Error('Loja não identificada.');
     try {
+      // Fluxo atômico via RPCs
       const comandaId = await abrirComanda('0', 'Consumidor Final');
       for (const item of cart) {
         await adicionarItem(comandaId, item.product_id, item.qty);
       }
       await fecharComanda(comandaId, paymentMethod);
-      const { data: lastSale } = await supabase.from('sales').select('*, items:order_items(*)').eq('comanda_id', comandaId).maybeSingle();
+      
+      const { data: lastSale } = await supabase
+        .from('sales')
+        .select('*, items:order_items(*)')
+        .eq('comanda_id', comandaId)
+        .maybeSingle();
+        
       return lastSale as Sale;
     } catch (err: any) {
+      console.error('[SALE_ERROR]', err);
       throw err;
     }
   };

@@ -1,17 +1,8 @@
 import { supabase } from '@/lib/supabase/client';
 
-type AddItemParams = {
-  storeId: string;
-  numeroComanda: string;
-  productId: string;
-  productName: string;
-  qty: number;
-  unitPrice: number;
-};
-
 /**
- * REGRA DE OURO: NUNCA faz insert direto. SEMPRE usa RPC.
- * O banco calcula o line_total.
+ * REGRA DE OURO: NUNCA faz insert direto em order_items. 
+ * SEMPRE usa RPC para respeitar a coluna gerada line_total.
  */
 export async function addComandaItemById({
   comandaId,
@@ -39,16 +30,19 @@ export async function addComandaItemById({
 /**
  * Resolve a comanda aberta pelo número e insere o item via RPC.
  */
-export async function addComandaItem({
+export async function addComandaItemByNumero({
   storeId,
   numeroComanda,
   productId,
   qty,
   unitPrice,
-}: AddItemParams) {
-  if (!productId) throw new Error('Dados do item ausentes');
-
-  // 1. Resolver o ID da comanda
+}: {
+  storeId: string;
+  numeroComanda: string;
+  productId: string;
+  qty: number;
+  unitPrice: number;
+}) {
   const { data: openComanda } = await supabase
     .from('comandas')
     .select('id')
@@ -74,7 +68,6 @@ export async function addComandaItem({
     comandaId = newComanda.id;
   }
 
-  // 2. Inserir o item via RPC (Garante line_total correto)
   await addComandaItemById({
     comandaId,
     productId,
@@ -84,5 +77,3 @@ export async function addComandaItem({
   
   return comandaId;
 }
-
-export { addComandaItem as addComandaItemByNumero };
