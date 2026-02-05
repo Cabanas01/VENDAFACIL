@@ -50,7 +50,6 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
     setIsSubmitting(true);
 
     try {
-      // REGRA DE OURO: Insert direto (via abrirComanda no provider que agora envia 'numero')
       const comandaId = await abrirComanda(identificacao, values.cliente_nome);
 
       if (comandaId) {
