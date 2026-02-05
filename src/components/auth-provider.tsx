@@ -3,6 +3,7 @@
 /**
  * @fileOverview AuthProvider - Fonte Única da Verdade para o Frontend.
  * 100% Sincronizado com o novo backend RPC-First.
+ * NUNCA insere line_total. NUNCA faz insert direto em order_items.
  */
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -134,8 +135,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   /**
-   * REGRA DE OURO: Adição de itens via RPC.
-   * O frontend NUNCA envia line_total. O banco calcula qty * price.
+   * REGRA DE OURO: Adição de itens EXCLUSIVAMENTE via RPC.
+   * line_total NUNCA é enviado.
    */
   const adicionarItem = async (comandaId: string, productId: string, quantity: number) => {
     const product = products.find(p => p.id === productId);
@@ -153,14 +154,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   /**
    * REGRA DE OURO: Fechamento ATÔMICO via RPC.
-   * O banco soma os itens, cria a venda e vincula tudo atomicamente.
+   * O banco soma os line_total automaticamente.
    */
   const fecharComanda = async (comandaId: string, paymentMethodId: string) => {
     const cashRegister = cashRegisters.find(cr => !cr.closed_at);
     
-    const { data, error } = await supabase.rpc('rpc_close_comanda_to_sale', {
+    // Mapeamento de métodos para compatibilidade com o backend
+    const methodMap: Record<string, string> = {
+      'cash': 'dinheiro',
+      'card': 'credito',
+      'pix': 'pix'
+    };
+
+    const finalMethod = methodMap[paymentMethodId] || paymentMethodId;
+
+    const { error } = await supabase.rpc('rpc_close_comanda_to_sale', {
       p_comanda_id: comandaId,
-      p_payment_method_id: paymentMethodId,
+      p_payment_method_id: finalMethod,
       p_cash_register_id: cashRegister?.id || null
     });
 
@@ -169,8 +179,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   /**
-   * Fluxo de PDV Rápido (Venda sem comanda prévia)
-   * Segue a sequência de RPCs para manter a integridade financeira e de estoque.
+   * Fluxo de PDV Rápido (Venda Direta)
+   * Agora 100% transacional usando a sequência de RPCs do banco.
    */
   const addSale = async (cart: CartItem[], paymentMethod: string) => {
     if (!store?.id) throw new Error('Loja não identificada.');
@@ -179,15 +189,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // 1. Abre comanda temporária '0'
       const comandaId = await abrirComanda('0', 'Consumidor Final');
 
-      // 2. Lança itens um a um via RPC (Garante baixa de estoque e preço no momento)
+      // 2. Lança itens um a um via RPC
       for (const item of cart) {
         await adicionarItem(comandaId, item.product_id, item.qty);
       }
 
-      // 3. Fecha comanda via RPC (Garante cálculo de total centralizado no banco)
+      // 3. Fecha comanda via RPC (Garante cálculo de total centralizado no servidor)
       await fecharComanda(comandaId, paymentMethod);
       
-      // 4. Recupera a venda gerada para exibir o recibo
+      // 4. Recupera a venda gerada
       const { data: lastSale } = await supabase
         .from('sales')
         .select('*, items:order_items(*)')

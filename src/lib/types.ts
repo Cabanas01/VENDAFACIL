@@ -68,7 +68,7 @@ export type Product = {
   prep_time_minutes: number;
 };
 
-export type OrderItemStatus = 'pending' | 'queued' | 'in_progress' | 'done' | 'canceled';
+export type OrderItemStatus = 'pending' | 'done' | 'canceled';
 
 export type OrderItem = {
   readonly id: string;
@@ -78,12 +78,10 @@ export type OrderItem = {
   readonly sale_id?: string | null;
   readonly quantity: number;
   readonly unit_price: number;
-  readonly line_total: number; // GENERATED ALWAYS - Read only from DB
+  readonly line_total: number; // GENERATED ALWAYS - READ ONLY FROM DB
   readonly status: OrderItemStatus;
   readonly created_at: string;
-  readonly updated_at: string;
   readonly product_name_snapshot?: string;
-  readonly product_barcode_snapshot?: string;
 };
 
 export type Sale = {
@@ -92,7 +90,7 @@ export type Sale = {
   customer_id?: string | null;
   comanda_id?: string | null;
   created_at: string;
-  total_cents: number; // Sincronizado com o backend
+  total_cents: number;
   payment_method: string | null;
   items?: OrderItem[];
 };
