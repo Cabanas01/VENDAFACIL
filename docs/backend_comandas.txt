@@ -1,17 +1,9 @@
 -- ======================================================
--- 🛠️ BACKEND DEFINITIVO: VENDAFÁCIL SAAS (OPÇÃO 01)
--- ESTE SCRIPT DEVE SER EXECUTADO NO SQL EDITOR DO SUPABASE
+-- 🛠️ BACKEND DEFINITIVO: VENDAFÁCIL SAAS (REVISADO)
+-- FOCO: BLINDAGEM DE COLUNAS GERADAS (line_total)
 -- ======================================================
 
--- 1️⃣ LIMPEZA DE LEGADO
-DROP VIEW IF EXISTS public.v_comandas_totais CASCADE;
-DROP VIEW IF EXISTS public.v_painel_cozinha CASCADE;
-DROP VIEW IF EXISTS public.v_painel_bar CASCADE;
-DROP FUNCTION IF EXISTS public.rpc_add_item_to_comanda CASCADE;
-DROP FUNCTION IF EXISTS public.rpc_mark_order_item_done CASCADE;
-DROP FUNCTION IF EXISTS public.rpc_close_comanda_to_sale CASCADE;
-
--- 2️⃣ FUNÇÃO: ADICIONAR ITEM À COMANDA (Transacional)
+-- 1️⃣ FUNÇÃO: ADICIONAR ITEM À COMANDA (Transacional)
 -- line_total é omitido pois é GENERATED ALWAYS no banco.
 CREATE OR REPLACE FUNCTION public.rpc_add_item_to_comanda(
     p_comanda_id UUID,
@@ -36,7 +28,7 @@ BEGIN
         v_final_price := p_unit_price;
     END IF;
 
-    -- 3. Inserir em order_items (REGRA: SEM LINE_TOTAL NA LISTA DE COLUNAS)
+    -- 3. Inserir em order_items (REGRA: NUNCA INCLUIR line_total NO INSERT)
     INSERT INTO public.order_items (
         store_id, 
         comanda_id, 
@@ -66,16 +58,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 3️⃣ FUNÇÃO: CONCLUIR ITEM (KDS / BDS)
-CREATE OR REPLACE FUNCTION public.rpc_mark_order_item_done(p_item_id UUID) 
-RETURNS BOOLEAN AS $$
-BEGIN
-    UPDATE public.order_items SET status = 'done' WHERE id = p_item_id;
-    RETURN TRUE;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- 4️⃣ FUNÇÃO: FECHAR COMANDA E GERAR VENDA (Atômica)
+-- 2️⃣ FUNÇÃO: FECHAR COMANDA E GERAR VENDA (Atômica)
+-- Utiliza SUM(line_total) para garantir precisão absoluta do cálculo do banco.
 CREATE OR REPLACE FUNCTION public.rpc_close_comanda_to_sale(
     p_comanda_id UUID,
     p_payment_method_id TEXT,
@@ -107,23 +91,3 @@ BEGIN
     RETURN jsonb_build_object('success', true, 'sale_id', v_sale_id);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- 5️⃣ VIEWS DE CONSUMO
-CREATE OR REPLACE VIEW public.v_comandas_totais AS
-SELECT 
-    c.id,
-    c.store_id,
-    c.numero,
-    c.mesa,
-    c.status,
-    c.cliente_nome,
-    COALESCE(SUM(oi.line_total), 0) as total_cents
-FROM public.comandas c
-LEFT JOIN public.order_items oi ON c.id = oi.comanda_id AND oi.status != 'canceled'
-GROUP BY c.id, c.store_id, c.numero, c.mesa, c.status, c.cliente_nome;
-
--- 6️⃣ PERMISSÕES
-GRANT EXECUTE ON FUNCTION public.rpc_add_item_to_comanda TO authenticated;
-GRANT EXECUTE ON FUNCTION public.rpc_mark_order_item_done TO authenticated;
-GRANT EXECUTE ON FUNCTION public.rpc_close_comanda_to_sale TO authenticated;
-GRANT SELECT ON public.v_comandas_totais TO authenticated;

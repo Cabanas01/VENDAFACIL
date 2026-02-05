@@ -2,6 +2,7 @@
 
 /**
  * @fileOverview Ponto de Venda (PDV) - Design Premium Cyan
+ * Sincronizado para fidelidade visual absoluta à imagem enviada.
  */
 
 import { useState, useMemo, useEffect } from 'react';
