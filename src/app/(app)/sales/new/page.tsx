@@ -43,7 +43,7 @@ import { printReceipt } from '@/lib/print-receipt';
 import { startOfToday, isAfter } from 'date-fns';
 
 const formatCurrency = (value: number) =>
-  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value / 100);
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((value || 0) / 100);
 
 export default function NewSalePage() {
   const { products, sales, addSale, store } = useAuth();
@@ -142,8 +142,11 @@ export default function NewSalePage() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-8rem)]">
-      <PageHeader title="Ponto de Venda" subtitle={`Operador: ${store?.name || '...'}`} />
+    <div className="flex flex-col h-[calc(100vh-8rem)] animate-in fade-in duration-500">
+      <div className="mb-6">
+        <h1 className="text-3xl font-headline font-bold tracking-tight">Ponto de Venda</h1>
+        <p className="text-muted-foreground mt-1 font-medium">Operador: {store?.name || '...'}</p>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 overflow-hidden">
         
@@ -271,7 +274,7 @@ export default function NewSalePage() {
               </ScrollArea>
             </TabsContent>
           </Tabs>
-        </Card>
+        </div>
       </div>
 
       {/* MODAL DE PAGAMENTO (DESIGN PREMIUM FIEL À IMAGEM) */}
@@ -286,7 +289,7 @@ export default function NewSalePage() {
             </button>
             
             <DialogHeader className="mb-12 pt-6">
-              <DialogTitle className="text-center text-2xl font-black uppercase tracking-tighter text-slate-900 font-headline text-center w-full">FORMA DE PAGAMENTO</DialogTitle>
+              <DialogTitle className="text-center text-2xl font-black uppercase tracking-tighter text-slate-900 font-headline">FORMA DE PAGAMENTO</DialogTitle>
             </DialogHeader>
             
             <div className="grid grid-cols-1 gap-5">

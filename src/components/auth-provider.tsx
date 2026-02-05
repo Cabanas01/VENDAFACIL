@@ -4,7 +4,7 @@
 /**
  * @fileOverview AuthProvider - Fonte Única da Verdade para o Frontend.
  * Sincronizado com as regras de ouro: NUNCA atualiza status manualmente.
- * Ajustado status para 'aberta'/'fechada' conforme constraints do banco.
+ * Ajustado para 'aberta'/'fechada' conforme constraints do banco e inclusão de p_unit_price na RPC.
  */
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -166,12 +166,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!store?.id) throw new Error('Loja não identificada.');
 
     try {
+      // Abre uma comanda rápida '0' para o consumidor final
       const comandaId = await abrirComanda('0', 'Consumidor Final');
 
+      // Lança os itens um a um
       for (const item of cart) {
         await adicionarItem(comandaId, item.product_id, item.qty);
       }
 
+      // Fecha e fatura
       await fecharComanda(comandaId, paymentMethod);
       
       const { data: lastSale } = await supabase
