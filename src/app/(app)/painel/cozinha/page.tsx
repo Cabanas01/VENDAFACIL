@@ -3,7 +3,7 @@
 /**
  * @fileOverview Painel Cozinha (KDS).
  * Consome estritamente a tabela order_items para garantir integridade.
- * Utiliza rpc_mark_order_item_done para evitar reaparecimento de itens.
+ * Utiliza rpc_mark_order_item_done para garantir que itens concluídos saiam da fila.
  */
 
 import { useEffect, useState, useCallback } from 'react';
@@ -28,7 +28,7 @@ export default function CozinhaPage() {
   const fetchPedidos = useCallback(async () => {
     if (!store?.id) return;
     
-    // REGRA DE OURO: Consumir a View que já filtra apenas o que está pendente/em preparo
+    // Filtramos apenas itens pendentes do destino cozinha
     const { data, error } = await supabase
       .from('v_painel_cozinha')
       .select('*')
@@ -52,7 +52,7 @@ export default function CozinhaPage() {
 
   const handleConcluir = async (itemId: string) => {
     try {
-      // REGRA DE OURO: Usar RPC de conclusão
+      // RPC DE MARCAÇÃO DE CONCLUSÃO
       await marcarItemConcluido(itemId);
       toast({ title: 'Pedido Concluído!', description: 'Item removido da fila de produção.' });
       await fetchPedidos();
@@ -80,7 +80,7 @@ export default function CozinhaPage() {
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
         {pedidos.map(p => (
           <Card key={p.item_id} className="border-none shadow-xl overflow-hidden bg-background animate-in zoom-in-95">
-            <div className={`px-6 py-4 flex justify-between items-center border-b ${p.status === 'in_progress' ? 'bg-orange-50 border-orange-100' : 'bg-muted/30'}`}>
+            <div className="px-6 py-4 flex justify-between items-center border-b bg-muted/30">
               <div className="flex flex-col">
                 <span className="text-xl font-black font-headline uppercase leading-none">Mesa {p.mesa || 'Balcão'}</span>
                 <span className="text-[9px] font-bold text-muted-foreground uppercase mt-1">Comanda #{p.comanda_numero}</span>

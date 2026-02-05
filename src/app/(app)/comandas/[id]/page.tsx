@@ -2,7 +2,7 @@
 
 /**
  * @fileOverview Gestão de Comanda Individual (PDV Operacional).
- * Delegando alteração de status estritamente para a RPC no backend.
+ * Delegando escrita estritamente para as RPCs.
  */
 
 import { useEffect, useState, useCallback } from 'react';
@@ -21,7 +21,9 @@ import {
   X,
   CreditCard,
   QrCode,
-  CircleDollarSign
+  CircleDollarSign,
+  Trash2, 
+  ShoppingCart
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -53,6 +55,7 @@ export default function ComandaDetailsPage() {
     if (!id) return;
     setLoading(true);
     try {
+      // LEITURA DOS DADOS (Vem das views e tabelas, mas sem line_total no frontend)
       const [comandaRes, itemsRes] = await Promise.all([
         supabase.from('v_comandas_totais').select('*').eq('id', id).single(),
         supabase.from('order_items').select('*').eq('comanda_id', id)
@@ -74,6 +77,7 @@ export default function ComandaDetailsPage() {
     if (localCart.length === 0 || isSubmitting) return;
     setIsSubmitting(true);
     try {
+      // Adiciona cada item via RPC
       for (const item of localCart) {
         await adicionarItem(id as string, item.product.id, item.qty);
       }
@@ -92,7 +96,7 @@ export default function ComandaDetailsPage() {
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
-      // REGRA DE OURO: O fechamento chama apenas a RPC. O backend altera o status.
+      // FECHAMENTO TRANSACIONAL VIA RPC
       await fecharComanda(id as string, method);
       toast({ title: 'Atendimento Concluído!' });
       
@@ -144,7 +148,7 @@ export default function ComandaDetailsPage() {
                 <TableRow key={idx} className="hover:bg-muted/5 transition-colors">
                   <TableCell className="px-6 font-bold text-xs uppercase tracking-tight">{item.product_name_snapshot || 'Produto'}</TableCell>
                   <TableCell className="text-center font-black text-xs">x{item.quantity}</TableCell>
-                  <TableCell className="text-right px-6 font-black text-primary">{formatCurrency(item.line_total || (item.quantity * item.unit_price))}</TableCell>
+                  <TableCell className="text-right px-6 font-black text-primary">{formatCurrency(item.line_total || 0)}</TableCell>
                 </TableRow>
               ))}
               {items.length === 0 && (
@@ -240,7 +244,7 @@ export default function ComandaDetailsPage() {
             <DialogDescription className="text-white/40 uppercase font-bold text-[10px] mt-2 tracking-widest">Total: {formatCurrency(comanda?.total_cents || 0)}</DialogDescription>
           </div>
           <div className="p-10 space-y-4 bg-white">
-            <Button variant="outline" className="w-full h-24 justify-start gap-8 border-none bg-slate-50 hover:bg-slate-100 rounded-[32px] px-10 transition-all group" onClick={() => handleFinalize('cash')}>
+            <Button variant="outline" className="w-full h-24 justify-start gap-8 border-none bg-slate-50 hover:bg-slate-100 rounded-[32px] px-10 transition-all group" onClick={() => handleFinalize('dinheiro')}>
               <div className="h-14 w-14 rounded-full bg-green-100 flex items-center justify-center shadow-inner group-active:scale-95 transition-transform"><CircleDollarSign className="text-green-600 h-7 w-7" /></div>
               <span className="font-black uppercase text-xs tracking-[0.2em]">Dinheiro / Troco</span>
             </Button>
@@ -248,9 +252,9 @@ export default function ComandaDetailsPage() {
               <div className="h-14 w-14 rounded-full bg-white/20 flex items-center justify-center shadow-inner group-active:scale-95 transition-transform"><QrCode className="text-white h-7 w-7" /></div>
               <span className="font-black uppercase text-xs tracking-[0.2em]">PIX QR Code</span>
             </Button>
-            <Button variant="outline" className="w-full h-24 justify-start gap-8 border-none bg-slate-50 hover:bg-slate-100 rounded-[32px] px-10 transition-all group" onClick={() => handleFinalize('card')}>
+            <Button variant="outline" className="w-full h-24 justify-start gap-8 border-none bg-slate-50 hover:bg-slate-100 rounded-[32px] px-10 transition-all group" onClick={() => handleFinalize('credito')}>
               <div className="h-14 w-14 rounded-full bg-blue-100 flex items-center justify-center shadow-inner group-active:scale-95 transition-transform"><CreditCard className="text-blue-600 h-7 w-7" /></div>
-              <span className="font-black uppercase text-xs tracking-[0.2em]">Cartão Débito/Crédito</span>
+              <span className="font-black uppercase text-xs tracking-[0.2em]">Cartão Crédito</span>
             </Button>
           </div>
         </DialogContent>
@@ -258,5 +262,3 @@ export default function ComandaDetailsPage() {
     </div>
   );
 }
-
-import { Trash2, ShoppingCart } from 'lucide-react';

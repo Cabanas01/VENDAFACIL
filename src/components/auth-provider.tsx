@@ -2,7 +2,7 @@
 
 /**
  * @fileOverview AuthProvider - Fonte Única da Verdade para o Frontend.
- * Refatorado para o padrão RPC-First (Opção 01 / Regra de Ouro).
+ * Refatorado para o padrão RPC-First conforme as regras de ouro do backend.
  */
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -114,6 +114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const identificacao = mesa?.toString().trim();
     if (!identificacao) throw new Error('Identificação da comanda é obrigatória');
 
+    // INSERT DIRETO EM COMANDAS (Campos permitidos)
     const { data, error } = await supabase
       .from('comandas')
       .insert({
@@ -134,7 +135,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   /**
    * REGRA DE OURO: Adição de itens via RPC.
-   * Não calculamos line_total e não inserimos diretamente na tabela.
+   * Não enviamos line_total, destino_preparo ou store_id.
    */
   const adicionarItem = async (comandaId: string, productId: string, quantity: number) => {
     const product = products.find(p => p.id === productId);
@@ -152,7 +153,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   /**
    * REGRA DE OURO: Fechamento via RPC.
-   * O banco soma os itens, cria a venda e atualiza o estoque.
+   * O banco soma os itens, cria a venda e vincula tudo atomicamente.
    */
   const fecharComanda = async (comandaId: string, paymentMethodId: string) => {
     const cashRegister = cashRegisters.find(cr => !cr.closed_at);
@@ -167,21 +168,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await refreshStatus();
   };
 
+  /**
+   * Fluxo de PDV Rápido (Venda sem comanda prévia)
+   * Segue a sequência de RPCs para manter a integridade.
+   */
   const addSale = async (cart: CartItem[], paymentMethod: string) => {
     if (!store?.id) throw new Error('Loja não identificada.');
 
     try {
-      // No PDV rápido, abrimos uma comanda '0', lançamos os itens e fechamos.
-      // Tudo via RPC para garantir integridade.
+      // 1. Abre comanda temporária
       const comandaId = await abrirComanda('0', 'Consumidor Final');
 
+      // 2. Lança itens via RPC
       for (const item of cart) {
         await adicionarItem(comandaId, item.product_id, item.qty);
       }
 
+      // 3. Fecha comanda via RPC
       await fecharComanda(comandaId, paymentMethod);
       
-      // Recuperar a venda criada para retorno (recibo)
+      // 4. Recupera a venda gerada para o recibo
       const { data: lastSale } = await supabase
         .from('sales')
         .select('*, items:order_items(*)')
