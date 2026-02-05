@@ -121,6 +121,7 @@ export default function NewSalePage() {
 
     setIsSubmitting(true);
     try {
+      // addSale agora utiliza o fluxo correto de RPCs no AuthProvider
       const result = await addSale(cart, method);
       
       if (result) {
@@ -272,7 +273,6 @@ export default function NewSalePage() {
         </Card>
       </div>
 
-      {/* MODAL DE PAGAMENTO (DESIGN PREMIUM FIEL À IMAGEM) */}
       <Dialog open={isFinalizing} onOpenChange={setIsFinalizing}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl rounded-[40px]">
           <div className="p-10 bg-white relative">

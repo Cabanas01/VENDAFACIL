@@ -2,7 +2,7 @@
 
 /**
  * @fileOverview AuthProvider - Fonte Única da Verdade para o Frontend.
- * Sincronizado com as regras de ouro: NUNCA atualiza status manualmente.
+ * Refatorado para o padrão RPC-First (Opção 01 / Regra de Ouro).
  */
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -132,10 +132,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return data.id;
   };
 
+  /**
+   * REGRA DE OURO: Adição de itens via RPC.
+   * Não calculamos line_total e não inserimos diretamente na tabela.
+   */
   const adicionarItem = async (comandaId: string, productId: string, quantity: number) => {
     const product = products.find(p => p.id === productId);
     
-    // Corrigido: Chamando a RPC com prefixo rpc_ conforme nova arquitetura
     const { error } = await supabase.rpc('rpc_add_item_to_comanda', {
       p_comanda_id: comandaId,
       p_product_id: productId,
@@ -147,6 +150,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await refreshStatus();
   };
 
+  /**
+   * REGRA DE OURO: Fechamento via RPC.
+   * O banco soma os itens, cria a venda e atualiza o estoque.
+   */
   const fecharComanda = async (comandaId: string, paymentMethodId: string) => {
     const cashRegister = cashRegisters.find(cr => !cr.closed_at);
     
@@ -164,6 +171,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!store?.id) throw new Error('Loja não identificada.');
 
     try {
+      // No PDV rápido, abrimos uma comanda '0', lançamos os itens e fechamos.
+      // Tudo via RPC para garantir integridade.
       const comandaId = await abrirComanda('0', 'Consumidor Final');
 
       for (const item of cart) {
@@ -172,6 +181,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       await fecharComanda(comandaId, paymentMethod);
       
+      // Recuperar a venda criada para retorno (recibo)
       const { data: lastSale } = await supabase
         .from('sales')
         .select('*, items:order_items(*)')
