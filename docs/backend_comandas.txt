@@ -21,33 +21,40 @@ CREATE OR REPLACE FUNCTION public.rpc_add_item_to_comanda(
 ) RETURNS TEXT AS $$
 DECLARE
     v_store_id UUID;
+    v_prod_name TEXT;
+    v_prod_target TEXT;
     v_final_price NUMERIC;
 BEGIN
-    -- 1. Obter store_id da comanda
+    -- 1. Obter dados do produto e da comanda
     SELECT store_id INTO v_store_id FROM public.comandas WHERE id = p_comanda_id;
+    SELECT name, production_target INTO v_prod_name, v_prod_target FROM public.products WHERE id = p_product_id;
     
-    -- 2. Resolver preço (se não enviado, busca o atual do produto)
-    IF p_unit_price IS NULL THEN
+    -- 2. Resolver preço
+    IF p_unit_price IS NULL OR p_unit_price = 0 THEN
         SELECT price_cents INTO v_final_price FROM public.products WHERE id = p_product_id;
     ELSE
         v_final_price := p_unit_price;
     END IF;
 
-    -- 3. Inserir em order_items (Omitindo line_total explicitamente)
+    -- 3. Inserir em order_items (REGRA: SEM LINE_TOTAL NA LISTA DE COLUNAS)
     INSERT INTO public.order_items (
         store_id, 
         comanda_id, 
         product_id, 
+        product_name_snapshot,
         quantity, 
         unit_price, 
-        status
+        status,
+        destino_preparo
     ) VALUES (
         v_store_id, 
         p_comanda_id, 
         p_product_id, 
+        v_prod_name,
         p_quantity, 
         v_final_price, 
-        'pending'
+        'pending',
+        v_prod_target
     );
 
     -- 4. Baixa de estoque
@@ -90,7 +97,7 @@ BEGIN
     INSERT INTO public.sales (
         store_id, comanda_id, total_cents, payment_method, cash_register_id
     ) VALUES (
-        v_store_id, p_comanda_id, v_total_cents, p_payment_method_id::public.sales.payment_method, p_cash_register_id
+        v_store_id, p_comanda_id, v_total_cents, p_payment_method_id, p_cash_register_id
     ) RETURNING id INTO v_sale_id;
 
     -- 4. Atualizar itens e comanda
@@ -113,7 +120,7 @@ SELECT
     COALESCE(SUM(oi.line_total), 0) as total_cents
 FROM public.comandas c
 LEFT JOIN public.order_items oi ON c.id = oi.comanda_id AND oi.status != 'canceled'
-GROUP BY c.id;
+GROUP BY c.id, c.store_id, c.numero, c.mesa, c.status, c.cliente_nome;
 
 -- 6️⃣ PERMISSÕES
 GRANT EXECUTE ON FUNCTION public.rpc_add_item_to_comanda TO authenticated;

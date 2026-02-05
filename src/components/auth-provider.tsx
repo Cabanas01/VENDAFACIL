@@ -125,15 +125,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const adicionarItem = async (comandaId: string, productId: string, quantity: number) => {
     const product = products.find(p => p.id === productId);
-    
-    // NUNCA envia line_total. O backend calcula unit_price * quantity via generated column.
+    if (!product) throw new Error('Produto não localizado.');
+
+    // ✅ REGRA DE OURO: Nunca enviar line_total. Deixar o banco calcular.
     const { error } = await supabase.rpc('rpc_add_item_to_comanda', {
       p_comanda_id: comandaId,
       p_product_id: productId,
-      p_quantity: quantity,
-      p_unit_price: product?.price_cents || 0
+      p_quantity: Number(quantity),
+      p_unit_price: product.price_cents
     });
-    
+
     if (error) throw error;
     await refreshStatus();
   };
@@ -141,7 +142,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fecharComanda = async (comandaId: string, paymentMethodId: string) => {
     const cashRegister = cashRegisters.find(cr => !cr.closed_at);
     
-    // REGRA DE OURO: Delega fechamento total para a RPC do banco
+    // ✅ REGRA DE OURO: Delega fechamento total para a RPC do banco.
+    // O banco fará SUM(line_total) e criará o registro de venda atomicamente.
     const { error } = await supabase.rpc('rpc_close_comanda_to_sale', {
       p_comanda_id: comandaId,
       p_payment_method_id: paymentMethodId,

@@ -151,7 +151,7 @@ export default function ComandaDetailsPage() {
                   <TableCell className="px-6 font-bold text-xs uppercase tracking-tight">{item.product_name_snapshot || 'Produto'}</TableCell>
                   <TableCell className="text-center font-black text-xs">x{item.quantity}</TableCell>
                   <TableCell className="text-right px-6 font-black text-primary">
-                    {/* Exibe o line_total gerado pelo banco */}
+                    {/* ✅ REGRA DE OURO: Exibe o line_total calculado pelo banco */}
                     {formatCurrency(item.line_total)}
                   </TableCell>
                 </TableRow>
