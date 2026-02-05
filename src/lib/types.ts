@@ -78,7 +78,7 @@ export type OrderItem = {
   readonly sale_id?: string | null;
   readonly quantity: number;
   readonly unit_price: number;
-  readonly line_total: number; // GENERATED ALWAYS - READ ONLY FROM DB
+  readonly line_total: number; // GENERATED ALWAYS - READ ONLY
   readonly status: OrderItemStatus;
   readonly created_at: string;
   readonly product_name_snapshot?: string;
@@ -101,7 +101,7 @@ export type CartItem = {
   product_barcode_snapshot?: string | null;
   qty: number;
   unit_price_cents: number;
-  subtotal_cents: number; // Somente para exibição UI
+  subtotal_cents: number; // For UI display only
   stock_qty: number;
 };
 

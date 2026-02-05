@@ -2,7 +2,7 @@
 
 /**
  * @fileOverview Gestão de Comanda Individual (PDV Operacional).
- * Alinhado ao backend RPC-First: line_total é somente leitura.
+ * Cálculo de total baseado estritamente nos line_total retornados pelo banco.
  */
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
@@ -55,7 +55,6 @@ export default function ComandaDetailsPage() {
     if (!id) return;
     setLoading(true);
     try {
-      // Leitura da View de Totais e Itens (Fonte da Verdade)
       const [comandaRes, itemsRes] = await Promise.all([
         supabase.from('v_comandas_totais').select('*').eq('id', id).single(),
         supabase.from('order_items').select('*').eq('comanda_id', id)
@@ -73,8 +72,8 @@ export default function ComandaDetailsPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Cálculo de total local apenas para conferência visual rápida (UI)
-  const cartTotal = useMemo(() => 
+  // Cálculo visual para o carrinho temporário (antes do banco processar)
+  const cartTotalDisplay = useMemo(() => 
     localCart.reduce((acc, i) => acc + (i.product.price_cents * i.qty), 0), 
   [localCart]);
 
@@ -82,7 +81,6 @@ export default function ComandaDetailsPage() {
     if (localCart.length === 0 || isSubmitting) return;
     setIsSubmitting(true);
     try {
-      // Lançamento de itens um a um via RPC
       for (const item of localCart) {
         await adicionarItem(id as string, item.product.id, item.qty);
       }
@@ -101,7 +99,6 @@ export default function ComandaDetailsPage() {
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
-      // Fechamento transacional: O banco soma line_total e cria a venda
       await fecharComanda(id as string, method);
       toast({ title: 'Atendimento Concluído!' });
       
@@ -154,7 +151,7 @@ export default function ComandaDetailsPage() {
                   <TableCell className="px-6 font-bold text-xs uppercase tracking-tight">{item.product_name_snapshot || 'Produto'}</TableCell>
                   <TableCell className="text-center font-black text-xs">x{item.quantity}</TableCell>
                   <TableCell className="text-right px-6 font-black text-primary">
-                    {/* Exibe line_total calculado pelo banco */}
+                    {/* Exibe o line_total gerado pelo banco */}
                     {formatCurrency(item.line_total)}
                   </TableCell>
                 </TableRow>
@@ -236,7 +233,7 @@ export default function ComandaDetailsPage() {
               <div className="p-6 border-t bg-white space-y-4">
                 <div className="flex justify-between items-center px-2">
                   <span className="text-[9px] font-black uppercase text-muted-foreground">Total Pedido</span>
-                  <span className="font-black text-primary">{formatCurrency(cartTotal)}</span>
+                  <span className="font-black text-primary">{formatCurrency(cartTotalDisplay)}</span>
                 </div>
                 <Button className="w-full h-16 font-black uppercase text-xs tracking-[0.2em] rounded-2xl shadow-lg shadow-primary/20" disabled={localCart.length === 0 || isSubmitting} onClick={handleAddItemsFinal}>
                   {isSubmitting ? <Loader2 className="animate-spin" /> : 'Lançar na Conta'}

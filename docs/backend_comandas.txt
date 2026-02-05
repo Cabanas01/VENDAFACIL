@@ -3,7 +3,7 @@
 -- ESTE SCRIPT DEVE SER EXECUTADO NO SQL EDITOR DO SUPABASE
 -- ======================================================
 
--- 1️⃣ LIMPEZA DE LEGADO (CONTROLADA)
+-- 1️⃣ LIMPEZA DE LEGADO
 DROP VIEW IF EXISTS public.v_comandas_totais CASCADE;
 DROP VIEW IF EXISTS public.v_painel_cozinha CASCADE;
 DROP VIEW IF EXISTS public.v_painel_bar CASCADE;
@@ -11,11 +11,8 @@ DROP FUNCTION IF EXISTS public.rpc_add_item_to_comanda CASCADE;
 DROP FUNCTION IF EXISTS public.rpc_mark_order_item_done CASCADE;
 DROP FUNCTION IF EXISTS public.rpc_close_comanda_to_sale CASCADE;
 
--- 2️⃣ GARANTIR ESTRUTURA UNIFICADA (order_items)
--- Caso a tabela não exista, ela deve ser a base única de consumo e venda.
--- Se já existir views com nome sale_items ou comanda_itens, elas devem apontar para cá.
-
--- 3️⃣ FUNÇÃO: ADICIONAR ITEM À COMANDA (Transacional)
+-- 2️⃣ FUNÇÃO: ADICIONAR ITEM À COMANDA (Transacional)
+-- line_total é omitido pois é GENERATED ALWAYS no banco.
 CREATE OR REPLACE FUNCTION public.rpc_add_item_to_comanda(
     p_comanda_id UUID,
     p_product_id UUID,
@@ -36,18 +33,33 @@ BEGIN
         v_final_price := p_unit_price;
     END IF;
 
-    -- 3. Inserir em order_items (Fonte Única)
+    -- 3. Inserir em order_items (Omitindo line_total explicitamente)
     INSERT INTO public.order_items (
-        store_id, comanda_id, product_id, quantity, unit_price, status
+        store_id, 
+        comanda_id, 
+        product_id, 
+        quantity, 
+        unit_price, 
+        status
     ) VALUES (
-        v_store_id, p_comanda_id, p_product_id, p_quantity, v_final_price, 'pending'
+        v_store_id, 
+        p_comanda_id, 
+        p_product_id, 
+        p_quantity, 
+        v_final_price, 
+        'pending'
     );
+
+    -- 4. Baixa de estoque
+    UPDATE public.products 
+    SET stock_qty = stock_qty - p_quantity 
+    WHERE id = p_product_id;
 
     RETURN 'Item adicionado com sucesso';
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 4️⃣ FUNÇÃO: CONCLUIR ITEM (KDS / BDS)
+-- 3️⃣ FUNÇÃO: CONCLUIR ITEM (KDS / BDS)
 CREATE OR REPLACE FUNCTION public.rpc_mark_order_item_done(p_item_id UUID) 
 RETURNS BOOLEAN AS $$
 BEGIN
@@ -56,7 +68,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 5️⃣ FUNÇÃO: FECHAR COMANDA E GERAR VENDA (Atômica)
+-- 4️⃣ FUNÇÃO: FECHAR COMANDA E GERAR VENDA (Atômica)
 CREATE OR REPLACE FUNCTION public.rpc_close_comanda_to_sale(
     p_comanda_id UUID,
     p_payment_method_id TEXT,
@@ -70,9 +82,9 @@ BEGIN
     -- 1. Obter dados
     SELECT store_id INTO v_store_id FROM public.comandas WHERE id = p_comanda_id;
     
-    -- 2. Calcular total real dos itens
-    SELECT COALESCE(SUM(unit_price * quantity), 0) INTO v_total_cents 
-    FROM public.order_items WHERE comanda_id = p_comanda_id;
+    -- 2. Calcular total real dos itens (Usando a generated column line_total)
+    SELECT COALESCE(SUM(line_total), 0) INTO v_total_cents 
+    FROM public.order_items WHERE comanda_id = p_comanda_id AND status != 'canceled';
 
     -- 3. Criar a Venda
     INSERT INTO public.sales (
@@ -89,7 +101,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 6️⃣ VIEWS DE CONSUMO
+-- 5️⃣ VIEWS DE CONSUMO
 CREATE OR REPLACE VIEW public.v_comandas_totais AS
 SELECT 
     c.id,
@@ -98,49 +110,13 @@ SELECT
     c.mesa,
     c.status,
     c.cliente_nome,
-    COALESCE(SUM(oi.unit_price * oi.quantity), 0) as total_cents
+    COALESCE(SUM(oi.line_total), 0) as total_cents
 FROM public.comandas c
 LEFT JOIN public.order_items oi ON c.id = oi.comanda_id AND oi.status != 'canceled'
 GROUP BY c.id;
 
-CREATE OR REPLACE VIEW public.v_painel_cozinha AS
-SELECT 
-    oi.id as item_id,
-    c.numero as comanda_numero,
-    c.mesa,
-    p.name as produto,
-    oi.quantity as qty,
-    oi.status,
-    oi.created_at,
-    oi.store_id
-FROM public.order_items oi
-JOIN public.comandas c ON oi.comanda_id = c.id
-JOIN public.products p ON oi.product_id = p.id
-WHERE oi.status IN ('pending', 'queued', 'in_progress')
-AND p.production_target = 'cozinha'
-AND c.status = 'aberta';
-
-CREATE OR REPLACE VIEW public.v_painel_bar AS
-SELECT 
-    oi.id as item_id,
-    c.numero as comanda_numero,
-    c.mesa,
-    p.name as produto,
-    oi.quantity as qty,
-    oi.status,
-    oi.created_at,
-    oi.store_id
-FROM public.order_items oi
-JOIN public.comandas c ON oi.comanda_id = c.id
-JOIN public.products p ON oi.product_id = p.id
-WHERE oi.status IN ('pending', 'queued', 'in_progress')
-AND p.production_target = 'bar'
-AND c.status = 'aberta';
-
--- 7️⃣ PERMISSÕES
+-- 6️⃣ PERMISSÕES
 GRANT EXECUTE ON FUNCTION public.rpc_add_item_to_comanda TO authenticated;
 GRANT EXECUTE ON FUNCTION public.rpc_mark_order_item_done TO authenticated;
 GRANT EXECUTE ON FUNCTION public.rpc_close_comanda_to_sale TO authenticated;
 GRANT SELECT ON public.v_comandas_totais TO authenticated;
-GRANT SELECT ON public.v_painel_cozinha TO authenticated;
-GRANT SELECT ON public.v_painel_bar TO authenticated;
