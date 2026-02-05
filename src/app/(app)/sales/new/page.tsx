@@ -5,7 +5,7 @@
  * Sincronizado para fidelidade visual absoluta à imagem enviada.
  */
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { 
   Search, 
   ShoppingCart, 
@@ -54,7 +54,6 @@ export default function NewSalePage() {
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Sincroniza vendas do dia para a aba "HOJE"
   const todaySales = useMemo(() => {
     const today = startOfToday();
     const safeSales = Array.isArray(sales) ? sales : [];
@@ -145,7 +144,7 @@ export default function NewSalePage() {
     <div className="flex flex-col h-[calc(100vh-8rem)] animate-in fade-in duration-500">
       <div className="mb-6 flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-headline font-black uppercase tracking-tighter">Ponto de Venda</h1>
+          <h1 className="text-3xl font-headline font-black uppercase tracking-tighter">PONTO DE VENDA</h1>
           <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">{store?.name || 'VendaFácil'}</p>
         </div>
       </div>
@@ -279,7 +278,7 @@ export default function NewSalePage() {
         </Card>
       </div>
 
-      {/* MODAL DE PAGAMENTO (DESIGN PREMIUM FIEL À IMAGEM) */}
+      {/* MODAL DE PAGAMENTO */}
       <Dialog open={isFinalizing} onOpenChange={setIsFinalizing}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl rounded-[40px]">
           <div className="p-10 bg-white relative">
@@ -290,9 +289,9 @@ export default function NewSalePage() {
               <X className="h-6 w-6" />
             </button>
             
-            <DialogHeader className="mb-12 pt-6">
-              <DialogTitle className="text-center text-2xl font-black uppercase tracking-tighter text-slate-900 font-headline">FORMA DE PAGAMENTO</DialogTitle>
-            </DialogHeader>
+            <div className="mb-12 pt-6 text-center">
+              <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900 font-headline">FORMA DE PAGAMENTO</h2>
+            </div>
             
             <div className="grid grid-cols-1 gap-5">
               <Button 

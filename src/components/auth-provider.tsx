@@ -127,8 +127,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const product = products.find(p => p.id === productId);
     if (!product) throw new Error('Produto não encontrado.');
 
-    // 🔒 RESOLUÇÃO DO ERRO DO TOAST:
-    // Garantimos que passamos números limpos e não nulos para evitar ambiguidade na RPC.
+    // 🔒 RESOLUÇÃO DO ERRO AMBÍGUO:
+    // Passamos os parâmetros de forma explícita para o Supabase resolver a assinatura correta.
     const { error } = await supabase.rpc('rpc_add_item_to_comanda', {
       p_comanda_id: comandaId,
       p_product_id: productId,
@@ -161,7 +161,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const comandaId = await abrirComanda('0', 'Consumidor Final');
       for (const item of cart) {
-        // Garantimos que cada item seja lançado com preço unitário inteiro
         await adicionarItem(comandaId, item.product_id, item.qty);
       }
       await fecharComanda(comandaId, paymentMethod);
