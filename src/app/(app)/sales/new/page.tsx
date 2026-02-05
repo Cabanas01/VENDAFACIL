@@ -1,3 +1,4 @@
+
 'use client';
 
 /**
@@ -127,7 +128,6 @@ export default function NewSalePage() {
 
     setIsSubmitting(true);
     try {
-      // Chama a função centralizada no AuthProvider que executa a Server Action
       const result = await addSale(cart, method);
       
       if (result) {
@@ -135,11 +135,9 @@ export default function NewSalePage() {
         printReceipt(result, store);
         setCart([]);
         setIsFinalizing(false);
-      } else {
-        throw new Error('Falha ao processar a venda no servidor.');
       }
     } catch (error: any) {
-      const errorMessage = typeof error === 'string' ? error : error.message || 'Erro desconhecido';
+      const errorMessage = error.message || 'Falha ao processar venda no banco de dados.';
       toast({ variant: 'destructive', title: 'Erro na Venda', description: errorMessage });
     } finally {
       setIsSubmitting(false);
@@ -291,7 +289,7 @@ export default function NewSalePage() {
             </button>
             
             <DialogHeader className="mb-12 pt-6">
-              <DialogTitle className="text-center text-2xl font-black uppercase tracking-tighter text-slate-900 font-headline">FORMA DE PAGAMENTO</DialogTitle>
+              <DialogTitle className="text-center text-2xl font-black uppercase tracking-tighter text-slate-900 font-headline text-center w-full">FORMA DE PAGAMENTO</DialogTitle>
             </DialogHeader>
             
             <div className="grid grid-cols-1 gap-5">

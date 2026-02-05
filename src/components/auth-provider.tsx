@@ -1,8 +1,10 @@
+
 'use client';
 
 /**
  * @fileOverview AuthProvider - Fonte Única da Verdade para o Frontend.
  * Sincronizado com as regras de ouro: NUNCA atualiza status manualmente.
+ * Ajustado status para 'aberta'/'fechada' conforme constraints do banco.
  */
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -114,7 +116,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const identificacao = mesa?.toString().trim();
     if (!identificacao) throw new Error('Identificação da comanda é obrigatória');
 
-    // REGRA DE OURO: INSERT Direto com status 'open' e numero obrigatório
+    // REGRA DE OURO: INSERT com status 'aberta' para cumprir check constraint do banco real
     const { data, error } = await supabase
       .from('comandas')
       .insert({
@@ -122,7 +124,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         numero: identificacao,     
         mesa: identificacao,       
         cliente_nome: cliente,
-        status: 'open'             
+        status: 'aberta'             
       })
       .select('id')
       .single();
@@ -134,7 +136,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const adicionarItem = async (comandaId: string, productId: string, quantity: number) => {
-    // REGRA DE OURO: Adição de item via RPC transacional
     const { error } = await supabase.rpc('rpc_add_item_to_comanda', {
       p_comanda_id: comandaId,
       p_product_id: productId,
@@ -148,7 +149,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fecharComanda = async (comandaId: string, paymentMethodId: string) => {
     const cashRegister = cashRegisters.find(cr => !cr.closed_at);
     
-    // REGRA DE OURO: Fechamento ATÔMICO via RPC. Status é alterado pelo banco.
     const { error } = await supabase.rpc('rpc_close_comanda_to_sale', {
       p_comanda_id: comandaId,
       p_payment_method_id: paymentMethodId,
@@ -163,7 +163,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!store?.id) throw new Error('Loja não identificada.');
 
     try {
-      // Cria comanda temporária para o PDV com status 'open'
+      // Cria comanda temporária com status 'aberta'
       const comandaId = await abrirComanda('0', 'Consumidor Final');
 
       for (const item of cart) {

@@ -1,8 +1,9 @@
+
 'use client';
 
 /**
  * @fileOverview Gestão de Comandas.
- * Ajustado para consumir estritamente o status 'open' do backend real.
+ * Ajustado para consumir estritamente o status 'aberta' do backend real.
  */
 
 import { useEffect, useState, useMemo } from 'react';
@@ -40,10 +41,10 @@ export default function ComandasPage() {
     refreshStatus().finally(() => setLoading(false));
   }, [refreshStatus]);
 
-  // Filtro alinhado ao novo schema (status 'open')
+  // Filtro alinhado ao novo schema (status 'aberta')
   const filteredComandas = useMemo(() => 
     comandas.filter(c => 
-      c.status === 'open' && (
+      c.status === 'aberta' && (
         c.numero?.toString().includes(search) || 
         (c.mesa || '').toLowerCase().includes(search.toLowerCase()) ||
         (c.cliente_nome || '').toLowerCase().includes(search.toLowerCase())
