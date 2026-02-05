@@ -3,7 +3,7 @@
 /**
  * @fileOverview AuthProvider - Fonte Única da Verdade para o Frontend.
  * Sincronizado com a arquitetura order_items e RPCs transacionais.
- * Versão: 2.0 (Estabilizada - Opção 01)
+ * Versão: 2.1 (Correção de Not-Null Constraint em Comandas)
  */
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -115,13 +115,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const abrirComanda = async (mesa: string, cliente: string, telefone?: string, cpf?: string) => {
     if (!store?.id) throw new Error('Contexto de loja ausente.');
     
+    const identificacao = mesa?.toString().trim();
+    if (!identificacao) throw new Error('Identificação da comanda é obrigatória');
+
+    // Converte para número se possível para satisfazer a constraint de integer, 
+    // ou usa 0 se for identificação textual (ex: "Balcão")
+    const numeroComanda = parseInt(identificacao.replace(/\D/g, '')) || 0;
+
     const { data, error } = await supabase
       .from('comandas')
       .insert({
         store_id: store.id,
-        mesa: mesa,
+        numero: numeroComanda, // 🔴 Campo OBRIGATÓRIO (NOT NULL)
+        mesa: identificacao,
         cliente_nome: cliente,
-        status: 'open' // Status padrão no banco
+        status: 'open'
       })
       .select('id')
       .single();
@@ -145,7 +153,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // 3. FECHAR COMANDA (RPC ATÔMICA)
   const fecharComanda = async (comandaId: string, paymentMethodId: string) => {
-    // Busca o caixa aberto atual
     const cashRegister = cashRegisters.find(cr => !cr.closed_at);
     
     const { error } = await supabase.rpc('rpc_close_comanda_to_sale', {
@@ -163,8 +170,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!store?.id) throw new Error('Loja não identificada.');
 
     try {
-      // Abre uma comanda temporária para o PDV
-      const comandaId = await abrirComanda('Balcão', 'Consumidor');
+      // Abre uma comanda temporária para o PDV. numero: 0 identifica vendas diretas.
+      const comandaId = await abrirComanda('0', 'Consumidor');
 
       // Lança os itens
       for (const item of cart) {
@@ -174,7 +181,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Fecha e fatura
       await fecharComanda(comandaId, paymentMethod);
       
-      // Retorna o registro de venda mais recente
       const { data: lastSale } = await supabase
         .from('sales')
         .select('*, items:order_items(*)')

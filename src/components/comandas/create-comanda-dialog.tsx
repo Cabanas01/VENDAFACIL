@@ -14,7 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 
 const comandaSchema = z.object({
-  mesa: z.string().min(1, 'Mesa é obrigatória'),
+  mesa: z.string().min(1, 'Identificação é obrigatória'),
   cliente_nome: z.string().min(1, 'Nome do cliente é obrigatório'),
 });
 
@@ -36,14 +36,25 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
   });
 
   const onSubmit = async (values: ComandaFormValues) => {
+    const identificacao = values.mesa?.trim();
+    
+    if (!identificacao) {
+      toast({
+        variant: 'destructive',
+        title: 'Campo obrigatório',
+        description: 'Informe o número da mesa ou identificação da comanda.',
+      });
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
-      // REGRA DE OURO: Insert direto (via abrComanda no provider)
-      const comandaId = await abrirComanda(values.mesa, values.cliente_nome);
+      // REGRA DE OURO: Insert direto (via abrirComanda no provider que agora envia 'numero')
+      const comandaId = await abrirComanda(identificacao, values.cliente_nome);
 
       if (comandaId) {
-        toast({ title: 'Atendimento Iniciado!', description: `Mesa ${values.mesa} aberta com sucesso.` });
+        toast({ title: 'Atendimento Iniciado!', description: `Mesa ${identificacao} aberta com sucesso.` });
         onOpenChange(false);
         form.reset();
         router.push(`/comandas/${comandaId}`);
@@ -79,7 +90,7 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
               name="mesa"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Identificação (Mesa/Local) *</FormLabel>
+                  <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Identificação (Mesa / Local) *</FormLabel>
                   <FormControl>
                     <Input placeholder="Ex: 15 ou Balcão" {...field} className="h-12 font-bold focus-visible:ring-primary/20" autoFocus />
                   </FormControl>
