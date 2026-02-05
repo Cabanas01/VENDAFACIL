@@ -278,7 +278,7 @@ export default function NewSalePage() {
         </Card>
       </div>
 
-      {/* MODAL DE PAGAMENTO */}
+      {/* MODAL DE PAGAMENTO (DESIGN PREMIUM FIEL À IMAGEM) */}
       <Dialog open={isFinalizing} onOpenChange={setIsFinalizing}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl rounded-[40px]">
           <div className="p-10 bg-white relative">

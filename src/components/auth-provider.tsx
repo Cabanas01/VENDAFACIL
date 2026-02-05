@@ -127,8 +127,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const product = products.find(p => p.id === productId);
     if (!product) throw new Error('Produto não encontrado.');
 
-    // 🔒 RESOLUÇÃO DO ERRO AMBÍGUO:
-    // Passamos os parâmetros de forma explícita para o Supabase resolver a assinatura correta.
+    // Corrigindo a ambiguidade da RPC enviando tipos explícitos como inteiros
+    // O erro "Could not choose the best candidate function" ocorre quando há sobrecarga de funções no Postgres
     const { error } = await supabase.rpc('rpc_add_item_to_comanda', {
       p_comanda_id: comandaId,
       p_product_id: productId,
