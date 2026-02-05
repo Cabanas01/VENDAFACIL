@@ -1,10 +1,9 @@
-
 'use client';
 
 /**
- * @fileOverview Painel Bar (BDS)
- * 
- * Utiliza a view v_painel_bar sincronizada com o backend final.
+ * @fileOverview Painel Bar (BDS).
+ * Consome estritamente a tabela order_items via View v_painel_bar.
+ * Utiliza rpc_mark_order_item_done para garantir sincronia total.
  */
 
 import { useEffect, useState, useCallback } from 'react';
@@ -13,78 +12,59 @@ import { supabase } from '@/lib/supabase/client';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { GlassWater, Clock, History, Loader2, MapPin, CheckCircle2, Play } from 'lucide-react';
-import { parseISO, formatDistanceToNow, differenceInMinutes } from 'date-fns';
+import { GlassWater, Clock, History, Loader2, CheckCircle2 } from 'lucide-react';
+import { formatDistanceToNow, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import type { PainelProducaoView } from '@/lib/types';
 
 export default function BarPage() {
-  const { store } = useAuth();
+  const { store, marcarItemConcluido } = useAuth();
   const { toast } = useToast();
   const [pedidos, setPedidos] = useState<PainelProducaoView[]>([]);
   const [loading, setLoading] = useState(true);
-  const [now, setNow] = useState(new Date());
 
   const fetchPedidos = useCallback(async () => {
     if (!store?.id) return;
-    try {
-      const { data, error } = await supabase
-        .from('v_painel_bar')
-        .select('*')
-        .eq('store_id', store.id);
+    
+    // REGRA DE OURO: View sincronizada com o novo backend
+    const { data, error } = await supabase
+      .from('v_painel_bar')
+      .select('*')
+      .eq('store_id', store.id);
 
-      if (error) throw error;
+    if (!error) {
       setPedidos(data || []);
-    } catch (err: any) {
-      console.error('[BDS_FETCH_ERROR]', err);
-    } finally {
-      setLoading(false);
     }
+    setLoading(false);
   }, [store?.id]);
 
   useEffect(() => {
     fetchPedidos();
-    const interval = setInterval(() => {
-      fetchPedidos();
-      setNow(new Date());
-    }, 30000);
-
     const channel = supabase
       .channel('bds_sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sale_items' }, () => fetchPedidos())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => fetchPedidos())
       .subscribe();
-
-    return () => { 
-      supabase.removeChannel(channel);
-      clearInterval(interval);
-    };
+    
+    return () => { supabase.removeChannel(channel); };
   }, [fetchPedidos]);
 
-  const handleStatusUpdate = async (itemId: string, newStatus: string) => {
+  const handleConcluir = async (itemId: string) => {
     try {
-      let error;
-      if (newStatus === 'em_preparo') {
-        const res = await supabase.rpc('iniciar_preparo_item', { p_item_id: itemId });
-        error = res.error;
-      } else {
-        const res = await supabase.rpc('finalizar_preparo_item', { p_item_id: itemId });
-        error = res.error;
-      }
-
-      if (error) throw error;
-      toast({ title: newStatus === 'pronto' ? 'Bebida servida!' : 'Em preparo!' });
-      fetchPedidos();
+      // REGRA DE OURO: Usar RPC de conclusão
+      await marcarItemConcluido(itemId);
+      toast({ title: 'Bebida Servida!', description: 'Item removido da fila do bar.' });
+      await fetchPedidos();
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Falha na Operação', description: err.message });
+      toast({ variant: 'destructive', title: 'Erro', description: err.message });
     }
   };
 
-  if (loading && pedidos.length === 0) return (
+  if (loading) return (
     <div className="h-[60vh] flex flex-col items-center justify-center gap-4">
-      <Loader2 className="animate-spin h-8 w-8 text-primary" />
-      <p className="font-black uppercase text-[10px] tracking-widest opacity-50">Sincronizando Bar...</p>
+      <Loader2 className="animate-spin text-cyan-600 h-8 w-8" />
+      <p className="font-black uppercase text-[10px] tracking-widest text-muted-foreground animate-pulse">Sincronizando Bar...</p>
     </div>
   );
 
@@ -93,57 +73,42 @@ export default function BarPage() {
       <div className="flex items-center justify-between">
         <PageHeader title="Bar (BDS)" subtitle="Monitor de bebidas e drinks." />
         <Badge variant="outline" className="h-10 px-4 gap-2 font-black uppercase text-xs border-cyan-200 bg-cyan-50 text-cyan-600">
-          <GlassWater className="h-4 w-4" /> {pedidos.length} Pedidos Pendentes
+          <GlassWater className="h-4 w-4" /> {pedidos.length} Bebidas Pendentes
         </Badge>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-        {pedidos.map(p => {
-          const elapsed = differenceInMinutes(now, parseISO(p.created_at));
-          const isLate = elapsed >= 10;
-
-          return (
-            <Card key={p.item_id} className={`border-none shadow-xl overflow-hidden animate-in zoom-in-95 duration-300 ${isLate ? 'ring-2 ring-red-500' : ''}`}>
-              <div className={`px-6 py-4 flex justify-between items-center border-b ${isLate ? 'bg-red-500 text-white' : 'bg-cyan-500/5 border-cyan-500/10'}`}>
-                <div className="flex flex-col">
-                  <span className="text-xl font-black font-headline tracking-tighter uppercase leading-none">Comanda #{p.comanda_numero}</span>
-                  <div className={`flex items-center gap-1.5 mt-1.5 text-[10px] font-black uppercase ${isLate ? 'text-white/80' : 'text-cyan-600'}`}>
-                    <MapPin className="h-3 w-3" /> {p.mesa || 'Sem mesa'}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 text-[10px] font-black uppercase">
-                  <Clock className="h-3 w-3" /> {elapsed} min
+        {pedidos.map(p => (
+          <Card key={p.item_id} className="border-none shadow-xl overflow-hidden bg-background animate-in zoom-in-95">
+            <div className="px-6 py-4 flex justify-between items-center border-b bg-cyan-500/5 border-cyan-500/10">
+              <div className="flex flex-col">
+                <span className="text-xl font-black font-headline uppercase leading-none">Mesa {p.mesa || 'Balcão'}</span>
+                <span className="text-[9px] font-bold text-cyan-600 uppercase mt-1">Comanda #{p.comanda_numero}</span>
+              </div>
+              <div className="flex items-center gap-2 text-[10px] font-black uppercase text-muted-foreground">
+                <Clock className="h-3 w-3" /> {formatDistanceToNow(parseISO(p.created_at), { locale: ptBR })}
+              </div>
+            </div>
+            
+            <CardContent className="p-8 space-y-6">
+              <div className="flex justify-between items-start">
+                <p className="text-3xl font-black leading-tight uppercase tracking-tight text-cyan-700">{p.produto}</p>
+                <div className="h-16 w-16 rounded-2xl bg-cyan-50 flex items-center justify-center text-4xl font-black text-cyan-600 border border-cyan-100 shadow-inner">
+                  {p.qty}
                 </div>
               </div>
               
-              <CardContent className="p-8 space-y-8">
-                <div className="flex justify-between items-start">
-                  <p className="text-3xl font-black leading-tight uppercase tracking-tight text-cyan-700">{p.produto}</p>
-                  <div className="h-16 w-16 rounded-2xl bg-cyan-50 flex items-center justify-center text-4xl font-black text-cyan-600 border border-cyan-100">
-                    {p.qty}
-                  </div>
-                </div>
-                
-                <div className="flex gap-3">
-                  {p.status === 'pendente' ? (
-                    <Button variant="outline" className="w-full h-14 font-black uppercase text-xs border-cyan-200 text-cyan-700" onClick={() => handleStatusUpdate(p.item_id, 'em_preparo')}>
-                      <Play className="h-4 w-4 mr-2" /> Iniciar
-                    </Button>
-                  ) : (
-                    <Button className="w-full h-14 font-black uppercase text-xs bg-cyan-600 hover:bg-cyan-700 shadow-lg shadow-cyan-600/20" onClick={() => handleStatusUpdate(p.item_id, 'pronto')}>
-                      <CheckCircle2 className="h-4 w-4 mr-2" /> Concluir
-                    </Button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
+              <Button className="w-full h-16 font-black uppercase text-xs tracking-widest bg-cyan-600 hover:bg-cyan-700 shadow-xl shadow-cyan-600/20" onClick={() => handleConcluir(p.item_id)}>
+                <CheckCircle2 className="mr-2 h-5 w-5" /> Entregar Bebida
+              </Button>
+            </CardContent>
+          </Card>
+        ))}
 
         {pedidos.length === 0 && (
-          <div className="col-span-full py-40 text-center opacity-20 border-4 border-dashed rounded-[40px] border-muted">
-            <History className="h-20 w-20 mx-auto text-cyan-600" />
-            <p className="text-xl font-black uppercase mt-4 text-foreground">Bar em Ordem</p>
+          <div className="col-span-full py-40 text-center opacity-20 border-4 border-dashed rounded-[40px] border-cyan-100 font-black uppercase tracking-[0.3em]">
+            <History className="h-20 w-20 mx-auto mb-4 text-cyan-600" />
+            Bar em Ordem
           </div>
         )}
       </div>

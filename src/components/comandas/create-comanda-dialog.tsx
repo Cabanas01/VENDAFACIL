@@ -1,25 +1,21 @@
-
 'use client';
 
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Loader2, ClipboardList, UserPlus, Phone, CreditCard } from 'lucide-react';
+import { Loader2, ClipboardList, UserPlus } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/components/auth-provider';
-import { supabase } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 
 const comandaSchema = z.object({
   mesa: z.string().min(1, 'Mesa é obrigatória'),
   cliente_nome: z.string().min(1, 'Nome do cliente é obrigatório'),
-  cliente_telefone: z.string().optional(),
-  cliente_cpf: z.string().optional(),
 });
 
 type ComandaFormValues = z.infer<typeof comandaSchema>;
@@ -29,51 +25,35 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
 }) {
-  const { store } = useAuth();
+  const { abrirComanda } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<ComandaFormValues>({
     resolver: zodResolver(comandaSchema),
-    defaultValues: { mesa: '', cliente_nome: '', cliente_telefone: '', cliente_cpf: '' }
+    defaultValues: { mesa: '', cliente_nome: '' }
   });
 
   const onSubmit = async (values: ComandaFormValues) => {
-    if (!store?.id) return;
     setIsSubmitting(true);
 
     try {
-      // Ao abrir, a comanda recebe status 'aberta' (regra de backend ou default)
-      const { data, error } = await supabase.rpc('abrir_comanda', {
-        p_store_id: store.id,
-        p_mesa: values.mesa,
-        p_cliente_nome: values.cliente_nome,
-        p_cliente_telefone: values.cliente_telefone || null,
-        p_cliente_cpf: values.cliente_cpf || null,
-      });
+      // REGRA DE OURO: Insert direto (via abrComanda no provider)
+      const comandaId = await abrirComanda(values.mesa, values.cliente_nome);
 
-      if (error) throw error;
-
-      let comandaId = null;
-      if (typeof data === 'string') {
-        comandaId = data;
-      } else if (data && typeof data === 'object') {
-        comandaId = (data as any).comanda_id || (data as any).id;
-      }
-      
-      if (comandaId && comandaId !== 'undefined') {
-        toast({ title: 'Comanda Aberta!' });
+      if (comandaId) {
+        toast({ title: 'Atendimento Iniciado!', description: `Mesa ${values.mesa} aberta com sucesso.` });
         onOpenChange(false);
         form.reset();
         router.push(`/comandas/${comandaId}`);
-      } else {
-        onOpenChange(false);
-        form.reset();
-        if (onSuccess) onSuccess();
       }
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Erro ao abrir', description: err.message });
+      toast({ 
+        variant: 'destructive', 
+        title: 'Falha ao Abrir', 
+        description: err.message || 'Verifique sua conexão e tente novamente.' 
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -81,50 +61,57 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="text-2xl font-black font-headline uppercase tracking-tighter flex items-center gap-2">
-            <ClipboardList className="h-6 w-6 text-primary" /> Abrir Comanda
-          </DialogTitle>
-          <DialogDescription>Inicie um novo atendimento com status 'aberta'.</DialogDescription>
-        </DialogHeader>
+      <DialogContent className="sm:max-w-md p-0 overflow-hidden rounded-[32px] border-none shadow-2xl">
+        <div className="bg-primary/5 pt-10 pb-6 px-8 text-center border-b border-primary/10">
+          <div className="mx-auto h-12 w-12 rounded-2xl bg-white flex items-center justify-center shadow-sm border border-primary/10 mb-4">
+            <ClipboardList className="h-6 w-6 text-primary" />
+          </div>
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black font-headline uppercase tracking-tighter text-center">Abrir Comanda</DialogTitle>
+            <DialogDescription className="text-center font-medium text-sm">Inicie um novo atendimento de mesa ou balcão.</DialogDescription>
+          </DialogHeader>
+        </div>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 py-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 p-8 bg-background">
             <FormField
               control={form.control}
               name="mesa"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Mesa *</FormLabel>
-                  <FormControl><Input placeholder="Ex: 10" {...field} className="h-12 font-bold" /></FormControl>
-                  <FormMessage />
+                  <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Identificação (Mesa/Local) *</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Ex: 15 ou Balcão" {...field} className="h-12 font-bold focus-visible:ring-primary/20" autoFocus />
+                  </FormControl>
+                  <FormMessage className="font-bold" />
                 </FormItem>
               )}
             />
 
-            <div className="border-t pt-4 space-y-4">
-              <h4 className="text-[10px] font-black uppercase tracking-widest text-primary flex items-center gap-2">
-                <UserPlus className="h-3 w-3" /> Identificação
-              </h4>
-              
-              <FormField
-                control={form.control}
-                name="cliente_nome"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-[10px] font-bold uppercase">Nome *</FormLabel>
-                    <FormControl><Input placeholder="Nome do cliente" {...field} className="h-11" /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+            <FormField
+              control={form.control}
+              name="cliente_nome"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nome do Cliente *</FormLabel>
+                  <FormControl>
+                    <div className="relative">
+                      <Input placeholder="Como devemos chamar o cliente?" {...field} className="h-12 pl-10 font-bold" />
+                      <UserPlus className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    </div>
+                  </FormControl>
+                  <FormMessage className="font-bold" />
+                </FormItem>
+              )}
+            />
 
-            <DialogFooter>
-              <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
-              <Button type="submit" disabled={isSubmitting} className="h-12 font-black uppercase tracking-widest">
-                {isSubmitting ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : 'Abrir Atendimento'}
+            <DialogFooter className="pt-4 gap-3 sm:flex-row-reverse">
+              <Button type="submit" disabled={isSubmitting} className="flex-1 h-12 font-black uppercase text-[11px] tracking-widest shadow-lg shadow-primary/20">
+                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Abrir Atendimento
+              </Button>
+              <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} className="flex-1 h-12 font-black uppercase text-[11px] tracking-widest">
+                Cancelar
               </Button>
             </DialogFooter>
           </form>

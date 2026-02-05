@@ -3,6 +3,7 @@
 /**
  * @fileOverview AuthProvider - Fonte Única da Verdade para o Frontend.
  * Sincronizado com a arquitetura order_items e RPCs transacionais.
+ * Versão: 2.0 (Estabilizada - Opção 01)
  */
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -17,7 +18,7 @@ import type {
   Customer,
   User,
   ComandaTotalView,
-  PainelProducaoView
+  OrderItem
 } from '@/lib/types';
 
 type AuthContextType = {
@@ -34,11 +35,12 @@ type AuthContextType = {
   refreshStatus: () => Promise<void>;
   createStore: (storeData: any) => Promise<void>;
   
-  // Novas RPCs Transacionais
-  abrirComanda: (mesa: string, cliente: string) => Promise<string>;
+  // RPCs Transacionais (Arquitetura order_items)
+  abrirComanda: (mesa: string, cliente: string, telefone?: string, cpf?: string) => Promise<string>;
   adicionarItem: (comandaId: string, productId: string, quantity: number) => Promise<void>;
   fecharComanda: (comandaId: string, paymentMethodId: string) => Promise<void>;
   marcarItemConcluido: (itemId: string) => Promise<void>;
+  addSale: (cart: CartItem[], paymentMethod: string) => Promise<Sale | null>;
   
   logout: () => Promise<void>;
 };
@@ -73,7 +75,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           supabase.from('v_comandas_totais').select('*').eq('store_id', storeId).neq('status', 'fechada'),
           supabase.from('customers').select('*').eq('store_id', storeId).order('name'),
           supabase.rpc('get_store_access_status', { p_store_id: storeId }),
-          supabase.from('sales').select('*, items:order_items(*)').eq('store_id', storeId).order('created_at', { ascending: false }).limit(50),
+          supabase.from('sales').select('*').eq('store_id', storeId).order('created_at', { ascending: false }).limit(50),
           supabase.from('cash_registers').select('*').eq('store_id', storeId).order('opened_at', { ascending: false })
         ]);
 
@@ -109,41 +111,84 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, [fetchAppData]);
 
-  // IMPLEMENTAÇÃO DAS RPCs TRANSACIONAIS DESCRITAS NA ARQUITETURA
-  
-  const abrirComanda = async (mesa: string, cliente: string) => {
-    if (!store?.id) throw new Error('Loja não identificada.');
-    const { data, error } = await supabase.rpc('abrir_comanda', {
-      p_store_id: store.id,
-      p_mesa: mesa,
-      p_cliente_nome: cliente
-    });
+  // 1. ABRIR COMANDA (INSERT DIRETO)
+  const abrirComanda = async (mesa: string, cliente: string, telefone?: string, cpf?: string) => {
+    if (!store?.id) throw new Error('Contexto de loja ausente.');
+    
+    const { data, error } = await supabase
+      .from('comandas')
+      .insert({
+        store_id: store.id,
+        mesa: mesa,
+        cliente_nome: cliente,
+        status: 'open' // Status padrão no banco
+      })
+      .select('id')
+      .single();
+
     if (error) throw error;
     await refreshStatus();
-    return data;
+    return data.id;
   };
 
+  // 2. ADICIONAR ITEM (RPC TRANSACIONAL)
   const adicionarItem = async (comandaId: string, productId: string, quantity: number) => {
-    // Agora chama a RPC que gerencia order_items
     const { error } = await supabase.rpc('rpc_add_item_to_comanda', {
       p_comanda_id: comandaId,
       p_product_id: productId,
       p_quantity: quantity
     });
+    
     if (error) throw error;
     await refreshStatus();
   };
 
+  // 3. FECHAR COMANDA (RPC ATÔMICA)
   const fecharComanda = async (comandaId: string, paymentMethodId: string) => {
-    // Operação ATÔMICA de fechamento e conversão para venda
+    // Busca o caixa aberto atual
+    const cashRegister = cashRegisters.find(cr => !cr.closed_at);
+    
     const { error } = await supabase.rpc('rpc_close_comanda_to_sale', {
       p_comanda_id: comandaId,
-      p_payment_method_id: paymentMethodId
+      p_payment_method_id: paymentMethodId,
+      p_cash_register_id: cashRegister?.id || null
     });
+
     if (error) throw error;
     await refreshStatus();
   };
 
+  // 4. PDV RÁPIDO (FLUXO HÍBRIDO)
+  const addSale = async (cart: CartItem[], paymentMethod: string) => {
+    if (!store?.id) throw new Error('Loja não identificada.');
+
+    try {
+      // Abre uma comanda temporária para o PDV
+      const comandaId = await abrirComanda('Balcão', 'Consumidor');
+
+      // Lança os itens
+      for (const item of cart) {
+        await adicionarItem(comandaId, item.product_id, item.qty);
+      }
+
+      // Fecha e fatura
+      await fecharComanda(comandaId, paymentMethod);
+      
+      // Retorna o registro de venda mais recente
+      const { data: lastSale } = await supabase
+        .from('sales')
+        .select('*, items:order_items(*)')
+        .eq('comanda_id', comandaId)
+        .single();
+
+      return lastSale as Sale;
+    } catch (err: any) {
+      console.error('[PDV_SALE_FATAL]', err);
+      throw err;
+    }
+  };
+
+  // 5. CONCLUIR ITEM NO KDS/BDS
   const marcarItemConcluido = async (itemId: string) => {
     const { error } = await supabase.rpc('rpc_mark_order_item_done', {
       p_item_id: itemId
@@ -166,7 +211,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider value={{ 
       user, store, accessStatus, products, comandas, customers, sales, cashRegisters, storeStatus,
-      refreshStatus, createStore, abrirComanda, adicionarItem, fecharComanda, marcarItemConcluido, logout 
+      refreshStatus, createStore, abrirComanda, adicionarItem, fecharComanda, marcarItemConcluido, addSale, logout 
     }}>
       {children}
     </AuthContext.Provider>
