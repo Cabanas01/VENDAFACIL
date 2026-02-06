@@ -27,7 +27,7 @@ export default function BarPage() {
   const fetchPedidos = useCallback(async () => {
     if (!store?.id) return;
     
-    // Busca itens pendentes destinados ao bar
+    // Busca itens pendentes destinados ao bar.
     const { data, error } = await supabase
       .from('v_painel_bar')
       .select('*')
@@ -54,7 +54,6 @@ export default function BarPage() {
     try {
       await marcarItemConcluido(itemId);
       toast({ title: 'Bebida Servida!' });
-      await fetchPedidos();
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Erro ao concluir', description: err.message });
     }
@@ -78,7 +77,7 @@ export default function BarPage() {
 
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
         {pedidos.map(p => (
-          <Card key={p.item_id} className="border-none shadow-xl overflow-hidden bg-background animate-in zoom-in-95">
+          <Card key={p.item_id} className="border-none shadow-xl overflow-hidden bg-background animate-in zoom-in-95 duration-300">
             <div className="px-6 py-4 flex justify-between items-center border-b bg-cyan-500/5 border-cyan-500/10">
               <div className="flex flex-col">
                 <span className="text-xl font-black font-headline uppercase leading-none">Mesa {p.mesa || 'Balcão'}</span>
@@ -97,7 +96,7 @@ export default function BarPage() {
                 </div>
               </div>
               <Button 
-                className="w-full h-16 font-black uppercase text-xs tracking-widest bg-cyan-600 hover:bg-cyan-700 shadow-xl shadow-cyan-600/20" 
+                className="w-full h-16 font-black uppercase text-xs tracking-widest bg-cyan-600 hover:bg-cyan-700 shadow-xl shadow-cyan-600/20 transition-all active:scale-95" 
                 onClick={() => handleConcluir(p.item_id)}
               >
                 <CheckCircle2 className="mr-2 h-5 w-5" /> Entregar Bebida

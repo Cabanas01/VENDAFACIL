@@ -32,11 +32,12 @@ export async function processSaleAction(
     if (cmdErr) throw cmdErr;
 
     // 2. Lançar itens via RPC (O banco resolve unit_price e line_total)
+    // Força conversão para numeric para evitar ambiguidade de assinatura.
     for (const item of cart) {
       const { error: itemErr } = await supabaseAdmin.rpc('rpc_add_item_to_comanda', {
         p_comanda_id: comanda.id,
         p_product_id: item.product_id,
-        p_quantity: Number(item.qty),
+        p_quantity: parseFloat(item.qty.toString()),
         p_unit_price: null
       });
       if (itemErr) throw itemErr;

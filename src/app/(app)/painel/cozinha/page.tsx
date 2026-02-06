@@ -27,7 +27,7 @@ export default function CozinhaPage() {
   const fetchPedidos = useCallback(async () => {
     if (!store?.id) return;
     
-    // Busca itens pendentes destinados à cozinha
+    // Busca itens pendentes destinados à cozinha. REGRA: Status pending apenas.
     const { data, error } = await supabase
       .from('v_painel_cozinha')
       .select('*')
@@ -54,8 +54,7 @@ export default function CozinhaPage() {
     try {
       await marcarItemConcluido(itemId);
       toast({ title: 'Pedido Concluído!' });
-      // O realtime atualizará a lista automaticamente, mas fazemos o fetch por segurança
-      await fetchPedidos();
+      // O realtime atualizará a lista automaticamente.
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Erro ao concluir', description: err.message });
     }
@@ -79,7 +78,7 @@ export default function CozinhaPage() {
 
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
         {pedidos.map(p => (
-          <Card key={p.item_id} className="border-none shadow-xl overflow-hidden bg-background animate-in zoom-in-95">
+          <Card key={p.item_id} className="border-none shadow-xl overflow-hidden bg-background animate-in zoom-in-95 duration-300">
             <div className="px-6 py-4 flex justify-between items-center border-b bg-muted/30">
               <div className="flex flex-col">
                 <span className="text-xl font-black font-headline uppercase leading-none">Mesa {p.mesa || 'Balcão'}</span>
@@ -98,7 +97,7 @@ export default function CozinhaPage() {
                 </div>
               </div>
               <Button 
-                className="w-full h-16 font-black uppercase text-xs tracking-widest shadow-xl shadow-primary/20" 
+                className="w-full h-16 font-black uppercase text-xs tracking-widest shadow-xl shadow-primary/20 transition-all active:scale-95" 
                 onClick={() => handleConcluir(p.item_id)}
               >
                 <CheckCircle2 className="mr-2 h-5 w-5" /> Confirmar Saída

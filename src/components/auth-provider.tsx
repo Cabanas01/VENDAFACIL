@@ -35,7 +35,7 @@ type AuthContextType = {
   createStore: (storeData: any) => Promise<void>;
   
   abrirComanda: (mesa: string, cliente: string) => Promise<string>;
-  adicionarItem: (comandaId: string, productId: string, quantity: number, priceOverride?: number) => Promise<void>;
+  adicionarItem: (comandaId: string, productId: string, quantity: number, priceOverrideCents?: number) => Promise<void>;
   fecharComanda: (comandaId: string, paymentMethodId: string) => Promise<void>;
   marcarItemConcluido: (itemId: string) => Promise<void>;
   addSale: (cart: CartItem[], paymentMethod: string) => Promise<Sale | null>;
@@ -130,14 +130,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return data.id;
   };
 
-  const adicionarItem = async (comandaId: string, productId: string, quantity: number, priceOverride?: number) => {
-    // Chamada RPC com os 4 parâmetros obrigatórios. 
-    // line_total NUNCA é enviado pois é gerado pelo banco.
+  const adicionarItem = async (comandaId: string, productId: string, quantity: number, priceOverrideCents?: number) => {
+    // REGRA DE OURO: SEMPRE envia os 4 parâmetros.
+    // p_quantity e p_unit_price forçados como numeric para evitar ambiguidade.
     const { error } = await supabase.rpc('rpc_add_item_to_comanda', {
       p_comanda_id: comandaId,
       p_product_id: productId,
-      p_quantity: Number(quantity),
-      p_unit_price: priceOverride || null
+      p_quantity: parseFloat(quantity.toString()),
+      p_unit_price: priceOverrideCents ? parseFloat(priceOverrideCents.toString()) : null
     });
 
     if (error) throw error;
@@ -147,7 +147,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fecharComanda = async (comandaId: string, paymentMethodId: string) => {
     const cashRegister = cashRegisters.find(cr => !cr.closed_at);
     
-    // Fechamento atômico via RPC. O banco calcula o total via line_total.
+    // REGRA DE OURO: Fechamento atômico delega soma ao banco.
     const { error } = await supabase.rpc('rpc_close_comanda_to_sale', {
       p_comanda_id: comandaId,
       p_payment_method_id: paymentMethodId,
@@ -182,7 +182,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const marcarItemConcluido = async (itemId: string) => {
-    // Uso exclusivo da RPC para atualizar status conforme check constraint
+    // REGRA DE OURO: Somente via RPC para respeitar check constraints.
     const { error } = await supabase.rpc('rpc_mark_order_item_done', { 
       p_item_id: itemId 
     });
