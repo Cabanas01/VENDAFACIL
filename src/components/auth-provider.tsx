@@ -4,7 +4,6 @@ import { createContext, useContext, useEffect, useState, useCallback } from 'rea
 import { supabase } from '@/lib/supabase/client';
 import { 
   getOpenSaleRpc, 
-  openSaleRpc, 
   addItemToSaleRpc, 
   closeSaleRpc, 
   markItemDoneRpc 
@@ -36,10 +35,9 @@ type AuthContextType = {
   refreshStatus: () => Promise<void>;
   createStore: (storeData: any) => Promise<void>;
   
-  // RPC Wrappers
-  getOpenSale: (tableNumber: number) => Promise<string | null>;
-  openSale: (tableNumber: number, customerName: string) => Promise<string>;
-  adicionarItem: (saleId: string, productId: string, quantity: number, destino: string) => Promise<void>;
+  // RPC Wrappers (Frontend delegation to Backend)
+  getOpenSale: (tableNumber: number) => Promise<string>;
+  adicionarItem: (saleId: string, productId: string, quantity: number) => Promise<void>;
   fecharVenda: (saleId: string, paymentMethodId: string) => Promise<void>;
   marcarItemConcluido: (itemId: string) => Promise<void>;
   addSaleBalcao: (cart: CartItem[], paymentMethod: string) => Promise<Sale | null>;
@@ -78,7 +76,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeId).eq('status', 'open').order('created_at', { ascending: true }),
           supabase.from('customers').select('*').eq('store_id', storeId).order('name'),
           supabase.rpc('get_store_access_status', { p_store_id: storeId }),
-          supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeId).eq('status', 'paid').order('created_at', { ascending: false }).limit(50),
+          supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeId).eq('status', 'closed').order('created_at', { ascending: false }).limit(50),
           supabase.from('cash_registers').select('*').eq('store_id', storeId).order('opened_at', { ascending: false }),
           supabase.from('production_snapshot').select('*').eq('store_id', storeId)
         ]);
@@ -116,21 +114,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, [fetchAppData]);
 
-  // --- RPC Wrappers ---
+  // --- RPC Wrappers (Fixed for Backend Alignment) ---
 
   const getOpenSale = async (tableNumber: number) => {
-    if (!store?.id) return null;
+    if (!store?.id) throw new Error('Unidade não identificada.');
     return getOpenSaleRpc(store.id, tableNumber);
   };
 
-  const openSale = async (tableNumber: number, customerName: string) => {
-    if (!store?.id) throw new Error('Loja não identificada.');
-    return openSaleRpc(store.id, tableNumber, customerName);
-  };
-
-  const adicionarItem = async (saleId: string, productId: string, quantity: number, destino: string) => {
-    await addItemToSaleRpc(saleId, productId, quantity, destino);
-    await refreshStatus();
+  const adicionarItem = async (saleId: string, productId: string, quantity: number) => {
+    await addItemToSaleRpc(saleId, productId, quantity);
+    // Não damos refresh aqui para evitar overhead em pedidos grandes, 
+    // a tela individual gerencia seu estado.
   };
 
   const fecharVenda = async (saleId: string, paymentMethodId: string) => {
@@ -144,31 +138,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const addSaleBalcao = async (cart: CartItem[], paymentMethod: string) => {
-    if (!store?.id) throw new Error('Loja não identificada.');
+    if (!store?.id) throw new Error('Unidade não identificada.');
     
     try {
-      // Busca mesa 0 (balcão)
-      let saleId = await getOpenSale(0);
+      // 1. Inicia/Recupera Atendimento Balcão (Mesa 0)
+      const saleId = await getOpenSale(0);
 
-      if (!saleId) {
-        saleId = await openSale(0, 'Consumidor Final');
-      }
-
+      // 2. Lança os itens sequencialmente via RPC (Banco calcula preços)
       for (const item of cart) {
-        await adicionarItem(saleId, item.product_id, item.qty, item.destino_preparo);
+        await adicionarItem(saleId, item.product_id, item.qty);
       }
 
+      // 3. Fecha a venda via RPC (Banco calcula total final)
       await fecharVenda(saleId, paymentMethod);
       
-      const { data: lastSale } = await supabase
+      // 4. Recupera objeto final para impressão
+      const { data: finalSale } = await supabase
         .from('sales')
         .select('*, items:sale_items(*)')
         .eq('id', saleId)
         .single();
         
-      return lastSale as Sale;
+      return finalSale as Sale;
     } catch (err: any) {
-      console.error('[PDV_BALCAO_ERROR]', err);
+      console.error('[PDV_BALCAO_FATAL]', err);
       throw err;
     }
   };
@@ -194,7 +187,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider value={{ 
       user, store, accessStatus, products, comandas, customers, sales, cashRegisters, productionQueue, storeStatus,
-      refreshStatus, createStore, getOpenSale, openSale, adicionarItem, fecharVenda, marcarItemConcluido, addSaleBalcao, logout 
+      refreshStatus, createStore, getOpenSale, adicionarItem, fecharVenda, marcarItemConcluido, addSaleBalcao, logout 
     }}>
       {children}
     </AuthContext.Provider>

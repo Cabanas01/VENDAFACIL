@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Loader2, ClipboardList, UserPlus } from 'lucide-react';
+import { Loader2, ClipboardList } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -15,7 +15,7 @@ import { useRouter } from 'next/navigation';
 
 const comandaSchema = z.object({
   mesa: z.coerce.number().int().min(1, 'Número da mesa inválido'),
-  cliente_nome: z.string().min(1, 'Nome do cliente é obrigatório'),
+  cliente_nome: z.string().optional(),
 });
 
 type ComandaFormValues = z.infer<typeof comandaSchema>;
@@ -25,7 +25,7 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
 }) {
-  const { getOpenSale, openSale, refreshStatus } = useAuth();
+  const { getOpenSale, refreshStatus } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -39,21 +39,21 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
     setIsSubmitting(true);
 
     try {
-      // Fluxo RPC Separado: Primeiro busca
-      let saleId = await getOpenSale(values.mesa);
+      /**
+       * O fluxo agora é simplificado: rpc_get_open_sale faz o find_or_create.
+       * O frontend não envia o customer_name para a RPC pois a assinatura do backend não possui este parâmetro.
+       */
+      const saleId = await getOpenSale(values.mesa);
 
-      if (!saleId) {
-        // Se não existe, cria
-        saleId = await openSale(values.mesa, values.cliente_nome);
-        toast({ title: 'Atendimento Iniciado!', description: `Mesa ${values.mesa} aberta com sucesso.` });
-      } else {
-        // Se já existe, apenas redireciona
-        toast({ title: 'Atendimento Localizado', description: `Redirecionando para a mesa ${values.mesa} já aberta.` });
-      }
+      toast({ 
+        title: 'Atendimento Iniciado!', 
+        description: `Mesa ${values.mesa} pronta para lançamento.` 
+      });
 
       onOpenChange(false);
       form.reset();
       if (onSuccess) await onSuccess();
+      
       router.push(`/comandas/${saleId}`);
     } catch (err: any) {
       toast({ 
@@ -75,7 +75,7 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
           </div>
           <DialogHeader>
             <DialogTitle className="text-2xl font-black font-headline uppercase tracking-tighter text-center">Abrir Comanda</DialogTitle>
-            <DialogDescription className="text-center font-medium text-sm">Inicie um novo atendimento de mesa ou balcão.</DialogDescription>
+            <DialogDescription className="text-center font-medium text-sm">Informe o número da mesa para iniciar.</DialogDescription>
           </DialogHeader>
         </div>
 
@@ -95,27 +95,10 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
               )}
             />
 
-            <FormField
-              control={form.control}
-              name="cliente_nome"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Identificação do Cliente *</FormLabel>
-                  <FormControl>
-                    <div className="relative">
-                      <Input placeholder="Nome do cliente" {...field} className="h-12 pl-10 font-bold" />
-                      <UserPlus className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    </div>
-                  </FormControl>
-                  <FormMessage className="font-bold" />
-                </FormItem>
-              )}
-            />
-
             <DialogFooter className="pt-4 gap-3 sm:flex-row-reverse">
               <Button type="submit" disabled={isSubmitting} className="flex-1 h-12 font-black uppercase text-[11px] tracking-widest shadow-lg shadow-primary/20">
                 {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                Abrir Atendimento
+                Acessar Mesa
               </Button>
               <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} className="flex-1 h-12 font-black uppercase text-[11px] tracking-widest">
                 Cancelar

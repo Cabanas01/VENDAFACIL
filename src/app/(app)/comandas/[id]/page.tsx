@@ -60,7 +60,7 @@ export default function ComandaDetailsPage() {
       setSale(saleRes.data as Sale);
       setItems(itemsRes.data || []);
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Erro', description: err.message });
+      toast({ variant: 'destructive', title: 'Erro de Sincronização', description: err.message });
     } finally {
       setLoading(false);
     }
@@ -68,6 +68,7 @@ export default function ComandaDetailsPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // Cálculo visual apenas para UI - O banco é a autoridade no fechamento
   const cartTotalDisplay = useMemo(() => 
     localCart.reduce((acc, i) => acc + (i.product.price_cents * i.qty), 0), 
   [localCart]);
@@ -77,15 +78,18 @@ export default function ComandaDetailsPage() {
     setIsSubmitting(true);
     try {
       for (const item of localCart) {
-        // Envia apenas o necessário. O banco resolve o preço via RPC.
-        await adicionarItem(id as string, item.product.id, item.qty, item.product.production_target);
+        /**
+         * REGRA DE OURO: rpc_add_item_to_sale recebe 3 params.
+         * O banco resolve o preço via tabela products.
+         */
+        await adicionarItem(id as string, item.product.id, item.qty);
       }
-      toast({ title: 'Pedido Lançado!' });
+      toast({ title: 'Pedido Lançado com Sucesso!' });
       setLocalCart([]);
       setIsAddingItems(false);
       await fetchData();
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Falha ao adicionar', description: err.message });
+      toast({ variant: 'destructive', title: 'Falha ao Lançar', description: err.message });
     } finally {
       setIsSubmitting(false);
     }
@@ -95,16 +99,23 @@ export default function ComandaDetailsPage() {
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
+      /**
+       * O faturamento é atômico no banco via rpc_close_sale.
+       */
       await fecharVenda(id as string, method);
+      
       toast({ title: 'Atendimento Concluído!' });
       
-      if (store && sale) {
-        printReceipt({ ...sale, items, payment_method: method } as Sale, store);
+      // Refresh total para garantir dados atualizados antes da impressão
+      const { data: updatedSale } = await supabase.from('sales').select('*').eq('id', id).single();
+      
+      if (store && updatedSale) {
+        printReceipt({ ...updatedSale, items, payment_method: method } as Sale, store);
       }
 
       router.push('/comandas');
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Erro no Pagamento', description: err.message });
+      toast({ variant: 'destructive', title: 'Erro ao Fechar Conta', description: err.message });
     } finally {
       setIsSubmitting(false);
     }
@@ -122,11 +133,11 @@ export default function ComandaDetailsPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <button onClick={() => router.push('/comandas')} className="h-12 w-12 rounded-full bg-white shadow-sm flex items-center justify-center hover:bg-slate-50 transition-colors"><ArrowLeft /></button>
-          <h1 className="text-4xl font-black font-headline uppercase tracking-tighter">Mesa {sale?.mesa || 'Balcão'}</h1>
+          <h1 className="text-4xl font-black font-headline uppercase tracking-tighter">Mesa {sale?.table_number}</h1>
           <Badge variant="outline" className="font-black uppercase border-primary/20 text-primary">Status: {sale?.status}</Badge>
         </div>
         <div className="text-right">
-          <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Saldo Atual</p>
+          <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Consumo Atual</p>
           <p className="text-4xl font-black text-primary tracking-tighter">{formatCurrency(sale?.total_cents || 0)}</p>
         </div>
       </div>
@@ -134,8 +145,8 @@ export default function ComandaDetailsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <Card className="lg:col-span-2 border-none shadow-sm overflow-hidden bg-background">
           <CardHeader className="bg-muted/10 border-b flex flex-row items-center justify-between py-4">
-            <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Itens Lançados</CardTitle>
-            <Button size="sm" className="font-black uppercase text-[10px] h-9" onClick={() => setIsAddingItems(true)}>+ Novo Pedido</Button>
+            <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Extrato de Itens</CardTitle>
+            <Button size="sm" className="font-black uppercase text-[10px] h-9 shadow-lg shadow-primary/10" onClick={() => setIsAddingItems(true)}>+ Adicionar Itens</Button>
           </CardHeader>
           <Table>
             <TableHeader>
@@ -150,8 +161,8 @@ export default function ComandaDetailsPage() {
                 <TableRow key={item.id} className="hover:bg-muted/5 transition-colors">
                   <TableCell className="px-6">
                     <div className="flex flex-col">
-                      <span className="font-bold text-xs uppercase tracking-tight">{item.product_name_snapshot || 'Produto'}</span>
-                      <span className="text-[9px] text-muted-foreground font-black uppercase">{item.status}</span>
+                      <span className="font-bold text-xs uppercase tracking-tight">{item.product_name_snapshot || 'Item'}</span>
+                      <span className="text-[9px] text-muted-foreground font-black uppercase">{formatCurrency(item.unit_price)} / un</span>
                     </div>
                   </TableCell>
                   <TableCell className="text-center font-black text-xs">x{item.quantity}</TableCell>
@@ -162,7 +173,7 @@ export default function ComandaDetailsPage() {
               ))}
               {items.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={3} className="text-center py-12 text-muted-foreground font-black uppercase text-[10px] tracking-widest opacity-40">Nenhum item lançado</TableCell>
+                  <TableCell colSpan={3} className="text-center py-12 text-muted-foreground font-black uppercase text-[10px] tracking-widest opacity-40">Nenhum item lançado ainda</TableCell>
                 </TableRow>
               )}
             </TableBody>
@@ -171,7 +182,7 @@ export default function ComandaDetailsPage() {
 
         <Card className="border-primary/20 bg-primary/5 shadow-2xl h-fit rounded-[32px] overflow-hidden">
           <CardHeader className="text-center py-10 bg-primary/10">
-            <CardTitle className="text-[10px] font-black uppercase tracking-[0.3em] text-primary">Concluir Conta</CardTitle>
+            <CardTitle className="text-[10px] font-black uppercase tracking-[0.3em] text-primary">Saldo a Pagar</CardTitle>
             <p className="text-5xl font-black tracking-tighter mt-3 text-slate-900">{formatCurrency(sale?.total_cents || 0)}</p>
           </CardHeader>
           <CardContent className="p-8">
@@ -180,7 +191,7 @@ export default function ComandaDetailsPage() {
               onClick={() => setIsClosing(true)} 
               disabled={!sale || sale.total_cents <= 0}
             >
-              <CheckCircle2 className="mr-3 h-6 w-6" /> Fechar Atendimento
+              <CheckCircle2 className="mr-3 h-6 w-6" /> Finalizar Conta
             </Button>
           </CardContent>
         </Card>
@@ -193,7 +204,7 @@ export default function ComandaDetailsPage() {
               <div className="p-6 border-b bg-muted/5 flex items-center gap-4">
                 <Search className="text-muted-foreground h-5 w-5" />
                 <Input 
-                  placeholder="Buscar produto..." 
+                  placeholder="Pesquisar no catálogo..." 
                   className="h-14 bg-slate-50 border-none rounded-2xl shadow-inner text-lg" 
                   value={search} 
                   onChange={e => setSearch(e.target.value)} 
@@ -239,11 +250,11 @@ export default function ComandaDetailsPage() {
               </ScrollArea>
               <div className="p-6 border-t bg-white space-y-4">
                 <div className="flex justify-between items-center px-2">
-                  <span className="text-[9px] font-black uppercase text-muted-foreground">Total Local</span>
+                  <span className="text-[9px] font-black uppercase text-muted-foreground">Subtotal Local</span>
                   <span className="font-black text-primary">{formatCurrency(cartTotalDisplay)}</span>
                 </div>
                 <Button className="w-full h-16 font-black uppercase text-xs tracking-widest rounded-2xl shadow-lg shadow-primary/20" disabled={localCart.length === 0 || isSubmitting} onClick={handleAddItemsFinal}>
-                  {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Lançar no Pedido'}
+                  {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar Pedido'}
                 </Button>
               </div>
             </div>
@@ -255,8 +266,8 @@ export default function ComandaDetailsPage() {
         <DialogContent className="sm:max-w-md p-0 overflow-hidden rounded-[40px] border-none shadow-2xl">
           <div className="p-10 bg-slate-900 text-white text-center relative">
             <button onClick={() => setIsClosing(false)} className="absolute right-6 top-6 h-10 w-10 rounded-full bg-white/10 flex items-center justify-center"><X className="h-5 w-5" /></button>
-            <DialogTitle className="text-2xl font-black uppercase tracking-tighter">Finalizar Pagamento</DialogTitle>
-            <DialogDescription className="text-white/40 uppercase font-bold text-[10px] mt-2 tracking-widest">Mesa {sale?.mesa} • Total: {formatCurrency(sale?.total_cents || 0)}</DialogDescription>
+            <DialogTitle className="text-2xl font-black uppercase tracking-tighter">Forma de Pagamento</DialogTitle>
+            <DialogDescription className="text-white/40 uppercase font-bold text-[10px] mt-2 tracking-widest">Mesa {sale?.table_number} • Total: {formatCurrency(sale?.total_cents || 0)}</DialogDescription>
           </div>
           <div className="p-10 space-y-4 bg-white">
             <Button variant="outline" className="w-full h-24 justify-start gap-8 border-none bg-slate-50 hover:bg-slate-100 rounded-[32px] px-10 transition-all" onClick={() => handleFinalize('cash')}>
