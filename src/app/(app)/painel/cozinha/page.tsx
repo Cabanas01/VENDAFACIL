@@ -1,9 +1,8 @@
-
 'use client';
 
 /**
  * @fileOverview Painel Cozinha (KDS).
- * Utiliza rpc_mark_order_item_done para garantir que itens concluídos saiam da fila de forma atômica.
+ * Filtra por status = 'pending' e utiliza rpc_mark_order_item_done.
  */
 
 import { useEffect, useState, useCallback } from 'react';
@@ -28,10 +27,12 @@ export default function CozinhaPage() {
   const fetchPedidos = useCallback(async () => {
     if (!store?.id) return;
     
+    // ✅ Regra: Buscar apenas itens pendentes para evitar duplicidade
     const { data, error } = await supabase
       .from('v_painel_cozinha')
       .select('*')
-      .eq('store_id', store.id);
+      .eq('store_id', store.id)
+      .eq('status', 'pending');
 
     if (!error) {
       setPedidos(data || []);
@@ -51,11 +52,9 @@ export default function CozinhaPage() {
 
   const handleConcluir = async (itemId: string) => {
     if (!itemId) return;
-    
     try {
-      // ✅ Chamada correta passando o ID do item
       await marcarItemConcluido(itemId);
-      toast({ title: 'Pedido Concluído!', description: 'Item enviado para a mesa.' });
+      toast({ title: 'Pedido Concluído!' });
       await fetchPedidos();
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Erro ao concluir', description: err.message });
@@ -72,9 +71,9 @@ export default function CozinhaPage() {
   return (
     <div className="space-y-10 animate-in fade-in duration-500">
       <div className="flex items-center justify-between">
-        <PageHeader title="Cozinha (KDS)" subtitle="Monitor de produção acelerada." />
+        <PageHeader title="Cozinha (KDS)" subtitle="Monitor de produção em tempo real." />
         <Badge variant="outline" className="h-10 px-4 gap-2 font-black uppercase text-xs border-primary/20 bg-primary/5 text-primary">
-          <ChefHat className="h-4 w-4" /> {pedidos.length} Pedidos Pendentes
+          <ChefHat className="h-4 w-4 text-primary" /> {pedidos.length} Pedidos
         </Badge>
       </div>
 
@@ -94,13 +93,12 @@ export default function CozinhaPage() {
             <CardContent className="p-8 space-y-6">
               <div className="flex justify-between items-start">
                 <p className="text-3xl font-black leading-tight uppercase tracking-tight">{p.produto}</p>
-                <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center text-4xl font-black text-primary border border-primary/10">
+                <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center text-4xl font-black text-primary border border-primary/10 shadow-inner">
                   {p.qty}
                 </div>
               </div>
-              
               <Button 
-                className="w-full h-16 font-black uppercase text-xs tracking-widest shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all" 
+                className="w-full h-16 font-black uppercase text-xs tracking-widest shadow-xl shadow-primary/20" 
                 onClick={() => handleConcluir(p.item_id)}
               >
                 <CheckCircle2 className="mr-2 h-5 w-5" /> Confirmar Saída

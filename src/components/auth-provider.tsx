@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * @fileOverview AuthProvider - Sincronizado com a Regra de Ouro.
- * Autoridade máxima financeira delegada ao PostgreSQL via RPCs.
+ * @fileOverview AuthProvider - Sincronizado com o Contrato RPC Final.
+ * Autoridade máxima financeira delegada ao PostgreSQL.
  */
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -130,13 +130,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const adicionarItem = async (comandaId: string, productId: string, quantity: number) => {
-    // ✅ Regra de Ouro: Passar os 4 parâmetros para rpc_add_item_to_comanda
-    // O banco resolve store_id, unit_price (se null) e destino_preparo.
+    // ✅ Regra: Parâmetros numéricos forçados e preço delegado ao banco (null)
     const { error } = await supabase.rpc('rpc_add_item_to_comanda', {
       p_comanda_id: comandaId,
       p_product_id: productId,
       p_quantity: parseFloat(quantity.toString()),
-      p_unit_price: null // Permite que o banco use o preço do cadastro
+      p_unit_price: null
     });
 
     if (error) {
@@ -149,7 +148,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fecharComanda = async (comandaId: string, paymentMethodId: string) => {
     const cashRegister = cashRegisters.find(cr => !cr.closed_at);
     
-    // ✅ Regra de Ouro: Delega fechamento total para a RPC rpc_close_comanda_to_sale
+    // ✅ Regra: Fechamento atômico via RPC. O banco soma o line_total.
     const { error } = await supabase.rpc('rpc_close_comanda_to_sale', {
       p_comanda_id: comandaId,
       p_payment_method_id: paymentMethodId,
@@ -163,7 +162,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const addSale = async (cart: CartItem[], paymentMethod: string) => {
     if (!store?.id) throw new Error('Loja não identificada.');
     try {
-      // Fluxo PDV: Comanda 0 -> Lança Itens -> Fecha Venda
+      // Fluxo PDV Direto: Abre Comanda '0' -> Lança Itens -> Fecha Venda
       const comandaId = await abrirComanda('0', 'Consumidor Final');
       for (const item of cart) {
         await adicionarItem(comandaId, item.product_id, item.qty);
@@ -184,7 +183,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const marcarItemConcluido = async (itemId: string) => {
-    // ✅ Regra de Ouro: Passar p_item_id conforme assinatura da RPC
     const { error } = await supabase.rpc('rpc_mark_order_item_done', { 
       p_item_id: itemId 
     });

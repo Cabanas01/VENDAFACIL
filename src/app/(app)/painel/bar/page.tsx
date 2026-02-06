@@ -1,10 +1,8 @@
-
 'use client';
 
 /**
  * @fileOverview Painel Bar (BDS).
- * Consome estritamente a tabela order_items via View v_painel_bar.
- * Utiliza rpc_mark_order_item_done para garantir sincronia total.
+ * Filtra por status = 'pending' e utiliza rpc_mark_order_item_done.
  */
 
 import { useEffect, useState, useCallback } from 'react';
@@ -29,10 +27,12 @@ export default function BarPage() {
   const fetchPedidos = useCallback(async () => {
     if (!store?.id) return;
     
+    // ✅ Regra: Buscar apenas itens pendentes
     const { data, error } = await supabase
       .from('v_painel_bar')
       .select('*')
-      .eq('store_id', store.id);
+      .eq('store_id', store.id)
+      .eq('status', 'pending');
 
     if (!error) {
       setPedidos(data || []);
@@ -52,11 +52,9 @@ export default function BarPage() {
 
   const handleConcluir = async (itemId: string) => {
     if (!itemId) return;
-
     try {
-      // ✅ Chamada correta passando o ID do item
       await marcarItemConcluido(itemId);
-      toast({ title: 'Bebida Servida!', description: 'Item removido da fila do bar.' });
+      toast({ title: 'Bebida Servida!' });
       await fetchPedidos();
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Erro ao concluir', description: err.message });
@@ -75,7 +73,7 @@ export default function BarPage() {
       <div className="flex items-center justify-between">
         <PageHeader title="Bar (BDS)" subtitle="Monitor de bebidas e drinks." />
         <Badge variant="outline" className="h-10 px-4 gap-2 font-black uppercase text-xs border-cyan-200 bg-cyan-50 text-cyan-600">
-          <GlassWater className="h-4 w-4" /> {pedidos.length} Bebidas Pendentes
+          <GlassWater className="h-4 w-4 text-cyan-600" /> {pedidos.length} Bebidas
         </Badge>
       </div>
 
@@ -99,7 +97,6 @@ export default function BarPage() {
                   {p.qty}
                 </div>
               </div>
-              
               <Button 
                 className="w-full h-16 font-black uppercase text-xs tracking-widest bg-cyan-600 hover:bg-cyan-700 shadow-xl shadow-cyan-600/20" 
                 onClick={() => handleConcluir(p.item_id)}

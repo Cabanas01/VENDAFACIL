@@ -2,7 +2,7 @@
 
 /**
  * @fileOverview Gestão de Comanda Individual (PDV Operacional).
- * Sincronizado com o Contrato RPC: p_unit_price é enviado como null.
+ * Sincronizado com Contrato RPC Final: Frontend não calcula faturamento.
  */
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
@@ -72,6 +72,7 @@ export default function ComandaDetailsPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // ✅ Regra: Cálculo de total do carrinho local usa price_cents
   const cartTotalDisplay = useMemo(() => 
     localCart.reduce((acc, i) => acc + (i.product.price_cents * i.qty), 0), 
   [localCart]);
@@ -81,7 +82,6 @@ export default function ComandaDetailsPage() {
     setIsSubmitting(true);
     try {
       for (const item of localCart) {
-        // ✅ Contrato RPC: enviar unit_price como null para o banco buscar o atual
         await adicionarItem(id as string, item.product.id, item.qty);
       }
       toast({ title: 'Pedido Lançado!' });
@@ -123,7 +123,7 @@ export default function ComandaDetailsPage() {
         <div className="flex items-center gap-4">
           <button onClick={() => router.push('/comandas')} className="h-12 w-12 rounded-full bg-white shadow-sm flex items-center justify-center hover:bg-slate-50 transition-colors"><ArrowLeft /></button>
           <h1 className="text-4xl font-black font-headline uppercase tracking-tighter">Comanda #{comanda?.numero}</h1>
-          <Badge variant="outline" className="font-black uppercase border-primary/20 text-primary">{comanda?.status}</Badge>
+          <Badge variant="outline" className="font-black uppercase border-primary/20 text-primary">Status: {comanda?.status}</Badge>
         </div>
         <div className="text-right">
           <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Saldo da Conta</p>
@@ -255,7 +255,7 @@ export default function ComandaDetailsPage() {
             <DialogDescription className="text-white/40 uppercase font-bold text-[10px] mt-2 tracking-widest">Saldo Devedor: {formatCurrency(comanda?.total_cents || 0)}</DialogDescription>
           </div>
           <div className="p-10 space-y-4 bg-white">
-            <Button variant="outline" className="w-full h-24 justify-start gap-8 border-none bg-slate-50 hover:bg-slate-100 rounded-[32px] px-10 transition-all group" onClick={() => handleFinalize('dinheiro')}>
+            <Button variant="outline" className="w-full h-24 justify-start gap-8 border-none bg-slate-50 hover:bg-slate-100 rounded-[32px] px-10 transition-all group" onClick={() => handleFinalize('cash')}>
               <div className="h-14 w-14 rounded-full bg-green-100 flex items-center justify-center shadow-inner group-active:scale-95 transition-transform"><CircleDollarSign className="text-green-600 h-7 w-7" /></div>
               <span className="font-black uppercase text-xs tracking-[0.2em]">Dinheiro / Troco</span>
             </Button>
@@ -263,7 +263,7 @@ export default function ComandaDetailsPage() {
               <div className="h-14 w-14 rounded-full bg-white/20 flex items-center justify-center shadow-inner group-active:scale-95 transition-transform"><QrCode className="text-white h-7 w-7" /></div>
               <span className="font-black uppercase text-xs tracking-[0.2em]">PIX QR Code</span>
             </Button>
-            <Button variant="outline" className="w-full h-24 justify-start gap-8 border-none bg-slate-50 hover:bg-slate-100 rounded-[32px] px-10 transition-all group" onClick={() => handleFinalize('credito')}>
+            <Button variant="outline" className="w-full h-24 justify-start gap-8 border-none bg-slate-50 hover:bg-slate-100 rounded-[32px] px-10 transition-all group" onClick={() => handleFinalize('card')}>
               <div className="h-14 w-14 rounded-full bg-blue-100 flex items-center justify-center shadow-inner group-active:scale-95 transition-transform"><CreditCard className="text-blue-600 h-7 w-7" /></div>
               <span className="font-black uppercase text-xs tracking-[0.2em]">Cartão Crédito</span>
             </Button>
