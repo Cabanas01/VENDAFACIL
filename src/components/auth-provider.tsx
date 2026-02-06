@@ -125,14 +125,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const adicionarItem = async (comandaId: string, productId: string, quantity: number) => {
-    const product = products.find(p => p.id === productId);
-    if (!product) throw new Error('Produto não encontrado.');
-
+    // ✅ Versão CORRETA (FINAL): Remove p_unit_price e deixa o banco gerir
     const { error } = await supabase.rpc('rpc_add_item_to_comanda', {
       p_comanda_id: comandaId,
       p_product_id: productId,
-      p_quantity: parseFloat(quantity.toString()),
-      p_unit_price: parseFloat(product.price_cents.toString())
+      p_quantity: parseFloat(quantity.toString())
     });
 
     if (error) throw error;
@@ -176,16 +173,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const marcarItemConcluido = async (itemId: string) => {
     if (!itemId) throw new Error('ID do item é obrigatório para conclusão.');
-    
-    // ✅ CORREÇÃO: Enviando o parâmetro com a chave correta para a RPC
     const { error } = await supabase.rpc('rpc_mark_order_item_done', { 
       p_item_id: itemId 
     });
-
-    if (error) {
-      console.error('[KDS_MARK_DONE_ERROR]', error);
-      throw error;
-    }
+    if (error) throw error;
     await refreshStatus();
   };
 

@@ -41,13 +41,12 @@ export async function processSaleAction(
 
     if (cmdErr) throw cmdErr;
 
-    // 2. Lançar itens via RPC (Garante line_total correto e FORÇA numeric)
+    // 2. Lançar itens via RPC (Garante line_total correto e delega unit_price ao banco)
     for (const item of cart) {
       const { error: itemErr } = await supabaseAdmin.rpc('rpc_add_item_to_comanda', {
         p_comanda_id: comanda.id,
         p_product_id: item.product_id,
-        p_quantity: parseFloat(item.qty.toString()),
-        p_unit_price: parseFloat(item.unit_price_cents.toString())
+        p_quantity: parseFloat(item.qty.toString())
       });
       if (itemErr) throw itemErr;
     }

@@ -1,27 +1,25 @@
+
 import { supabase } from '@/lib/supabase/client';
 
 /**
  * REGRA DE OURO: NUNCA faz insert direto em order_items. 
- * SEMPRE usa RPC para respeitar a coluna gerada line_total.
+ * SEMPRE usa RPC para respeitar a coluna gerada line_total e delegar unit_price ao banco.
  */
 export async function addComandaItemById({
   comandaId,
   productId,
   qty,
-  unitPrice,
 }: {
   comandaId: string;
   productId: string;
   qty: number;
-  unitPrice: number;
 }) {
   if (!comandaId || !productId) throw new Error('IDs obrigatórios ausentes');
 
   const { error } = await supabase.rpc('rpc_add_item_to_comanda', {
     p_comanda_id: comandaId,
     p_product_id: productId,
-    p_quantity: qty,
-    p_unit_price: unitPrice
+    p_quantity: parseFloat(qty.toString())
   });
 
   if (error) throw error;
@@ -35,13 +33,11 @@ export async function addComandaItemByNumero({
   numeroComanda,
   productId,
   qty,
-  unitPrice,
 }: {
   storeId: string;
   numeroComanda: string;
   productId: string;
   qty: number;
-  unitPrice: number;
 }) {
   const { data: openComanda } = await supabase
     .from('comandas')
@@ -71,8 +67,7 @@ export async function addComandaItemByNumero({
   await addComandaItemById({
     comandaId,
     productId,
-    qty,
-    unitPrice
+    qty
   });
   
   return comandaId;
