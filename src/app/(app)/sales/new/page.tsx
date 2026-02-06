@@ -2,7 +2,7 @@
 
 /**
  * @fileOverview Frente de Caixa (PDV Balcão).
- * Alinhado ao contrato v5.3: PDV = Mesa 0.
+ * Alinhado ao contrato v5.3: PDV = Mesa 0 via rpc_get_or_create_open_comanda.
  */
 
 import { useState, useMemo } from 'react';
@@ -86,15 +86,15 @@ export default function NewSalePDVPage() {
     
     setIsSubmitting(true);
     try {
-      // 1. Obtém/Cria Comanda Balcão (Mesa 0)
+      // 1. Obtém/Cria Comanda Balcão (Mesa 0) - Literal RPC v5.3
       const comandaId = await getOrCreateComanda(0, customerName || 'Consumidor Balcão');
       
-      // 2. Lança Itens via RPC Atômica
+      // 2. Lança Itens via RPC Atômica (Com cast Number())
       for (const item of cart) {
-        await adicionarItem(comandaId, item.product_id, item.qty);
+        await adicionarItem(comandaId, item.product_id, Number(item.qty));
       }
       
-      // 3. Finaliza via RPC
+      // 3. Finaliza via RPC (Faturamento Atômico no Banco)
       await finalizarAtendimento(comandaId, method);
       
       toast({ title: 'Venda Finalizada!', description: `Total: ${formatCurrency(cartTotalDisplay)}` });

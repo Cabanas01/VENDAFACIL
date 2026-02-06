@@ -26,7 +26,7 @@ type AuthContextType = {
   refreshStatus: () => Promise<void>;
   createStore: (storeData: any) => Promise<void>;
   
-  // Interface do Provedor sincronizada com ComandaService
+  // Interface do Provedor sincronizada com ComandaService v5.3
   getOrCreateComanda: (tableNumber: number, customerName: string | null) => Promise<string>;
   adicionarItem: (comandaId: string, productId: string, quantity: number) => Promise<void>;
   finalizarAtendimento: (comandaId: string, paymentMethod: 'dinheiro' | 'pix' | 'cartao') => Promise<void>;
@@ -59,6 +59,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (storeId) {
+        // Leitura via Selects protegidos por RLS (Sem mutação REST)
         const [storeRes, prodRes, cmdRes, custRes, accessRes, cashRes] = await Promise.all([
           supabase.from('stores').select('*').eq('id', storeId).single(),
           supabase.from('products').select('*').eq('store_id', storeId).order('name'),
@@ -104,7 +105,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const adicionarItem = async (comandaId: string, productId: string, quantity: number) => {
-    await ComandaService.adicionarItem(comandaId, productId, quantity);
+    await ComandaService.adicionarItem(comandaId, productId, Number(quantity));
     await refreshStatus();
   };
 
