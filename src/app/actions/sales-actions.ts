@@ -1,29 +1,19 @@
-
 'use server';
 
 /**
- * @fileOverview Server Action robusta para Processamento de Vendas.
- * Sincronizada para utilizar exclusivamente as RPCs transacionais e forçar numeric.
+ * @fileOverview Server Action para Processamento de Vendas (PDV Direto).
+ * Sincronizada para remover referências a colunas inexistentes e usar RPCs numéricas.
  */
 
-import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { getSupabaseAdmin } from '@/lib/supabase/admin';
 import type { CartItem } from '@/lib/types';
 
 export async function processSaleAction(
   storeId: string, 
   cart: CartItem[], 
-  paymentMethod: string,
-  customerId?: string | null
+  paymentMethod: string
 ) {
-  const supabase = await createSupabaseServerClient();
   const supabaseAdmin = getSupabaseAdmin();
-
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  
-  if (authError || !user) {
-    return { success: false, error: 'Sessão expirada. Faça login novamente.' };
-  }
 
   try {
     // 1. Criar comanda temporária para a venda

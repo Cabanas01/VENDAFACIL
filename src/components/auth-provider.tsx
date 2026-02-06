@@ -1,4 +1,3 @@
-
 'use client';
 
 /**
@@ -125,14 +124,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const adicionarItem = async (comandaId: string, productId: string, quantity: number) => {
-    // ✅ Versão CORRETA (FINAL): Remove p_unit_price e deixa o banco gerir
+    // ✅ Regra de Ouro: Forçar numeric e remover p_unit_price para o banco buscar o valor correto
     const { error } = await supabase.rpc('rpc_add_item_to_comanda', {
       p_comanda_id: comandaId,
       p_product_id: productId,
       p_quantity: parseFloat(quantity.toString())
     });
 
-    if (error) throw error;
+    if (error) {
+      console.error('[RPC_ADD_ITEM_ERROR]', error);
+      throw error;
+    }
     await refreshStatus();
   };
 
@@ -152,6 +154,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const addSale = async (cart: CartItem[], paymentMethod: string) => {
     if (!store?.id) throw new Error('Loja não identificada.');
     try {
+      // Fluxo atômico via RPCs
       const comandaId = await abrirComanda('0', 'Consumidor Final');
       for (const item of cart) {
         await adicionarItem(comandaId, item.product_id, item.qty);
@@ -172,10 +175,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const marcarItemConcluido = async (itemId: string) => {
-    if (!itemId) throw new Error('ID do item é obrigatório para conclusão.');
-    const { error } = await supabase.rpc('rpc_mark_order_item_done', { 
-      p_item_id: itemId 
-    });
+    const { error } = await supabase.rpc('rpc_mark_order_item_done', { p_item_id: itemId });
     if (error) throw error;
     await refreshStatus();
   };

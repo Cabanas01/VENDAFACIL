@@ -5,7 +5,8 @@ import type { Sale, Store } from '@/lib/types';
 const paymentMethodLabels = {
   dinheiro: 'DINHEIRO',
   pix: 'PIX QR CODE',
-  cartao: 'CARTÃO DÉBITO/CRÉDITO',
+  credito: 'CARTÃO CRÉDITO',
+  debito: 'CARTÃO DÉBITO',
   cash: 'DINHEIRO',
   card: 'CARTÃO',
 };
@@ -21,7 +22,7 @@ export function generateReceiptHTML(
   sale: Sale,
   store: Store,
   width: '80mm' | '58mm' = '80mm',
-  comandaInfo?: { numero: number; mesa: string | null; cliente: string | null }
+  comandaInfo?: { numero: string; mesa: string | null; cliente: string | null }
 ): string {
   const items = sale.items || [];
   
@@ -29,10 +30,10 @@ export function generateReceiptHTML(
     .map(
       (item) => `
     <div class="item">
-      <div class="item-name">${item.product_name_snapshot}</div>
+      <div class="item-name">${item.product_name_snapshot || 'Produto'}</div>
       <div class="item-details">
-        <span>${item.quantity} x ${formatCurrency(item.unit_price_cents)}</span>
-        <span class="item-price">${formatCurrency(item.subtotal_cents)}</span>
+        <span>${item.quantity} x ${formatCurrency(item.unit_price)}</span>
+        <span class="item-price">${formatCurrency(item.line_total)}</span>
       </div>
     </div>
   `
@@ -74,18 +75,17 @@ export function generateReceiptHTML(
   <div class="center info-section">${store.phone || ''}</div>
 
   <div class="line"></div>
-  <div class="center bold">CONFERÊNCIA DE MESA</div>
+  <div class="center bold">CONFERÊNCIA DE VENDA</div>
   <div class="center">${new Date().toLocaleString('pt-BR')}</div>
   <div class="line"></div>
 
   ${comandaInfo ? `
-    <div class="info-section"><b>COMANDA:</b> #${comandaInfo.numero}</div>
-    <div class="info-section"><b>MESA:</b> ${comandaInfo.mesa || 'Balcão'}</div>
+    <div class="info-section"><b>MESA/COMANDA:</b> ${comandaInfo.numero}</div>
     <div class="info-section"><b>CLIENTE:</b> ${comandaInfo.cliente || 'Consumidor'}</div>
     <div class="line"></div>
   ` : ''}
 
-  <div class="bold">ITENS CONSUMIDOS</div>
+  <div class="bold">ITENS</div>
   ${receiptItems || '<div class="center">Nenhum item registrado</div>'}
 
   <div class="line"></div>
