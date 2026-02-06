@@ -15,7 +15,7 @@ import { useRouter } from 'next/navigation';
 
 const comandaSchema = z.object({
   mesa: z.coerce.number().int().min(1, 'Informe o número da mesa'),
-  cliente: z.string().optional(),
+  cliente: z.string().min(1, 'Identifique o cliente'),
 });
 
 type ComandaFormValues = z.infer<typeof comandaSchema>;
@@ -41,12 +41,12 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
   const onSubmit = async (values: ComandaFormValues) => {
     setIsSubmitting(true);
     try {
-      // Chama a RPC rpc_get_open_sale via wrapper getOpenSale
-      const saleId = await getOpenSale(values.mesa, values.cliente || null);
+      // Chama a RPC rpc_get_open_sale com a nova assinatura de 3 parâmetros
+      const saleId = await getOpenSale(values.mesa, values.cliente);
 
       toast({ 
         title: 'Atendimento Iniciado', 
-        description: `Mesa ${values.mesa} aberta com sucesso.` 
+        description: `Mesa ${values.mesa} para ${values.cliente} pronta.` 
       });
 
       onOpenChange(false);
@@ -54,12 +54,12 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
       
       if (onSuccess) await onSuccess();
       
-      // Redireciona para os detalhes da venda aberta
+      // Navega para o atendimento ativo
       router.push(`/comandas/${saleId}`);
     } catch (err: any) {
       toast({ 
         variant: 'destructive', 
-        title: 'Erro ao abrir mesa', 
+        title: 'Erro ao abrir atendimento', 
         description: err.message || 'Falha na comunicação com o servidor.' 
       });
     } finally {
@@ -76,7 +76,7 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
           </div>
           <DialogHeader>
             <DialogTitle className="text-2xl font-black font-headline uppercase tracking-tighter">Novo Atendimento</DialogTitle>
-            <DialogDescription className="text-sm font-medium">Informe a mesa para iniciar ou retomar o pedido.</DialogDescription>
+            <DialogDescription className="text-sm font-medium">Inicie ou recupere uma mesa aberta.</DialogDescription>
           </DialogHeader>
         </div>
 
@@ -108,12 +108,12 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
                 name="cliente"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nome do Cliente (Opcional)</FormLabel>
+                    <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Identificação do Cliente *</FormLabel>
                     <FormControl>
                       <div className="relative">
                         <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground opacity-50" />
                         <Input 
-                          placeholder="Ex: João Silva" 
+                          placeholder="Ex: Maria Clara" 
                           {...field} 
                           className="h-12 pl-10 font-bold focus-visible:ring-primary/20" 
                         />
@@ -128,7 +128,7 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
             <DialogFooter className="pt-4 gap-3 sm:flex-row-reverse">
               <Button type="submit" disabled={isSubmitting} className="flex-1 h-12 font-black uppercase text-[11px] tracking-widest shadow-lg shadow-primary/20">
                 {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                Abrir Mesa
+                Confirmar Atendimento
               </Button>
               <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} className="flex-1 h-12 font-black uppercase text-[11px] tracking-widest" disabled={isSubmitting}>
                 Cancelar

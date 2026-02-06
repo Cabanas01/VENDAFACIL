@@ -19,7 +19,8 @@ import {
   CircleDollarSign,
   Trash2, 
   ShoppingCart,
-  Search
+  Search,
+  UserCircle
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -76,11 +77,11 @@ export default function ComandaDetailsPage() {
     if (localCart.length === 0 || isSubmitting) return;
     setIsSubmitting(true);
     try {
-      // Chama rpc_add_item_to_sale para cada item
+      // Chama a RPC rpc_add_item_to_sale para cada item do carrinho
       for (const item of localCart) {
         await adicionarItem(id as string, item.product.id, item.qty);
       }
-      toast({ title: 'Pedido Lançado com Sucesso!' });
+      toast({ title: 'Pedido Lançado!' });
       setLocalCart([]);
       setIsAddingItems(false);
       await fetchData();
@@ -95,12 +96,11 @@ export default function ComandaDetailsPage() {
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
-      // Chama fechar_comanda no backend
+      // Chama rpc_close_sale delegando toda a lógica ao banco
       await fecharVenda(id as string, method);
       
       toast({ title: 'Venda Concluída!' });
       
-      // Imprime recibo
       if (store && sale) {
         printReceipt({ ...sale, items, payment_method: method } as Sale, store);
       }
@@ -124,16 +124,21 @@ export default function ComandaDetailsPage() {
     <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => router.push('/comandas')} className="h-12 w-12 rounded-full bg-white shadow-sm hover:bg-slate-50">
+          <Button variant="ghost" size="icon" onClick={() => router.push('/comandas')} className="h-12 w-12 rounded-full bg-white shadow-sm">
             <ArrowLeft />
           </Button>
-          <h1 className="text-4xl font-black font-headline uppercase tracking-tighter">
-            {sale?.table_number === 0 ? 'Balcão / PDV' : `Mesa ${sale?.table_number}`}
-          </h1>
-          <Badge variant="outline" className="font-black uppercase border-primary/20 text-primary">Status: {sale?.status}</Badge>
+          <div className="space-y-1">
+            <h1 className="text-4xl font-black font-headline uppercase tracking-tighter leading-none">
+              {sale?.table_number === 0 ? 'Balcão / PDV' : `Mesa ${sale?.table_number}`}
+            </h1>
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <UserCircle className="h-3 w-3" />
+              <span className="text-[10px] font-black uppercase tracking-widest">{sale?.customer_name || 'Consumidor'}</span>
+            </div>
+          </div>
         </div>
         <div className="text-right">
-          <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Saldo Atual</p>
+          <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Saldo Parcial</p>
           <p className="text-4xl font-black text-primary tracking-tighter">{formatCurrency(sale?.total_cents || 0)}</p>
         </div>
       </div>
@@ -141,8 +146,8 @@ export default function ComandaDetailsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <Card className="lg:col-span-2 border-none shadow-sm overflow-hidden bg-background">
           <CardHeader className="bg-muted/10 border-b flex flex-row items-center justify-between py-4">
-            <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Extrato da Conta</CardTitle>
-            <Button size="sm" className="font-black uppercase text-[10px] h-9 shadow-lg" onClick={() => setIsAddingItems(true)}>+ Adicionar Itens</Button>
+            <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Extrato do Pedido</CardTitle>
+            <Button size="sm" className="font-black uppercase text-[10px] h-9" onClick={() => setIsAddingItems(true)}>+ Adicionar Itens</Button>
           </CardHeader>
           <Table>
             <TableHeader>
@@ -178,7 +183,7 @@ export default function ComandaDetailsPage() {
 
         <Card className="border-primary/20 bg-primary/5 shadow-2xl h-fit rounded-[32px] overflow-hidden">
           <CardHeader className="text-center py-10 bg-primary/10">
-            <CardTitle className="text-[10px] font-black uppercase tracking-[0.3em] text-primary">Saldo Final</CardTitle>
+            <CardTitle className="text-[10px] font-black uppercase tracking-[0.3em] text-primary">Total Consolidado</CardTitle>
             <p className="text-5xl font-black tracking-tighter mt-3 text-slate-900">{formatCurrency(sale?.total_cents || 0)}</p>
           </CardHeader>
           <CardContent className="p-8">
@@ -187,7 +192,7 @@ export default function ComandaDetailsPage() {
               onClick={() => setIsClosing(true)} 
               disabled={!sale || (sale.total_cents || 0) <= 0}
             >
-              <CheckCircle2 className="mr-3 h-6 w-6" /> Fechar Conta
+              <CheckCircle2 className="mr-3 h-6 w-6" /> Concluir Atendimento
             </Button>
           </CardContent>
         </Card>
@@ -200,8 +205,8 @@ export default function ComandaDetailsPage() {
               <div className="p-6 border-b bg-muted/5 flex items-center gap-4">
                 <Search className="text-muted-foreground h-5 w-5" />
                 <Input 
-                  placeholder="Pesquisar no cardápio..." 
-                  className="h-14 bg-slate-50 border-none rounded-2xl shadow-inner text-lg" 
+                  placeholder="Pesquisar produtos..." 
+                  className="h-14 bg-slate-50 border-none rounded-2xl text-lg" 
                   value={search} 
                   onChange={e => setSearch(e.target.value)} 
                 />
@@ -227,7 +232,7 @@ export default function ComandaDetailsPage() {
               </ScrollArea>
             </div>
             <div className="w-80 flex flex-col bg-slate-50/50">
-              <div className="p-6 border-b font-black uppercase text-[10px] tracking-widest text-muted-foreground">Pedido Atual</div>
+              <div className="p-6 border-b font-black uppercase text-[10px] tracking-widest text-muted-foreground">Novos Itens</div>
               <ScrollArea className="flex-1 p-6">
                 {localCart.map((item) => (
                   <div key={item.product.id} className="flex justify-between items-center mb-4 bg-white p-4 rounded-2xl shadow-sm">
@@ -246,11 +251,11 @@ export default function ComandaDetailsPage() {
               </ScrollArea>
               <div className="p-6 border-t bg-white space-y-4">
                 <div className="flex justify-between items-center px-2">
-                  <span className="text-[9px] font-black uppercase text-muted-foreground">Total Local</span>
+                  <span className="text-[9px] font-black uppercase text-muted-foreground">A Lançar</span>
                   <span className="font-black text-primary">{formatCurrency(cartTotalDisplay)}</span>
                 </div>
                 <Button className="w-full h-16 font-black uppercase text-xs tracking-widest rounded-2xl shadow-lg" disabled={localCart.length === 0 || isSubmitting} onClick={handleAddItemsFinal}>
-                  {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar Pedido'}
+                  {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar Lançamento'}
                 </Button>
               </div>
             </div>
@@ -264,7 +269,7 @@ export default function ComandaDetailsPage() {
             <button onClick={() => setIsClosing(false)} className="absolute right-6 top-6 h-10 w-10 rounded-full bg-white/10 flex items-center justify-center"><X className="h-5 w-5" /></button>
             <DialogTitle className="text-2xl font-black uppercase tracking-tighter">Pagamento</DialogTitle>
             <DialogDescription className="text-white/40 uppercase font-bold text-[10px] mt-2 tracking-widest">
-              {sale?.table_number === 0 ? 'BALCÃO' : `MESA ${sale?.table_number}`} • {formatCurrency(sale?.total_cents || 0)}
+              Total a Pagar: {formatCurrency(sale?.total_cents || 0)}
             </DialogDescription>
           </div>
           <div className="p-10 space-y-4 bg-white">

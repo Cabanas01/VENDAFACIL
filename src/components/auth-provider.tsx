@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase/client';
 import { 
   getOpenSaleRpc, 
   addItemToSaleRpc, 
-  fecharComandaRpc
+  closeSaleRpc
 } from '@/lib/rpc';
 import type { 
   Store, 
@@ -34,7 +34,7 @@ type AuthContextType = {
   refreshStatus: () => Promise<void>;
   createStore: (storeData: any) => Promise<void>;
   
-  // RPC Wrappers - Alinhados ao Backend
+  // RPC Wrappers - Alinhados ao Backend v4.0
   getOpenSale: (tableNumber: number, customerName: string | null) => Promise<string>;
   adicionarItem: (saleId: string, productId: string, quantity: number) => Promise<void>;
   fecharVenda: (saleId: string, paymentMethod: string) => Promise<void>;
@@ -123,21 +123,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const fecharVenda = async (saleId: string, paymentMethod: string) => {
-    await fecharComandaRpc(saleId, paymentMethod);
+    await closeSaleRpc(saleId, paymentMethod);
     await refreshStatus();
   };
 
   const addSaleBalcao = async (cart: CartItem[], paymentMethod: string, customerName: string) => {
     if (!store?.id) throw new Error('Unidade não identificada.');
     try {
-      // Venda de balcão usa mesa 0
-      const saleId = await getOpenSale(0, customerName);
+      // Venda de balcão usa mesa 0 por padrão no RPC-First
+      const saleId = await getOpenSaleRpc(store.id, 0, customerName);
       
       for (const item of cart) {
-        await adicionarItem(saleId, item.product_id, item.qty);
+        await addItemToSaleRpc(saleId, item.product_id, item.qty);
       }
       
-      await fecharVenda(saleId, paymentMethod);
+      await closeSaleRpc(saleId, paymentMethod);
       
       const { data: finalSale } = await supabase.from('sales').select('*, items:sale_items(*)').eq('id', saleId).single();
       return finalSale as Sale;
