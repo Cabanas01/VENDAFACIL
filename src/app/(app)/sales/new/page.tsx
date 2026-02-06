@@ -79,12 +79,13 @@ export default function NewSalePDVPage() {
     }
   };
 
-  const handleFinalize = async (method: 'dinheiro' | 'pix' | 'cartao') => {
+  const handleFinalize = async (method: 'cash' | 'pix' | 'card') => {
     if (cart.length === 0 || isSubmitting) return;
     
     setIsSubmitting(true);
     try {
-      // PDV = Mesa 0
+      // PDV = Mesa 0. O customerName agora é passado apenas se o backend suportar, 
+      // ou atualizado via meta-dados se necessário. Para este fluxo, usamos table_number 0.
       const comandaId = await getOrCreateComanda(0, customerName || 'Consumidor Balcão');
       
       for (const item of cart) {
@@ -226,12 +227,12 @@ export default function NewSalePDVPage() {
 
             <div className="space-y-8">
               <div className="space-y-3">
-                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground pl-2">Cliente (Opcional)</label>
+                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground pl-2">CLIENTE (OPCIONAL)</label>
                 <div className="relative">
                   <UserCircle className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground opacity-50" />
                   <input 
                     placeholder="Identificar consumidor..." 
-                    className="w-full h-14 pl-12 rounded-2xl border-none bg-slate-100/50 font-bold text-lg"
+                    className="w-full h-14 pl-12 rounded-2xl border border-slate-200 bg-white font-bold text-lg focus:ring-2 focus:ring-primary/20 outline-none"
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
                   />
@@ -239,19 +240,19 @@ export default function NewSalePDVPage() {
               </div>
               
               <div className="grid grid-cols-1 gap-4">
-                <Button variant="outline" className="h-20 justify-start gap-6 border-none bg-slate-50 hover:bg-slate-100 rounded-[24px] px-8" onClick={() => handleFinalize('dinheiro')} disabled={isSubmitting}>
+                <Button variant="outline" className="h-20 justify-start gap-6 border-none bg-slate-50 hover:bg-slate-100 rounded-[24px] px-8" onClick={() => handleFinalize('cash')} disabled={isSubmitting}>
                   <div className="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center shadow-inner"><CircleDollarSign className="text-green-600 h-6 w-6" /></div>
-                  <span className="font-black uppercase text-[11px] tracking-[0.2em]">Dinheiro</span>
+                  <span className="font-black uppercase text-[11px] tracking-[0.2em]">DINHEIRO</span>
                 </Button>
 
                 <Button className="h-20 justify-start gap-6 border-none bg-cyan-400 text-white hover:bg-cyan-500 rounded-[24px] px-8 shadow-xl" onClick={() => handleFinalize('pix')} disabled={isSubmitting}>
                   <div className="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center shadow-inner"><QrCode className="h-6 w-6 text-white" /></div>
-                  <span className="font-black uppercase text-[11px] tracking-[0.2em]">PIX QR Code</span>
+                  <span className="font-black uppercase text-[11px] tracking-[0.2em]">PIX QR CODE</span>
                 </Button>
 
-                <Button variant="outline" className="h-20 justify-start gap-6 border-none bg-slate-50 hover:bg-slate-100 rounded-[24px] px-8" onClick={() => handleFinalize('cartao')} disabled={isSubmitting}>
+                <Button variant="outline" className="h-20 justify-start gap-6 border-none bg-slate-50 hover:bg-slate-100 rounded-[24px] px-8" onClick={() => handleFinalize('card')} disabled={isSubmitting}>
                   <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center shadow-inner"><CreditCard className="h-6 w-6 text-blue-600" /></div>
-                  <span className="font-black uppercase text-[11px] tracking-[0.2em]">Cartão</span>
+                  <span className="font-black uppercase text-[11px] tracking-[0.2em]">CARTÃO</span>
                 </Button>
               </div>
             </div>

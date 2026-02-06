@@ -1,3 +1,4 @@
+
 export type User = {
   id: string;
   email: string;
@@ -65,6 +66,7 @@ export type Product = {
   barcode?: string;
   created_at: string;
   production_target: 'cozinha' | 'bar' | 'nenhum';
+  prep_time_minutes?: number;
 };
 
 export type OrderItemStatus = 'pending' | 'done' | 'canceled';
@@ -82,7 +84,7 @@ export type ComandaItem = {
   created_at: string;
 };
 
-export type ComandaStatus = 'aberta' | 'fechada';
+export type ComandaStatus = 'open' | 'closed';
 
 export type Comanda = {
   id: string;
@@ -103,6 +105,7 @@ export type Sale = {
   total_cents: number;
   payment_method: 'cash' | 'pix' | 'card';
   created_at: string;
+  items?: any[];
 };
 
 export type CartItem = {
@@ -110,6 +113,7 @@ export type CartItem = {
   product_name_snapshot: string;
   qty: number;
   unit_price_cents: number;
+  stock_qty?: number;
 };
 
 export type CashRegister = {
@@ -141,6 +145,7 @@ export type ProductionSnapshotView = {
   destino_preparo: string;
   created_at: string;
   store_id: string;
+  sale_number?: string;
 };
 
 export type StoreAccessStatus = {

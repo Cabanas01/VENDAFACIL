@@ -4,16 +4,17 @@
 import { supabase } from './supabase/client';
 
 /**
- * @fileOverview SERVIÇO CANÔNICO v5.3 (DEFINITIVO)
+ * @fileOverview SERVIÇO CANÔNICO v5.4 (AJUSTADO)
  * 
- * Sincronizado com o hint do banco de dados:
- * public.rpc_get_or_create_open_comanda(p_numero, p_store_id)
+ * Sincronizado com o esquema real do banco para evitar violação de constraints.
+ * Status: 'open' | 'closed'
+ * Métodos: 'cash' | 'pix' | 'card'
  */
 
 export const ComandaService = {
   /**
    * 1. Busca ou Cria Comanda Aberta
-   * Assinatura Real: rpc_get_or_create_open_comanda(p_numero, p_store_id)
+   * Assinatura Real detectada: rpc_get_or_create_open_comanda(p_numero, p_store_id)
    */
   async getOrCreateComanda(storeId: string, tableNumber: number) {
     const { data, error } = await supabase.rpc('rpc_get_or_create_open_comanda', {
@@ -37,7 +38,7 @@ export const ComandaService = {
     const { error } = await supabase.rpc('rpc_add_item_to_comanda', {
       p_comanda_id: comandaId,
       p_product_id: productId,
-      p_quantity: Number(quantity), // Cast obrigatório para numeric
+      p_quantity: Number(quantity),
     });
 
     if (error) {
@@ -48,12 +49,12 @@ export const ComandaService = {
 
   /**
    * 3. Fecha Atendimento e Gera Venda
-   * Assinatura: rpc_close_comanda_to_sale(p_comanda_id, p_payment_method)
+   * Mapeamento de métodos para satisfazer check constraints: cash, pix, card
    */
-  async finalizarAtendimento(comandaId: string, paymentMethod: 'dinheiro' | 'pix' | 'cartao') {
+  async finalizarAtendimento(comandaId: string, method: 'cash' | 'pix' | 'card') {
     const { data, error } = await supabase.rpc('rpc_close_comanda_to_sale', {
       p_comanda_id: comandaId,
-      p_payment_method: paymentMethod,
+      p_payment_method: method,
     });
 
     if (error) {
@@ -66,7 +67,6 @@ export const ComandaService = {
 
   /**
    * 4. Conclui Item na Produção
-   * Assinatura: rpc_mark_order_item_done(p_order_item_id)
    */
   async concluirPreparo(orderItemId: string) {
     const { error } = await supabase.rpc('rpc_mark_order_item_done', {
