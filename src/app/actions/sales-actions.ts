@@ -1,7 +1,8 @@
+
 'use server';
 
 /**
- * @fileOverview Server Action para Processamento de Vendas - Sincronizado com Mapeamento v3.0.
+ * @fileOverview Server Action para Processamento de Vendas - Sincronizado com Mapeamento RPC v3.0.
  */
 
 import { getSupabaseAdmin } from '@/lib/supabase/admin';
@@ -15,29 +16,36 @@ export async function processSaleAction(
   const supabaseAdmin = getSupabaseAdmin();
 
   try {
-    // 1. Abrir comanda temporária via RPC oficial
-    const { data: comandaId, error: cmdErr } = await supabaseAdmin.rpc('abrir_comanda', {
-      p_store_id: storeId,
-      p_mesa: '0',
-      p_cliente_nome: 'Consumidor Final'
-    });
+    // 1. Abrir comanda temporária via INSERT (Mesa '0' = PDV Direto)
+    const { data: comanda, error: cmdErr } = await supabaseAdmin
+      .from('comandas')
+      .insert({
+        store_id: storeId,
+        mesa: '0',
+        cliente_nome: 'Consumidor Final',
+        status: 'aberta'
+      })
+      .select('id')
+      .single();
 
     if (cmdErr) throw cmdErr;
 
-    // 2. Lançar itens via RPC oficial (adicionar_item_comanda)
+    // 2. Lançar itens via RPC oficial (rpc_add_item_to_comanda)
     for (const item of cart) {
-      const { error: itemErr } = await supabaseAdmin.rpc('adicionar_item_comanda', {
-        p_comanda_id: comandaId,
+      const { error: itemErr } = await supabaseAdmin.rpc('rpc_add_item_to_comanda', {
+        p_comanda_id: comanda.id,
         p_product_id: item.product_id,
-        p_quantity: Math.floor(item.qty)
+        p_quantity: Math.floor(item.qty),
+        p_unit_price: item.unit_price_cents
       });
       if (itemErr) throw itemErr;
     }
 
-    // 3. Fechar via RPC oficial (fechar_comanda)
-    const { data: closeData, error: closeErr } = await supabaseAdmin.rpc('fechar_comanda', {
-      p_comanda_id: comandaId,
-      p_forma_pagamento: paymentMethod
+    // 3. Fechar via RPC oficial (rpc_close_comanda_to_sale)
+    const { data: closeData, error: closeErr } = await supabaseAdmin.rpc('rpc_close_comanda_to_sale', {
+      p_comanda_id: comanda.id,
+      p_payment_method_id: paymentMethod,
+      p_cash_register_id: null
     });
 
     if (closeErr) throw closeErr;

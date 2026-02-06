@@ -1,7 +1,9 @@
+
 'use client';
 
 /**
  * @fileOverview Painel Bar (BDS) - Sincronizado com Mapeamento RPC.
+ * Filtra apenas itens com status 'pending' e destino 'bar'.
  */
 
 import { useEffect, useState, useCallback } from 'react';
@@ -10,27 +12,29 @@ import { supabase } from '@/lib/supabase/client';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { GlassWater, Clock, History, Loader2, CheckCircle2 } from 'lucide-react';
+import { GlassWater, Clock, History, Loader2, CheckCircle2, MapPin } from 'lucide-react';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import type { PainelProducaoView } from '@/lib/types';
 
 export default function BarPage() {
   const { store, marcarItemConcluido } = useAuth();
   const { toast } = useToast();
-  const [pedidos, setPedidos] = useState<PainelProducaoView[]>([]);
+  const [pedidos, setPedidos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchPedidos = useCallback(async () => {
     if (!store?.id) return;
     
-    // Utilizando a RPC oficial get_kitchen_queue para o destino 'bar'
-    const { data, error } = await supabase.rpc('get_kitchen_queue', {
-      p_store_id: store.id,
-      p_destino: 'bar'
-    });
+    // Busca direta na tabela order_items filtrando por status e destino
+    const { data, error } = await supabase
+      .from('order_items')
+      .select('*, comandas(numero, mesa)')
+      .eq('store_id', store.id)
+      .eq('status', 'pending')
+      .eq('destino_preparo', 'bar')
+      .order('created_at', { ascending: true });
 
     if (!error) {
       setPedidos(data || []);
@@ -75,11 +79,11 @@ export default function BarPage() {
 
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
         {pedidos.map(p => (
-          <Card key={p.item_id} className="border-none shadow-xl overflow-hidden bg-background animate-in zoom-in-95 duration-300">
+          <Card key={p.id} className="border-none shadow-xl overflow-hidden bg-background animate-in zoom-in-95 duration-300">
             <div className="px-6 py-4 flex justify-between items-center border-b bg-cyan-500/5 border-cyan-500/10">
               <div className="flex flex-col">
-                <span className="text-xl font-black font-headline uppercase leading-none">Mesa {p.mesa || 'Balcão'}</span>
-                <span className="text-[9px] font-bold text-cyan-600 uppercase mt-1">Comanda #{p.comanda_numero}</span>
+                <span className="text-xl font-black font-headline uppercase leading-none">Mesa {p.comandas?.mesa || 'Balcão'}</span>
+                <span className="text-[9px] font-bold text-cyan-600 uppercase mt-1">Comanda #{p.comandas?.numero}</span>
               </div>
               <div className="flex items-center gap-2 text-[10px] font-black uppercase text-muted-foreground">
                 <Clock className="h-3 w-3" /> {formatDistanceToNow(parseISO(p.created_at), { locale: ptBR })}
@@ -88,14 +92,14 @@ export default function BarPage() {
             
             <CardContent className="p-8 space-y-6">
               <div className="flex justify-between items-start">
-                <p className="text-3xl font-black leading-tight uppercase tracking-tight text-cyan-700">{p.produto}</p>
+                <p className="text-3xl font-black leading-tight uppercase tracking-tight text-cyan-700">{p.product_name_snapshot}</p>
                 <div className="h-16 w-16 rounded-2xl bg-cyan-50 flex items-center justify-center text-4xl font-black text-cyan-600 border border-cyan-100 shadow-inner">
-                  {p.qty}
+                  {p.quantity}
                 </div>
               </div>
               <Button 
                 className="w-full h-16 font-black uppercase text-xs tracking-widest bg-cyan-600 hover:bg-cyan-700 shadow-xl shadow-cyan-600/20 transition-all active:scale-95" 
-                onClick={() => handleConcluir(p.item_id)}
+                onClick={() => handleConcluir(p.id)}
               >
                 <CheckCircle2 className="mr-2 h-5 w-5" /> Entregar Bebida
               </Button>

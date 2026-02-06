@@ -1,8 +1,10 @@
+
 'use client';
 
 /**
  * @fileOverview AuthProvider - Motor de Dados Sincronizado v3.0.
  * Centraliza toda a lógica de escrita via RPCs Oficiais (Schema Public).
+ * Seguindo estritamente o mapeamento definitivo do backend.
  */
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -16,7 +18,8 @@ import type {
   CartItem,
   Customer,
   User,
-  ComandaTotalView
+  ComandaTotalView,
+  OrderItem
 } from '@/lib/types';
 
 type AuthContextType = {
@@ -34,8 +37,8 @@ type AuthContextType = {
   createStore: (storeData: any) => Promise<void>;
   
   abrirComanda: (mesa: string, cliente: string) => Promise<string>;
-  adicionarItem: (comandaId: string, productId: string, quantity: number) => Promise<void>;
-  fecharComanda: (comandaId: string, paymentMethodId: string) => Promise<void>;
+  adicionarItem: (comandaId: string, productId: string, quantity: number, unitPrice?: number) => Promise<void>;
+  fecharComanda: (comandaId: string, paymentMethodId: string, cashRegisterId?: string) => Promise<void>;
   marcarItemConcluido: (itemId: string) => Promise<void>;
   addSale: (cart: CartItem[], paymentMethod: string) => Promise<Sale | null>;
   
@@ -66,10 +69,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (storeId) {
+        // Busca de dados normalizada usando nomes de colunas oficiais
         const [storeRes, prodRes, cmdRes, custRes, accessRes, salesRes, cashRes] = await Promise.all([
           supabase.from('stores').select('*').eq('id', storeId).single(),
           supabase.from('products').select('*').eq('store_id', storeId).order('name'),
-          supabase.from('v_comandas_totais').select('*').eq('store_id', storeId).order('numero', { ascending: true }),
+          supabase.from('comandas').select('*').eq('store_id', storeId).eq('status', 'aberta').order('numero', { ascending: true }),
           supabase.from('customers').select('*').eq('store_id', storeId).order('name'),
           supabase.rpc('get_store_access_status', { p_store_id: storeId }),
           supabase.from('sales').select('*, items:order_items(*)').eq('store_id', storeId).order('created_at', { ascending: false }).limit(50),
@@ -78,6 +82,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         setStore(storeRes.data || null);
         setProducts(prodRes.data || []);
+        
+        // No frontend, tratamos as comandas abertas como nossa view principal
         setComandas(cmdRes.data || []);
         setCustomers(custRes.data || []);
         setSales(salesRes.data || []);
@@ -111,35 +117,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const abrirComanda = async (mesa: string, cliente: string) => {
     if (!store?.id) throw new Error('Contexto de loja ausente.');
     
-    // Chamada RPC Oficial: abrir_comanda
-    const { data, error } = await supabase.rpc('abrir_comanda', {
-      p_store_id: store.id,
-      p_mesa: mesa.toString(),
-      p_cliente_nome: cliente || 'Consumidor'
-    });
+    // Inserção direta conforme mapeamento: Insere em comandas com status aberta
+    const { data, error } = await supabase
+      .from('comandas')
+      .insert({
+        store_id: store.id,
+        mesa: mesa.toString(),
+        cliente_nome: cliente || 'Consumidor',
+        status: 'aberta'
+      })
+      .select('id')
+      .single();
 
     if (error) throw error;
     await refreshStatus();
-    return data; // retorna o uuid da comanda
+    return data.id; 
   };
 
-  const adicionarItem = async (comandaId: string, productId: string, quantity: number) => {
-    // Chamada RPC Oficial: adicionar_item_comanda
-    const { error } = await supabase.rpc('adicionar_item_comanda', {
+  const adicionarItem = async (comandaId: string, productId: string, quantity: number, unitPrice?: number) => {
+    // RPC Oficial: p_unit_price é obrigatório (cents ou null)
+    const { error } = await supabase.rpc('rpc_add_item_to_comanda', {
       p_comanda_id: comandaId,
       p_product_id: productId,
-      p_quantity: Math.floor(quantity)
+      p_quantity: Math.floor(quantity),
+      p_unit_price: unitPrice ?? null
     });
 
     if (error) throw error;
     await refreshStatus();
   };
 
-  const fecharComanda = async (comandaId: string, paymentMethodId: string) => {
-    // Chamada RPC Oficial: fechar_comanda
-    const { error } = await supabase.rpc('fechar_comanda', {
+  const fecharComanda = async (comandaId: string, paymentMethodId: string, cashRegisterId?: string) => {
+    // RPC Oficial: rpc_close_comanda_to_sale (fechamento atômico)
+    const { error } = await supabase.rpc('rpc_close_comanda_to_sale', {
       p_comanda_id: comandaId,
-      p_forma_pagamento: paymentMethodId
+      p_payment_method_id: paymentMethodId,
+      p_cash_register_id: cashRegisterId ?? null
     });
 
     if (error) throw error;
@@ -149,11 +162,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const addSale = async (cart: CartItem[], paymentMethod: string) => {
     if (!store?.id) throw new Error('Loja não identificada.');
     try {
-      // Fluxo RPC-First: Comanda '0' (PDV) -> Lançar Itens -> Fechar
+      // Fluxo Seguro: Comanda '0' (PDV) -> RPC Adicionar -> RPC Fechar
       const comandaId = await abrirComanda('0', 'Consumidor Final');
       
       for (const item of cart) {
-        await adicionarItem(comandaId, item.product_id, item.qty);
+        await adicionarItem(comandaId, item.product_id, item.qty, item.unit_price_cents);
       }
       
       await fecharComanda(comandaId, paymentMethod);
@@ -172,8 +185,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const marcarItemConcluido = async (itemId: string) => {
-    // Chamada RPC Oficial: finalizar_preparo_item
-    const { error } = await supabase.rpc('finalizar_preparo_item', { 
+    // RPC Oficial: rpc_mark_order_item_done
+    const { error } = await supabase.rpc('rpc_mark_order_item_done', { 
       p_item_id: itemId 
     });
     if (error) throw error;
