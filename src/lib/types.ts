@@ -68,9 +68,9 @@ export type Product = {
   prep_time_minutes: number;
 };
 
-export type OrderItemStatus = 'pending' | 'done' | 'canceled';
+export type SaleItemStatus = 'pending' | 'done' | 'canceled';
 
-export type OrderItem = {
+export type SaleItem = {
   readonly id: string;
   readonly store_id: string;
   readonly product_id: string;
@@ -78,8 +78,8 @@ export type OrderItem = {
   readonly sale_id?: string | null;
   readonly quantity: number;
   readonly unit_price: number;
-  readonly line_total: number;
-  readonly status: OrderItemStatus;
+  readonly subtotal_cents: number;
+  readonly status: SaleItemStatus;
   readonly created_at: string;
   readonly product_name_snapshot?: string;
   readonly destino_preparo?: string;
@@ -93,7 +93,7 @@ export type Sale = {
   created_at: string;
   total_cents: number;
   payment_method: string | null;
-  items?: OrderItem[];
+  items?: SaleItem[];
 };
 
 export type CartItem = {
@@ -144,7 +144,7 @@ export type PainelProducaoView = {
   mesa: string | null;
   produto: string;
   qty: number;
-  status: OrderItemStatus;
+  status: SaleItemStatus;
   created_at: string;
   store_id: string;
 };

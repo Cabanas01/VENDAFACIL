@@ -1,9 +1,8 @@
-
 'use client';
 
 /**
- * @fileOverview Painel Bar (BDS) - Sincronizado com Mapeamento RPC.
- * Filtra apenas itens com status 'pending' e destino 'bar'.
+ * @fileOverview Painel Bar (BDS) - Sincronizado com Mapeamento RPC v3.1.
+ * Filtra apenas itens com status 'pending' e destino 'bar' na tabela sale_items.
  */
 
 import { useEffect, useState, useCallback } from 'react';
@@ -12,7 +11,7 @@ import { supabase } from '@/lib/supabase/client';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { GlassWater, Clock, History, Loader2, CheckCircle2, MapPin } from 'lucide-react';
+import { GlassWater, Clock, History, Loader2, CheckCircle2 } from 'lucide-react';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
@@ -27,9 +26,9 @@ export default function BarPage() {
   const fetchPedidos = useCallback(async () => {
     if (!store?.id) return;
     
-    // Busca direta na tabela order_items filtrando por status e destino
+    // Busca direta na tabela física sale_items conforme v3.1
     const { data, error } = await supabase
-      .from('order_items')
+      .from('sale_items')
       .select('*, comandas(numero, mesa)')
       .eq('store_id', store.id)
       .eq('status', 'pending')
@@ -44,9 +43,10 @@ export default function BarPage() {
 
   useEffect(() => {
     fetchPedidos();
+    // Monitoramento Realtime para sale_items
     const channel = supabase
       .channel('bds_sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => fetchPedidos())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sale_items' }, () => fetchPedidos())
       .subscribe();
     
     return () => { supabase.removeChannel(channel); };

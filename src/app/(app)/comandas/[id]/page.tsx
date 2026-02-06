@@ -2,7 +2,7 @@
 
 /**
  * @fileOverview Gestão de Comanda Individual (PDV Operacional).
- * Totalmente sincronizado com o contrato RPC-First.
+ * Sincronizado com o contrato RPC-First v3.1 (sale_items).
  */
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
@@ -29,7 +29,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import type { OrderItem, ComandaTotalView, Product } from '@/lib/types';
+import type { SaleItem, ComandaTotalView, Product } from '@/lib/types';
 import { printReceipt } from '@/lib/print-receipt';
 
 const formatCurrency = (val: number) => 
@@ -42,7 +42,7 @@ export default function ComandaDetailsPage() {
   const router = useRouter();
 
   const [comanda, setComanda] = useState<ComandaTotalView | null>(null);
-  const [items, setItems] = useState<OrderItem[]>([]);
+  const [items, setItems] = useState<SaleItem[]>([]);
   const [loading, setLoading] = useState(true);
   
   const [isClosing, setIsClosing] = useState(false);
@@ -56,9 +56,10 @@ export default function ComandaDetailsPage() {
     if (!id) return;
     setLoading(true);
     try {
+      // 1. View de totais e Tabela física de itens (sale_items conforme v3.1)
       const [comandaRes, itemsRes] = await Promise.all([
         supabase.from('v_comandas_totais').select('*').eq('id', id).single(),
-        supabase.from('order_items').select('*').eq('comanda_id', id)
+        supabase.from('sale_items').select('*').eq('comanda_id', id)
       ]);
 
       if (comandaRes.error) throw comandaRes.error;
@@ -73,7 +74,6 @@ export default function ComandaDetailsPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // REGRA DE OURO: Somatório visual para a UI. Persistência usa line_total do banco.
   const cartTotalDisplay = useMemo(() => 
     localCart.reduce((acc, i) => acc + (i.product.price_cents * i.qty), 0), 
   [localCart]);
@@ -104,14 +104,14 @@ export default function ComandaDetailsPage() {
       toast({ title: 'Atendimento Concluído!' });
       
       if (store && comanda) {
-        // Enviar sale mockado para impressão (o banco já criou o real)
+        // Enviar sale mockado para impressão
         const saleMock: any = { 
           total_cents: comanda.total_cents, 
           items: items.map(i => ({ 
             product_name_snapshot: i.product_name_snapshot,
             quantity: i.quantity,
             unit_price: i.unit_price,
-            line_total: i.line_total
+            subtotal_cents: i.subtotal_cents
           })), 
           payment_method: method 
         };
@@ -172,7 +172,7 @@ export default function ComandaDetailsPage() {
                   </TableCell>
                   <TableCell className="text-center font-black text-xs">x{item.quantity}</TableCell>
                   <TableCell className="text-right px-6 font-black text-primary">
-                    {formatCurrency(item.line_total)}
+                    {formatCurrency(item.subtotal_cents)}
                   </TableCell>
                 </TableRow>
               ))}
@@ -202,7 +202,7 @@ export default function ComandaDetailsPage() {
         </Card>
       </div>
 
-      {/* DIALOGS MANUTENÇÃO (REVISADOS) */}
+      {/* DIALOGS MANUTENÇÃO */}
       <Dialog open={isAddingItems} onOpenChange={setIsAddingItems}>
         <DialogContent className="sm:max-w-4xl p-0 overflow-hidden rounded-[32px] border-none shadow-2xl">
           <div className="flex h-[75vh]">
