@@ -1,3 +1,4 @@
+
 'use client';
 
 /**
@@ -28,7 +29,6 @@ export default function BarPage() {
   const fetchPedidos = useCallback(async () => {
     if (!store?.id) return;
     
-    // REGRA DE OURO: View sincronizada com o novo backend
     const { data, error } = await supabase
       .from('v_painel_bar')
       .select('*')
@@ -51,13 +51,15 @@ export default function BarPage() {
   }, [fetchPedidos]);
 
   const handleConcluir = async (itemId: string) => {
+    if (!itemId) return;
+
     try {
-      // REGRA DE OURO: Usar RPC de conclusão
+      // ✅ Chamada correta passando o ID do item
       await marcarItemConcluido(itemId);
       toast({ title: 'Bebida Servida!', description: 'Item removido da fila do bar.' });
       await fetchPedidos();
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Erro', description: err.message });
+      toast({ variant: 'destructive', title: 'Erro ao concluir', description: err.message });
     }
   };
 
@@ -98,7 +100,10 @@ export default function BarPage() {
                 </div>
               </div>
               
-              <Button className="w-full h-16 font-black uppercase text-xs tracking-widest bg-cyan-600 hover:bg-cyan-700 shadow-xl shadow-cyan-600/20" onClick={() => handleConcluir(p.item_id)}>
+              <Button 
+                className="w-full h-16 font-black uppercase text-xs tracking-widest bg-cyan-600 hover:bg-cyan-700 shadow-xl shadow-cyan-600/20" 
+                onClick={() => handleConcluir(p.item_id)}
+              >
                 <CheckCircle2 className="mr-2 h-5 w-5" /> Entregar Bebida
               </Button>
             </CardContent>

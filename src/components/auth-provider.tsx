@@ -128,7 +128,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const product = products.find(p => p.id === productId);
     if (!product) throw new Error('Produto não encontrado.');
 
-    // ✅ FORCE NUMERIC (parseFloat) para evitar o erro "best candidate function" no Postgres
     const { error } = await supabase.rpc('rpc_add_item_to_comanda', {
       p_comanda_id: comandaId,
       p_product_id: productId,
@@ -136,10 +135,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       p_unit_price: parseFloat(product.price_cents.toString())
     });
 
-    if (error) {
-      console.error('[RPC_ADD_ITEM_FAILED]', error);
-      throw new Error(error.message || 'Falha ao lançar item.');
-    }
+    if (error) throw error;
     await refreshStatus();
   };
 
@@ -179,8 +175,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const marcarItemConcluido = async (itemId: string) => {
-    const { error } = await supabase.rpc('rpc_mark_order_item_done', { p_item_id: itemId });
-    if (error) throw error;
+    if (!itemId) throw new Error('ID do item é obrigatório para conclusão.');
+    
+    // ✅ CORREÇÃO: Enviando o parâmetro com a chave correta para a RPC
+    const { error } = await supabase.rpc('rpc_mark_order_item_done', { 
+      p_item_id: itemId 
+    });
+
+    if (error) {
+      console.error('[KDS_MARK_DONE_ERROR]', error);
+      throw error;
+    }
     await refreshStatus();
   };
 

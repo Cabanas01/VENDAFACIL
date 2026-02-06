@@ -1,3 +1,4 @@
+
 'use client';
 
 /**
@@ -27,7 +28,6 @@ export default function CozinhaPage() {
   const fetchPedidos = useCallback(async () => {
     if (!store?.id) return;
     
-    // Lista itens pendentes filtrados pela view sincronizada
     const { data, error } = await supabase
       .from('v_painel_cozinha')
       .select('*')
@@ -41,7 +41,6 @@ export default function CozinhaPage() {
 
   useEffect(() => {
     fetchPedidos();
-    // Escuta mudanças na order_items para atualização em tempo real
     const channel = supabase
       .channel('kds_sync')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => fetchPedidos())
@@ -51,13 +50,15 @@ export default function CozinhaPage() {
   }, [fetchPedidos]);
 
   const handleConcluir = async (itemId: string) => {
+    if (!itemId) return;
+    
     try {
-      // REGRA DE OURO: Marcação via RPC (única forma de escrita no painel)
+      // ✅ Chamada correta passando o ID do item
       await marcarItemConcluido(itemId);
       toast({ title: 'Pedido Concluído!', description: 'Item enviado para a mesa.' });
       await fetchPedidos();
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Erro', description: err.message });
+      toast({ variant: 'destructive', title: 'Erro ao concluir', description: err.message });
     }
   };
 
@@ -98,7 +99,10 @@ export default function CozinhaPage() {
                 </div>
               </div>
               
-              <Button className="w-full h-16 font-black uppercase text-xs tracking-widest shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all" onClick={() => handleConcluir(p.item_id)}>
+              <Button 
+                className="w-full h-16 font-black uppercase text-xs tracking-widest shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all" 
+                onClick={() => handleConcluir(p.item_id)}
+              >
                 <CheckCircle2 className="mr-2 h-5 w-5" /> Confirmar Saída
               </Button>
             </CardContent>

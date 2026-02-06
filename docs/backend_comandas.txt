@@ -5,12 +5,10 @@
 -- ======================================================
 
 -- 1️⃣ LIMPEZA: Removendo versões antigas para evitar "best candidate" error
--- RODE ESTES COMANDOS NO SQL EDITOR DO SUPABASE
 DROP FUNCTION IF EXISTS public.rpc_add_item_to_comanda(uuid, uuid, integer, integer);
 DROP FUNCTION IF EXISTS public.rpc_add_item_to_comanda(uuid, uuid, numeric, numeric);
 
 -- 2️⃣ FUNÇÃO: ADICIONAR ITEM À COMANDA (Versão Única e Segura)
--- line_total é omitido pois é GENERATED ALWAYS no banco.
 CREATE OR REPLACE FUNCTION public.rpc_add_item_to_comanda(
     p_comanda_id UUID,
     p_product_id UUID,
@@ -23,49 +21,39 @@ DECLARE
     v_prod_target TEXT;
     v_final_price NUMERIC;
 BEGIN
-    -- 1. Obter dados do produto e da comanda
     SELECT store_id INTO v_store_id FROM public.comandas WHERE id = p_comanda_id;
     SELECT name, production_target INTO v_prod_name, v_prod_target FROM public.products WHERE id = p_product_id;
     
-    -- 2. Resolver preço (Prioriza o enviado, senão busca o atual)
     IF p_unit_price IS NULL OR p_unit_price = 0 THEN
         SELECT price_cents INTO v_final_price FROM public.products WHERE id = p_product_id;
     ELSE
         v_final_price := p_unit_price;
     END IF;
 
-    -- 3. Inserir em order_items (REGRA: NUNCA INCLUIR line_total NO INSERT)
     INSERT INTO public.order_items (
-        store_id, 
-        comanda_id, 
-        product_id, 
-        product_name_snapshot,
-        quantity, 
-        unit_price, 
-        status,
-        destino_preparo
+        store_id, comanda_id, product_id, product_name_snapshot,
+        quantity, unit_price, status, destino_preparo
     ) VALUES (
-        v_store_id, 
-        p_comanda_id, 
-        p_product_id, 
-        v_prod_name,
-        p_quantity, 
-        v_final_price, 
-        'pending',
-        v_prod_target
+        v_store_id, p_comanda_id, p_product_id, v_prod_name,
+        p_quantity, v_final_price, 'pending', v_prod_target
     );
 
-    -- 4. Baixa de estoque
-    UPDATE public.products 
-    SET stock_qty = stock_qty - p_quantity 
-    WHERE id = p_product_id;
-
+    UPDATE public.products SET stock_qty = stock_qty - p_quantity WHERE id = p_product_id;
     RETURN 'Item adicionado com sucesso';
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 3️⃣ FUNÇÃO: FECHAR COMANDA E GERAR VENDA (Atômica)
--- Utiliza SUM(line_total) para garantir precisão absoluta do cálculo do banco.
+-- 3️⃣ FUNÇÃO: CONCLUIR ITEM DE PRODUÇÃO (KDS/BDS)
+CREATE OR REPLACE FUNCTION public.rpc_mark_order_item_done(
+    p_item_id UUID
+) RETURNS BOOLEAN AS $$
+BEGIN
+    UPDATE public.order_items SET status = 'done' WHERE id = p_item_id;
+    RETURN FOUND;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 4️⃣ FUNÇÃO: FECHAR COMANDA E GERAR VENDA (Atômica)
 CREATE OR REPLACE FUNCTION public.rpc_close_comanda_to_sale(
     p_comanda_id UUID,
     p_payment_method_id TEXT,
@@ -76,21 +64,16 @@ DECLARE
     v_sale_id UUID;
     v_store_id UUID;
 BEGIN
-    -- 1. Obter dados
     SELECT store_id INTO v_store_id FROM public.comandas WHERE id = p_comanda_id;
-    
-    -- 2. Calcular total real dos itens (Usando a generated column line_total)
     SELECT COALESCE(SUM(line_total), 0) INTO v_total_cents 
     FROM public.order_items WHERE comanda_id = p_comanda_id AND status != 'canceled';
 
-    -- 3. Criar a Venda
     INSERT INTO public.sales (
         store_id, comanda_id, total_cents, payment_method, cash_register_id
     ) VALUES (
         v_store_id, p_comanda_id, v_total_cents, p_payment_method_id, p_cash_register_id
     ) RETURNING id INTO v_sale_id;
 
-    -- 4. Atualizar itens e comanda
     UPDATE public.order_items SET sale_id = v_sale_id, status = 'done' WHERE comanda_id = p_comanda_id;
     UPDATE public.comandas SET status = 'fechada' WHERE id = p_comanda_id;
 
