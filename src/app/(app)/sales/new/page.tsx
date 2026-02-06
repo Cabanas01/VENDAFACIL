@@ -1,10 +1,5 @@
 'use client';
 
-/**
- * @fileOverview Frente de Caixa (PDV Balcão).
- * Alinhado ao contrato v5.3: PDV = Mesa 0 via rpc_get_or_create_open_comanda.
- */
-
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
@@ -18,7 +13,8 @@ import {
   X,
   QrCode,
   UserCircle,
-  CircleDollarSign
+  CircleDollarSign,
+  CreditCard // Corrigido: CreditCard importado corretamente
 } from 'lucide-react';
 import { useAuth } from '@/components/auth-provider';
 import { useToast } from '@/hooks/use-toast';
@@ -86,15 +82,13 @@ export default function NewSalePDVPage() {
     
     setIsSubmitting(true);
     try {
-      // 1. Obtém/Cria Comanda Balcão (Mesa 0) - Literal RPC v5.3
+      // PDV = Mesa 0 via rpc_get_or_create_open_comanda
       const comandaId = await getOrCreateComanda(0, customerName || 'Consumidor Balcão');
       
-      // 2. Lança Itens via RPC Atômica (Com cast Number())
       for (const item of cart) {
         await adicionarItem(comandaId, item.product_id, Number(item.qty));
       }
       
-      // 3. Finaliza via RPC (Faturamento Atômico no Banco)
       await finalizarAtendimento(comandaId, method);
       
       toast({ title: 'Venda Finalizada!', description: `Total: ${formatCurrency(cartTotalDisplay)}` });

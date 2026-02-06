@@ -26,7 +26,6 @@ type AuthContextType = {
   refreshStatus: () => Promise<void>;
   createStore: (storeData: any) => Promise<void>;
   
-  // Interface do Provedor sincronizada com ComandaService v5.3
   getOrCreateComanda: (tableNumber: number, customerName: string | null) => Promise<string>;
   adicionarItem: (comandaId: string, productId: string, quantity: number) => Promise<void>;
   finalizarAtendimento: (comandaId: string, paymentMethod: 'dinheiro' | 'pix' | 'cartao') => Promise<void>;
@@ -50,35 +49,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fetchAppData = useCallback(async (userId: string) => {
     setStoreStatus('loading_status');
     try {
-      const { data: ownerStore } = await supabase.from('stores').select('id').eq('user_id', userId).maybeSingle();
-      let storeId = ownerStore?.id;
+      // Leitura de dados via views ou selects sem p_store_id manual (RLS resolve)
+      const [storeRes, prodRes, cmdRes, custRes, accessRes, cashRes] = await Promise.all([
+        supabase.from('stores').select('*').single(),
+        supabase.from('products').select('*').order('name'),
+        supabase.from('comandas').select('*, items:comanda_items(*)').eq('status', 'aberta').order('created_at', { ascending: true }),
+        supabase.from('customers').select('*').order('name'),
+        supabase.rpc('get_store_access_status'),
+        supabase.from('cash_registers').select('*').order('opened_at', { ascending: false })
+      ]);
 
-      if (!storeId) {
-        const { data: memberEntry } = await supabase.from('store_members').select('store_id').eq('user_id', userId).maybeSingle();
-        storeId = memberEntry?.store_id;
-      }
-
-      if (storeId) {
-        // Leitura via Selects protegidos por RLS (Sem mutação REST)
-        const [storeRes, prodRes, cmdRes, custRes, accessRes, cashRes] = await Promise.all([
-          supabase.from('stores').select('*').eq('id', storeId).single(),
-          supabase.from('products').select('*').eq('store_id', storeId).order('name'),
-          supabase.from('comandas').select('*, items:comanda_items(*)').eq('store_id', storeId).eq('status', 'aberta').order('created_at', { ascending: true }),
-          supabase.from('customers').select('*').eq('store_id', storeId).order('name'),
-          supabase.rpc('get_store_access_status', { p_store_id: storeId }),
-          supabase.from('cash_registers').select('*').eq('store_id', storeId).order('opened_at', { ascending: false })
-        ]);
-
-        setStore(storeRes.data || null);
-        setProducts(prodRes.data || []);
-        setComandas(cmdRes.data || []);
-        setCustomers(custRes.data || []);
-        setCashRegistersState(cashRes.data || []);
-        setAccessStatus(accessRes.data?.[0] || null);
-        setStoreStatus('ready');
-      } else {
-        setStoreStatus('no_store');
-      }
+      setStore(storeRes.data || null);
+      setProducts(prodRes.data || []);
+      setComandas(cmdRes.data || []);
+      setCustomers(custRes.data || []);
+      setCashRegistersState(cashRes.data || []);
+      setAccessStatus(accessRes.data?.[0] || null);
+      setStoreStatus('ready');
     } catch (err) {
       console.error('[AUTH_SYNC_FATAL]', err);
       setStoreStatus('error');
