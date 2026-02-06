@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * @fileOverview Painel Bar (BDS) - Sync v4.0.
- * Consome a View production_snapshot.
+ * @fileOverview Painel Bar (BDS) - SaaS Core v4.0.
+ * Sincronizado com a View production_snapshot.
  */
 
 import { useEffect, useState, useCallback } from 'react';
@@ -16,22 +16,37 @@ import { formatDistanceToNow, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
+import type { ProductionSnapshotView } from '@/lib/types';
 
 export default function BarPage() {
-  const { store, marcarItemConcluido, productionQueue, refreshStatus } = useAuth();
+  const { store, marcarItemConcluido } = useAuth();
   const { toast } = useToast();
+  const [pedidos, setPedidos] = useState<ProductionSnapshotView[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchPedidos = useCallback(async () => {
-    setLoading(true);
-    await refreshStatus();
-    setLoading(false);
-  }, [refreshStatus]);
+    if (!store?.id) return;
+    try {
+      const { data, error } = await supabase
+        .from('production_snapshot')
+        .select('*')
+        .eq('destino_preparo', 'bar')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+      setPedidos(data || []);
+    } catch (err) {
+      console.error('[BDS_FETCH_ERROR]', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [store?.id]);
 
   useEffect(() => {
     fetchPedidos();
     const channel = supabase
-      .channel('bds_v4')
+      .channel('bds_realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sale_items' }, () => fetchPedidos())
       .subscribe();
     
@@ -41,18 +56,17 @@ export default function BarPage() {
   const handleConcluir = async (itemId: string) => {
     try {
       await marcarItemConcluido(itemId);
-      toast({ title: 'Bebida Servida!' });
+      toast({ title: 'Drink Servido!' });
+      await fetchPedidos();
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Erro ao concluir', description: err.message });
+      toast({ variant: 'destructive', title: 'Erro', description: err.message });
     }
   };
 
-  const filteredItems = productionQueue.filter(p => p.destino_preparo === 'bar');
-
-  if (loading && productionQueue.length === 0) return (
-    <div className="h-[60vh] flex flex-col items-center justify-center gap-4">
+  if (loading && pedidos.length === 0) return (
+    <div className="h-[60vh] flex flex-col items-center justify-center gap-4 text-muted-foreground">
       <Loader2 className="animate-spin text-cyan-600 h-8 w-8" />
-      <p className="font-black uppercase text-[10px] tracking-widest text-muted-foreground animate-pulse">Sincronizando Bar...</p>
+      <p className="font-black uppercase text-[10px] tracking-widest animate-pulse">Sincronizando BDS...</p>
     </div>
   );
 
@@ -61,12 +75,12 @@ export default function BarPage() {
       <div className="flex items-center justify-between">
         <PageHeader title="Bar (BDS)" subtitle="Monitor de bebidas v4.0." />
         <Badge variant="outline" className="h-10 px-4 gap-2 font-black uppercase text-xs border-cyan-200 bg-cyan-50 text-cyan-600">
-          <GlassWater className="h-4 w-4 text-cyan-600" /> {filteredItems.length} Drinks
+          <GlassWater className="h-4 w-4 text-cyan-600" /> {pedidos.length} Pedidos Ativos
         </Badge>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-        {filteredItems.map(p => (
+        {pedidos.map(p => (
           <Card key={p.item_id} className="border-none shadow-xl overflow-hidden bg-background animate-in zoom-in-95 duration-300">
             <div className="px-6 py-4 flex justify-between items-center border-b bg-cyan-500/5 border-cyan-500/10">
               <div className="flex flex-col">
@@ -89,13 +103,13 @@ export default function BarPage() {
                 className="w-full h-16 font-black uppercase text-xs tracking-widest bg-cyan-600 hover:bg-cyan-700 shadow-xl shadow-cyan-600/20 transition-all active:scale-95" 
                 onClick={() => handleConcluir(p.item_id)}
               >
-                <CheckCircle2 className="mr-2 h-5 w-5" /> Confirmar Entrega
+                <CheckCircle2 className="mr-2 h-5 w-5" /> Marcar como Entregue
               </Button>
             </CardContent>
           </Card>
         ))}
 
-        {filteredItems.length === 0 && (
+        {pedidos.length === 0 && (
           <div className="col-span-full py-40 text-center opacity-20 border-4 border-dashed rounded-[40px] border-cyan-100 font-black uppercase tracking-[0.3em]">
             <History className="h-20 w-20 mx-auto mb-4 text-cyan-600" />
             Bar em Ordem

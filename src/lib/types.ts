@@ -78,7 +78,8 @@ export type SaleItem = {
   readonly sale_id: string;
   readonly quantity: number;
   readonly unit_price: number;
-  readonly subtotal_cents: number;
+  readonly line_total: number; // Coluna gerada no banco (readonly)
+  readonly subtotal_cents: number; // Alias legado para line_total
   readonly status: OrderItemStatus;
   readonly created_at: string;
   readonly product_name_snapshot?: string;
@@ -132,7 +133,7 @@ export type Customer = {
     created_at: string;
 };
 
-// V4.0 View Mapping
+// V4.0 View Mapping (production_snapshot)
 export type ProductionSnapshotView = {
   item_id: string;
   sale_id: string;

@@ -14,7 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 
 const comandaSchema = z.object({
-  mesa: z.string().min(1, 'Identificação é obrigatória'),
+  mesa: z.coerce.number().int().min(1, 'Número da mesa inválido'),
   cliente_nome: z.string().min(1, 'Nome do cliente é obrigatório'),
 });
 
@@ -25,44 +25,39 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
 }) {
-  const { abrirComanda } = useAuth();
+  const { getOpenSale, openSale, refreshStatus } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<ComandaFormValues>({
     resolver: zodResolver(comandaSchema),
-    defaultValues: { mesa: '', cliente_nome: '' }
+    defaultValues: { mesa: 0, cliente_nome: '' }
   });
 
   const onSubmit = async (values: ComandaFormValues) => {
-    const identificacao = values.mesa?.trim();
-    
-    if (!identificacao) {
-      toast({
-        variant: 'destructive',
-        title: 'Campo obrigatório',
-        description: 'Informe o número da mesa ou identificação da comanda.',
-      });
-      return;
-    }
-
     setIsSubmitting(true);
 
     try {
-      const comandaId = await abrirComanda(identificacao, values.cliente_nome);
+      // Fluxo Obrigatorio v4.0: Check -> Create
+      let saleId = await getOpenSale(values.mesa);
 
-      if (comandaId) {
-        toast({ title: 'Atendimento Iniciado!', description: `Mesa ${identificacao} aberta com sucesso.` });
-        onOpenChange(false);
-        form.reset();
-        router.push(`/comandas/${comandaId}`);
+      if (!saleId) {
+        saleId = await openSale(values.mesa, values.cliente_nome);
+        toast({ title: 'Atendimento Iniciado!', description: `Mesa ${values.mesa} aberta com sucesso.` });
+      } else {
+        toast({ title: 'Atendimento Localizado', description: `Redirecionando para a mesa ${values.mesa}.` });
       }
+
+      onOpenChange(false);
+      form.reset();
+      if (onSuccess) await onSuccess();
+      router.push(`/comandas/${saleId}`);
     } catch (err: any) {
       toast({ 
         variant: 'destructive', 
         title: 'Falha ao Abrir', 
-        description: err.message || 'Verifique sua conexão e tente novamente.' 
+        description: err.message || 'Erro ao processar abertura de mesa.' 
       });
     } finally {
       setIsSubmitting(false);
@@ -89,9 +84,9 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
               name="mesa"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Identificação (Mesa / Local) *</FormLabel>
+                  <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Número da Mesa *</FormLabel>
                   <FormControl>
-                    <Input placeholder="Ex: 15 ou Balcão" {...field} className="h-12 font-bold focus-visible:ring-primary/20" autoFocus />
+                    <Input type="number" placeholder="Ex: 15" {...field} className="h-12 font-bold focus-visible:ring-primary/20" autoFocus />
                   </FormControl>
                   <FormMessage className="font-bold" />
                 </FormItem>

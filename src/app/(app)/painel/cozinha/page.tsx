@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * @fileOverview Painel Cozinha (KDS) - Sync v4.0.
- * Consome a View production_snapshot.
+ * @fileOverview Painel Cozinha (KDS) - SaaS Core v4.0.
+ * Sincronizado com a View production_snapshot.
  */
 
 import { useEffect, useState, useCallback } from 'react';
@@ -16,22 +16,38 @@ import { formatDistanceToNow, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
+import type { ProductionSnapshotView } from '@/lib/types';
 
 export default function CozinhaPage() {
-  const { store, marcarItemConcluido, productionQueue, refreshStatus } = useAuth();
+  const { store, marcarItemConcluido, refreshStatus } = useAuth();
   const { toast } = useToast();
+  const [pedidos, setPedidos] = useState<ProductionSnapshotView[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchPedidos = useCallback(async () => {
-    setLoading(true);
-    await refreshStatus();
-    setLoading(false);
-  }, [refreshStatus]);
+    if (!store?.id) return;
+    try {
+      // Regra v4.0: Consumir exclusivamente a View production_snapshot
+      const { data, error } = await supabase
+        .from('production_snapshot')
+        .select('*')
+        .eq('destino_preparo', 'cozinha')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+      setPedidos(data || []);
+    } catch (err) {
+      console.error('[KDS_FETCH_ERROR]', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [store?.id]);
 
   useEffect(() => {
     fetchPedidos();
     const channel = supabase
-      .channel('kds_v4')
+      .channel('kds_realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sale_items' }, () => fetchPedidos())
       .subscribe();
     
@@ -41,32 +57,31 @@ export default function CozinhaPage() {
   const handleConcluir = async (itemId: string) => {
     try {
       await marcarItemConcluido(itemId);
-      toast({ title: 'Prato Pronto!' });
+      toast({ title: 'Prato Liberado!' });
+      await fetchPedidos();
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Erro ao concluir', description: err.message });
+      toast({ variant: 'destructive', title: 'Erro', description: err.message });
     }
   };
 
-  const filteredItems = productionQueue.filter(p => p.destino_preparo === 'cozinha');
-
-  if (loading && productionQueue.length === 0) return (
-    <div className="h-[60vh] flex flex-col items-center justify-center gap-4">
+  if (loading && pedidos.length === 0) return (
+    <div className="h-[60vh] flex flex-col items-center justify-center gap-4 text-muted-foreground">
       <Loader2 className="animate-spin text-primary h-8 w-8" />
-      <p className="font-black uppercase text-[10px] tracking-widest text-muted-foreground animate-pulse">Sincronizando Cozinha...</p>
+      <p className="font-black uppercase text-[10px] tracking-widest animate-pulse">Sincronizando KDS...</p>
     </div>
   );
 
   return (
     <div className="space-y-10 animate-in fade-in duration-500">
       <div className="flex items-center justify-between">
-        <PageHeader title="Cozinha (KDS)" subtitle="Monitor de produção v4.0." />
+        <PageHeader title="Cozinha (KDS)" subtitle="Produção em tempo real v4.0." />
         <Badge variant="outline" className="h-10 px-4 gap-2 font-black uppercase text-xs border-primary/20 bg-primary/5 text-primary">
-          <ChefHat className="h-4 w-4 text-primary" /> {filteredItems.length} Pedidos
+          <ChefHat className="h-4 w-4 text-primary" /> {pedidos.length} Pedidos Pendentes
         </Badge>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-        {filteredItems.map(p => (
+        {pedidos.map(p => (
           <Card key={p.item_id} className="border-none shadow-xl overflow-hidden bg-background animate-in zoom-in-95 duration-300">
             <div className="px-6 py-4 flex justify-between items-center border-b bg-muted/30">
               <div className="flex flex-col">
@@ -89,13 +104,13 @@ export default function CozinhaPage() {
                 className="w-full h-16 font-black uppercase text-xs tracking-widest shadow-xl shadow-primary/20 transition-all active:scale-95" 
                 onClick={() => handleConcluir(p.item_id)}
               >
-                <CheckCircle2 className="mr-2 h-5 w-5" /> Liberar para Entrega
+                <CheckCircle2 className="mr-2 h-5 w-5" /> Liberar Produção
               </Button>
             </CardContent>
           </Card>
         ))}
 
-        {filteredItems.length === 0 && (
+        {pedidos.length === 0 && (
           <div className="col-span-full py-40 text-center opacity-20 border-4 border-dashed rounded-[40px] font-black uppercase tracking-[0.3em]">
             <ChefHat className="h-20 w-20 mx-auto mb-4" />
             Cozinha Limpa

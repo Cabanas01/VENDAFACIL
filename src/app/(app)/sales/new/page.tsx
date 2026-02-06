@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * @fileOverview Ponto de Venda (PDV) - Design Premium Clean
- * Sincronizado para fidelidade visual absoluta à imagem e correção de erros de precificação.
+ * @fileOverview Ponto de Venda (PDV) - SaaS Core v4.0.
+ * Fluxo sequencial seguro: Abre Mesa 0 -> Lança Itens via RPC -> Fecha Venda via RPC.
  */
 
 import { useState, useMemo } from 'react';
@@ -45,7 +45,7 @@ const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((value || 0) / 100);
 
 export default function NewSalePage() {
-  const { products, sales, addSale, store } = useAuth();
+  const { products, sales, addSaleBalcao, store } = useAuth();
   const { toast } = useToast();
   
   const [search, setSearch] = useState('');
@@ -125,7 +125,8 @@ export default function NewSalePage() {
 
     setIsSubmitting(true);
     try {
-      const result = await addSale(cart, method);
+      // Chama a wrapper unificada que segue o fluxo RPC v4.0
+      const result = await addSaleBalcao(cart, method);
       if (result) {
         toast({ title: 'Venda Concluída!' });
         printReceipt(result, store);
@@ -170,7 +171,7 @@ export default function NewSalePage() {
               {filteredProducts.map(product => (
                 <Card 
                   key={product.id} 
-                  className="group cursor-pointer hover:border-primary transition-all active:scale-[0.98] shadow-sm border-primary/5 bg-background relative overflow-hidden h-36"
+                  className="group cursor-pointer hover:border-primary transition-all active:scale-[0.98] shadow-sm border-primary/5 bg-background h-36"
                   onClick={() => addToCart(product)}
                 >
                   <CardContent className="p-5 flex flex-col justify-between h-full text-left">
@@ -209,15 +210,15 @@ export default function NewSalePage() {
                           <p className="text-[11px] font-black uppercase leading-tight tracking-tight text-slate-900">{item.product_name_snapshot}</p>
                           <p className="text-[10px] text-muted-foreground font-bold uppercase mt-1 opacity-60">{formatCurrency(item.unit_price_cents)}</p>
                         </div>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-red-400 hover:bg-red-50 rounded-full" onClick={() => setCart(cart.filter(i => i.product_id !== item.product_id))}>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-red-400 rounded-full" onClick={() => setCart(cart.filter(i => i.product_id !== item.product_id))}>
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center bg-slate-100/50 rounded-2xl p-1 border border-slate-200/50">
-                          <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl hover:bg-white" onClick={() => updateQuantity(item.product_id, item.qty - 1)}><Minus className="h-4 w-4" /></Button>
+                          <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl" onClick={() => updateQuantity(item.product_id, item.qty - 1)}><Minus className="h-4 w-4" /></Button>
                           <span className="w-12 text-center text-sm font-black">{item.qty}</span>
-                          <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl hover:bg-white" onClick={() => updateQuantity(item.product_id, item.qty + 1)}><Plus className="h-4 w-4" /></Button>
+                          <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl" onClick={() => updateQuantity(item.product_id, item.qty + 1)}><Plus className="h-4 w-4" /></Button>
                         </div>
                         <span className="font-black text-lg text-slate-950 tracking-tighter">{formatCurrency(item.subtotal_cents)}</span>
                       </div>
@@ -239,7 +240,7 @@ export default function NewSalePage() {
                   <span className="text-5xl font-black text-primary tracking-tighter">{formatCurrency(cartTotal)}</span>
                 </div>
                 <Button 
-                  className="w-full h-20 text-sm font-black uppercase tracking-[0.2em] shadow-2xl shadow-primary/20 rounded-[24px] hover:scale-[1.02] active:scale-[0.98] transition-all"
+                  className="w-full h-20 text-sm font-black uppercase tracking-[0.2em] shadow-2xl shadow-primary/20 rounded-[24px]"
                   disabled={cart.length === 0 || isSubmitting}
                   onClick={() => setIsFinalizing(true)}
                 >
@@ -280,7 +281,7 @@ export default function NewSalePage() {
           <div className="p-10 bg-white relative">
             <button 
               onClick={() => setIsFinalizing(false)}
-              className="absolute right-8 top-8 h-12 w-12 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:text-slate-900 transition-colors shadow-sm ring-1 ring-slate-100"
+              className="absolute right-8 top-8 h-12 w-12 rounded-full bg-slate-50 flex items-center justify-center text-slate-400"
             >
               <X className="h-6 w-6" />
             </button>
@@ -293,17 +294,17 @@ export default function NewSalePage() {
               <Button 
                 variant="outline" 
                 className="h-24 justify-start text-[11px] font-black uppercase tracking-[0.2em] gap-8 border-none bg-slate-50 shadow-sm hover:bg-slate-100 transition-all px-10 rounded-[32px] group" 
-                onClick={() => handleFinalize('dinheiro')} 
+                onClick={() => handleFinalize('cash')} 
                 disabled={isSubmitting}
               >
                 <div className="h-16 w-16 rounded-full bg-green-100 flex items-center justify-center shrink-0 shadow-inner group-active:scale-95 transition-transform">
                   <Coins className="h-8 w-8 text-green-600" />
                 </div>
-                <span>DINHEIRO / TROCO</span>
+                <span>DINHEIRO</span>
               </Button>
 
               <Button 
-                className="h-24 justify-start text-[11px] font-black uppercase tracking-[0.2em] gap-8 border-none bg-cyan-400 text-white shadow-2xl shadow-cyan-400/30 hover:bg-cyan-500 transition-all px-10 rounded-[32px] ring-4 ring-cyan-400/10 group" 
+                className="h-24 justify-start text-[11px] font-black uppercase tracking-[0.2em] gap-8 border-none bg-cyan-400 text-white shadow-2xl shadow-cyan-400/30 hover:bg-cyan-500 transition-all px-10 rounded-[32px] group" 
                 onClick={() => handleFinalize('pix')} 
                 disabled={isSubmitting}
               >
@@ -316,21 +317,21 @@ export default function NewSalePage() {
               <Button 
                 variant="outline" 
                 className="h-24 justify-start text-[11px] font-black uppercase tracking-[0.2em] gap-8 border-none bg-slate-50 shadow-sm hover:bg-slate-100 transition-all px-10 rounded-[32px] group" 
-                onClick={() => handleFinalize('credito')} 
+                onClick={() => handleFinalize('card')} 
                 disabled={isSubmitting}
               >
                 <div className="h-16 w-16 rounded-full bg-blue-100 flex items-center justify-center shrink-0 shadow-inner group-active:scale-95 transition-transform">
                   <CreditCard className="h-8 w-8 text-blue-600" />
                 </div>
-                <span>CARTÃO DÉBITO/CRÉDITO</span>
+                <span>CARTÃO</span>
               </Button>
             </div>
           </div>
 
           {isSubmitting && (
-            <div className="absolute inset-0 bg-background/80 flex flex-col items-center justify-center z-50 animate-in fade-in backdrop-blur-sm">
+            <div className="absolute inset-0 bg-background/80 flex flex-col items-center justify-center z-50 backdrop-blur-sm">
               <Loader2 className="h-14 w-14 animate-spin text-primary mb-6" />
-              <p className="text-[11px] font-black uppercase tracking-[0.3em] text-primary animate-pulse">SINCRONIZANDO TRANSAÇÃO...</p>
+              <p className="text-[11px] font-black uppercase tracking-[0.3em] text-primary animate-pulse">PROCESSANDO...</p>
             </div>
           )}
         </DialogContent>

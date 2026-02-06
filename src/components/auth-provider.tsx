@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * @fileOverview AuthProvider - Backend v4.0 Sync.
- * Orquestrador central baseado no padrão RPC-First do PostgreSQL.
+ * @fileOverview AuthProvider - SaaS Core v4.0.
+ * Sincronizado com o padrão RPC-First. Escrita direta em tabelas financeiras é PROIBIDA.
  */
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -34,7 +34,9 @@ type AuthContextType = {
   refreshStatus: () => Promise<void>;
   createStore: (storeData: any) => Promise<void>;
   
-  getOpenSale: (mesa: string) => Promise<string | null>;
+  // RPC Wrappers
+  getOpenSale: (tableNumber: number) => Promise<string | null>;
+  openSale: (tableNumber: number, customerName: string) => Promise<string>;
   adicionarItem: (saleId: string, productId: string, quantity: number) => Promise<void>;
   fecharVenda: (saleId: string, paymentMethodId: string, cashRegisterId?: string) => Promise<void>;
   marcarItemConcluido: (itemId: string) => Promise<void>;
@@ -71,7 +73,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const [storeRes, prodRes, cmdRes, custRes, accessRes, salesRes, cashRes, queueRes] = await Promise.all([
           supabase.from('stores').select('*').eq('id', storeId).single(),
           supabase.from('products').select('*').eq('store_id', storeId).order('name'),
-          supabase.from('sales').select('*').eq('store_id', storeId).eq('status', 'open').order('created_at', { ascending: true }),
+          supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeId).eq('status', 'open').order('created_at', { ascending: true }),
           supabase.from('customers').select('*').eq('store_id', storeId).order('name'),
           supabase.rpc('get_store_access_status', { p_store_id: storeId }),
           supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeId).eq('status', 'paid').order('created_at', { ascending: false }).limit(50),
@@ -112,10 +114,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, [fetchAppData]);
 
-  const getOpenSale = async (mesa: string) => {
-    const { data, error } = await supabase.rpc('rpc_get_open_sale', { p_mesa: mesa });
+  // --- RPC Wrappers (Obrigatorios) ---
+
+  const getOpenSale = async (tableNumber: number) => {
+    if (!store?.id) return null;
+    const { data, error } = await supabase.rpc('rpc_get_open_sale', { 
+      p_store_id: store.id,
+      p_table_number: tableNumber 
+    });
     if (error) throw error;
-    return data; 
+    return (data as any)?.[0]?.sale_id || null; 
+  };
+
+  const openSale = async (tableNumber: number, customerName: string) => {
+    if (!store?.id) throw new Error('Loja não identificada.');
+    const { data, error } = await supabase.rpc('rpc_open_sale', {
+      p_store_id: store.id,
+      p_table_number: tableNumber,
+      p_customer_name: customerName
+    });
+    if (error) throw error;
+    return data as string;
   };
 
   const adicionarItem = async (saleId: string, productId: string, quantity: number) => {
@@ -124,7 +143,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       p_product_id: productId,
       p_quantity: Math.floor(quantity)
     });
-
     if (error) throw error;
     await refreshStatus();
   };
@@ -135,13 +153,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       p_payment_method_id: paymentMethodId,
       p_cash_register_id: cashRegisterId ?? null
     });
-
     if (error) throw error;
     await refreshStatus();
   };
 
   const marcarItemConcluido = async (itemId: string) => {
-    const { error } = await supabase.rpc('rpc_mark_item_done', { p_item_id: itemId });
+    const { error } = await supabase.rpc('rpc_mark_item_done', { 
+      p_item_id: itemId 
+    });
     if (error) throw error;
     await refreshStatus();
   };
@@ -150,13 +169,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!store?.id) throw new Error('Loja não identificada.');
     
     try {
-      // No PDV de balcão, mesa é sempre "0"
-      const { data: saleId, error: openErr } = await supabase.rpc('rpc_get_open_sale', { 
-        p_mesa: '0',
-        p_cliente_nome: 'Consumidor Final'
-      });
+      // Fluxo PDV Direto: Mesa 0
+      let saleId = await getOpenSale(0);
 
-      if (openErr) throw openErr;
+      if (!saleId) {
+        saleId = await openSale(0, 'Consumidor Final');
+      }
 
       for (const item of cart) {
         await adicionarItem(saleId, item.product_id, item.qty);
@@ -198,7 +216,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider value={{ 
       user, store, accessStatus, products, comandas, customers, sales, cashRegisters, productionQueue, storeStatus,
-      refreshStatus, createStore, getOpenSale, adicionarItem, fecharVenda, marcarItemConcluido, addSaleBalcao, logout 
+      refreshStatus, createStore, getOpenSale, openSale, adicionarItem, fecharVenda, marcarItemConcluido, addSaleBalcao, logout 
     }}>
       {children}
     </AuthContext.Provider>

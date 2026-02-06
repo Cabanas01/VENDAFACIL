@@ -2,7 +2,7 @@
 
 /**
  * @fileOverview Gestão de Comanda Individual (PDV Operacional).
- * Sincronizado com o contrato RPC-First v3.1 (sale_items).
+ * Sincronizado com o contrato RPC-First v4.0.
  */
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
@@ -29,7 +29,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import type { SaleItem, ComandaTotalView, Product } from '@/lib/types';
+import type { SaleItem, Sale, Product } from '@/lib/types';
 import { printReceipt } from '@/lib/print-receipt';
 
 const formatCurrency = (val: number) => 
@@ -37,11 +37,11 @@ const formatCurrency = (val: number) =>
 
 export default function ComandaDetailsPage() {
   const { id } = useParams();
-  const { store, adicionarItem, fecharComanda, products, refreshStatus } = useAuth();
+  const { store, adicionarItem, fecharVenda, products, refreshStatus } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
 
-  const [comanda, setComanda] = useState<ComandaTotalView | null>(null);
+  const [sale, setSale] = useState<Sale | null>(null);
   const [items, setItems] = useState<SaleItem[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -56,14 +56,13 @@ export default function ComandaDetailsPage() {
     if (!id) return;
     setLoading(true);
     try {
-      // 1. View de totais e Tabela física de itens (sale_items conforme v3.1)
-      const [comandaRes, itemsRes] = await Promise.all([
-        supabase.from('v_comandas_totais').select('*').eq('id', id).single(),
-        supabase.from('sale_items').select('*').eq('comanda_id', id)
+      const [saleRes, itemsRes] = await Promise.all([
+        supabase.from('sales').select('*').eq('id', id).single(),
+        supabase.from('sale_items').select('*').eq('sale_id', id)
       ]);
 
-      if (comandaRes.error) throw comandaRes.error;
-      setComanda(comandaRes.data as any);
+      if (saleRes.error) throw saleRes.error;
+      setSale(saleRes.data as Sale);
       setItems(itemsRes.data || []);
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Erro', description: err.message });
@@ -100,22 +99,11 @@ export default function ComandaDetailsPage() {
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
-      await fecharComanda(id as string, method);
+      await fecharVenda(id as string, method);
       toast({ title: 'Atendimento Concluído!' });
       
-      if (store && comanda) {
-        // Enviar sale mockado para impressão
-        const saleMock: any = { 
-          total_cents: comanda.total_cents, 
-          items: items.map(i => ({ 
-            product_name_snapshot: i.product_name_snapshot,
-            quantity: i.quantity,
-            unit_price: i.unit_price,
-            subtotal_cents: i.subtotal_cents
-          })), 
-          payment_method: method 
-        };
-        printReceipt(saleMock, store);
+      if (store && sale) {
+        printReceipt({ ...sale, items, payment_method: method } as Sale, store);
       }
 
       router.push('/comandas');
@@ -127,9 +115,9 @@ export default function ComandaDetailsPage() {
   };
 
   if (loading) return (
-    <div className="h-screen flex flex-col items-center justify-center gap-4">
+    <div className="h-screen flex flex-col items-center justify-center gap-4 text-muted-foreground">
       <Loader2 className="animate-spin text-primary" />
-      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground animate-pulse">Sincronizando Comanda...</p>
+      <p className="text-[10px] font-black uppercase tracking-widest animate-pulse">Sincronizando Comanda...</p>
     </div>
   );
 
@@ -138,20 +126,20 @@ export default function ComandaDetailsPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <button onClick={() => router.push('/comandas')} className="h-12 w-12 rounded-full bg-white shadow-sm flex items-center justify-center hover:bg-slate-50 transition-colors"><ArrowLeft /></button>
-          <h1 className="text-4xl font-black font-headline uppercase tracking-tighter">Comanda #{comanda?.numero}</h1>
-          <Badge variant="outline" className="font-black uppercase border-primary/20 text-primary">Mesa {comanda?.mesa || 'Balcão'}</Badge>
+          <h1 className="text-4xl font-black font-headline uppercase tracking-tighter">Mesa {sale?.mesa || 'Balcão'}</h1>
+          <Badge variant="outline" className="font-black uppercase border-primary/20 text-primary">Status: {sale?.status}</Badge>
         </div>
         <div className="text-right">
-          <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Total Acumulado</p>
-          <p className="text-4xl font-black text-primary tracking-tighter">{formatCurrency(comanda?.total_cents || 0)}</p>
+          <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Saldo Atual</p>
+          <p className="text-4xl font-black text-primary tracking-tighter">{formatCurrency(sale?.total_cents || 0)}</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <Card className="lg:col-span-2 border-none shadow-sm overflow-hidden bg-background">
           <CardHeader className="bg-muted/10 border-b flex flex-row items-center justify-between py-4">
-            <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Itens da Conta</CardTitle>
-            <Button size="sm" className="font-black uppercase text-[10px] h-9" onClick={() => setIsAddingItems(true)}>+ Adicionar Pedido</Button>
+            <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Itens Consumidos</CardTitle>
+            <Button size="sm" className="font-black uppercase text-[10px] h-9" onClick={() => setIsAddingItems(true)}>+ Novo Pedido</Button>
           </CardHeader>
           <Table>
             <TableHeader>
@@ -172,13 +160,13 @@ export default function ComandaDetailsPage() {
                   </TableCell>
                   <TableCell className="text-center font-black text-xs">x{item.quantity}</TableCell>
                   <TableCell className="text-right px-6 font-black text-primary">
-                    {formatCurrency(item.subtotal_cents)}
+                    {formatCurrency(item.line_total)}
                   </TableCell>
                 </TableRow>
               ))}
               {items.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={3} className="text-center py-12 text-muted-foreground font-black uppercase text-[10px] tracking-widest opacity-40">Conta zerada</TableCell>
+                  <TableCell colSpan={3} className="text-center py-12 text-muted-foreground font-black uppercase text-[10px] tracking-widest opacity-40">Nenhum item lançado</TableCell>
                 </TableRow>
               )}
             </TableBody>
@@ -187,22 +175,22 @@ export default function ComandaDetailsPage() {
 
         <Card className="border-primary/20 bg-primary/5 shadow-2xl h-fit rounded-[32px] overflow-hidden">
           <CardHeader className="text-center py-10 bg-primary/10">
-            <CardTitle className="text-[10px] font-black uppercase tracking-[0.3em] text-primary">Fechar Atendimento</CardTitle>
-            <p className="text-5xl font-black tracking-tighter mt-3 text-slate-900">{formatCurrency(comanda?.total_cents || 0)}</p>
+            <CardTitle className="text-[10px] font-black uppercase tracking-[0.3em] text-primary">Concluir Conta</CardTitle>
+            <p className="text-5xl font-black tracking-tighter mt-3 text-slate-900">{formatCurrency(sale?.total_cents || 0)}</p>
           </CardHeader>
           <CardContent className="p-8">
             <Button 
               className="w-full h-20 text-sm font-black uppercase tracking-[0.2em] shadow-2xl shadow-primary/20 rounded-[24px]" 
               onClick={() => setIsClosing(true)} 
-              disabled={!comanda || comanda.total_cents <= 0}
+              disabled={!sale || sale.total_cents <= 0}
             >
-              <CheckCircle2 className="mr-3 h-6 w-6" /> Receber Pagamento
+              <CheckCircle2 className="mr-3 h-6 w-6" /> Fechar Venda
             </Button>
           </CardContent>
         </Card>
       </div>
 
-      {/* DIALOGS MANUTENÇÃO */}
+      {/* DIALOGS */}
       <Dialog open={isAddingItems} onOpenChange={setIsAddingItems}>
         <DialogContent className="sm:max-w-4xl p-0 overflow-hidden rounded-[32px] border-none shadow-2xl">
           <div className="flex h-[75vh]">
@@ -210,7 +198,7 @@ export default function ComandaDetailsPage() {
               <div className="p-6 border-b bg-muted/5 flex items-center gap-4">
                 <Search className="text-muted-foreground h-5 w-5" />
                 <Input 
-                  placeholder="Pesquisar no cardápio..." 
+                  placeholder="Buscar produto..." 
                   className="h-14 bg-slate-50 border-none rounded-2xl shadow-inner text-lg" 
                   value={search} 
                   onChange={e => setSearch(e.target.value)} 
@@ -219,13 +207,13 @@ export default function ComandaDetailsPage() {
               <ScrollArea className="flex-1 p-6">
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   {products.filter(p => p.active && p.name.toLowerCase().includes(search.toLowerCase())).map(p => (
-                    <Card key={p.id} className="cursor-pointer hover:border-primary transition-all shadow-sm border-primary/5 bg-background relative overflow-hidden h-36" onClick={() => {
+                    <Card key={p.id} className="cursor-pointer hover:border-primary transition-all shadow-sm border-primary/5 bg-background h-36" onClick={() => {
                       const existing = localCart.find(i => i.product.id === p.id);
                       if (existing) setLocalCart(localCart.map(i => i.product.id === p.id ? {...i, qty: i.qty + 1} : i));
                       else setLocalCart([...localCart, {product: p, qty: 1}]);
                     }}>
-                      <CardContent className="p-5 flex flex-col justify-between h-full text-left">
-                        <h3 className="font-black text-[11px] leading-tight line-clamp-2 uppercase tracking-tighter text-slate-900">{p.name}</h3>
+                      <CardContent className="p-5 flex flex-col justify-between h-full">
+                        <h3 className="font-black text-[11px] uppercase tracking-tighter text-slate-900 line-clamp-2">{p.name}</h3>
                         <div className="flex items-end justify-between">
                           <span className="text-primary font-black text-xl tracking-tighter">{formatCurrency(p.price_cents)}</span>
                           <span className="text-[10px] font-black text-slate-300 uppercase">{p.stock_qty} UN</span>
@@ -237,7 +225,7 @@ export default function ComandaDetailsPage() {
               </ScrollArea>
             </div>
             <div className="w-80 flex flex-col bg-slate-50/50">
-              <div className="p-6 border-b font-black uppercase text-[10px] tracking-widest text-muted-foreground">Pedido Atual</div>
+              <div className="p-6 border-b font-black uppercase text-[10px] tracking-widest text-muted-foreground">Carrinho Local</div>
               <ScrollArea className="flex-1 p-6">
                 {localCart.map((item) => (
                   <div key={item.product.id} className="flex justify-between items-center mb-4 bg-white p-4 rounded-2xl shadow-sm">
@@ -245,7 +233,7 @@ export default function ComandaDetailsPage() {
                       <span className="text-[10px] font-black uppercase truncate max-w-[120px]">{item.product.name}</span>
                       <span className="text-[9px] font-bold text-primary">x{item.qty}</span>
                     </div>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-red-400 hover:bg-red-50 hover:text-red-600 rounded-full" onClick={() => setLocalCart(localCart.filter(i => i.product.id !== item.product.id))}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-red-400 rounded-full" onClick={() => setLocalCart(localCart.filter(i => i.product.id !== item.product.id))}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
@@ -256,11 +244,11 @@ export default function ComandaDetailsPage() {
               </ScrollArea>
               <div className="p-6 border-t bg-white space-y-4">
                 <div className="flex justify-between items-center px-2">
-                  <span className="text-[9px] font-black uppercase text-muted-foreground">Subtotal</span>
+                  <span className="text-[9px] font-black uppercase text-muted-foreground">A Lançar</span>
                   <span className="font-black text-primary">{formatCurrency(cartTotalDisplay)}</span>
                 </div>
-                <Button className="w-full h-16 font-black uppercase text-xs tracking-[0.2em] rounded-2xl shadow-lg shadow-primary/20" disabled={localCart.length === 0 || isSubmitting} onClick={handleAddItemsFinal}>
-                  {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar Pedido'}
+                <Button className="w-full h-16 font-black uppercase text-xs tracking-widest rounded-2xl shadow-lg shadow-primary/20" disabled={localCart.length === 0 || isSubmitting} onClick={handleAddItemsFinal}>
+                  {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Lançar Pedido'}
                 </Button>
               </div>
             </div>
@@ -271,22 +259,22 @@ export default function ComandaDetailsPage() {
       <Dialog open={isClosing} onOpenChange={setIsClosing}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden rounded-[40px] border-none shadow-2xl">
           <div className="p-10 bg-slate-900 text-white text-center relative">
-            <button onClick={() => setIsClosing(false)} className="absolute right-6 top-6 h-10 w-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"><X className="h-5 w-5" /></button>
+            <button onClick={() => setIsClosing(false)} className="absolute right-6 top-6 h-10 w-10 rounded-full bg-white/10 flex items-center justify-center"><X className="h-5 w-5" /></button>
             <DialogTitle className="text-2xl font-black uppercase tracking-tighter">Receber Pagamento</DialogTitle>
-            <DialogDescription className="text-white/40 uppercase font-bold text-[10px] mt-2 tracking-widest">Total da Conta: {formatCurrency(comanda?.total_cents || 0)}</DialogDescription>
+            <DialogDescription className="text-white/40 uppercase font-bold text-[10px] mt-2 tracking-widest">Mesa {sale?.mesa} • {formatCurrency(sale?.total_cents || 0)}</DialogDescription>
           </div>
           <div className="p-10 space-y-4 bg-white">
-            <Button variant="outline" className="w-full h-24 justify-start gap-8 border-none bg-slate-50 hover:bg-slate-100 rounded-[32px] px-10 transition-all group" onClick={() => handleFinalize('cash')}>
-              <div className="h-14 w-14 rounded-full bg-green-100 flex items-center justify-center shadow-inner group-active:scale-95 transition-transform"><CircleDollarSign className="text-green-600 h-7 w-7" /></div>
-              <span className="font-black uppercase text-xs tracking-[0.2em]">Dinheiro / Troco</span>
+            <Button variant="outline" className="w-full h-24 justify-start gap-8 border-none bg-slate-50 hover:bg-slate-100 rounded-[32px] px-10 transition-all" onClick={() => handleFinalize('cash')}>
+              <div className="h-14 w-14 rounded-full bg-green-100 flex items-center justify-center shadow-inner"><CircleDollarSign className="text-green-600 h-7 w-7" /></div>
+              <span className="font-black uppercase text-xs tracking-[0.2em]">Dinheiro</span>
             </Button>
-            <Button className="w-full h-24 justify-start gap-8 border-none bg-cyan-400 text-white hover:bg-cyan-500 rounded-[32px] px-10 shadow-2xl shadow-cyan-400/20 transition-all group" onClick={() => handleFinalize('pix')}>
-              <div className="h-14 w-14 rounded-full bg-white/20 flex items-center justify-center shadow-inner group-active:scale-95 transition-transform"><QrCode className="text-white h-7 w-7" /></div>
-              <span className="font-black uppercase text-xs tracking-[0.2em]">PIX QR Code</span>
+            <Button className="w-full h-24 justify-start gap-8 border-none bg-cyan-400 text-white hover:bg-cyan-500 rounded-[32px] px-10 shadow-2xl shadow-cyan-400/20 transition-all" onClick={() => handleFinalize('pix')}>
+              <div className="h-14 w-14 rounded-full bg-white/20 flex items-center justify-center shadow-inner"><QrCode className="text-white h-7 w-7" /></div>
+              <span className="font-black uppercase text-xs tracking-[0.2em]">PIX</span>
             </Button>
-            <Button variant="outline" className="w-full h-24 justify-start gap-8 border-none bg-slate-50 hover:bg-slate-100 rounded-[32px] px-10 transition-all group" onClick={() => handleFinalize('card')}>
-              <div className="h-14 w-14 rounded-full bg-blue-100 flex items-center justify-center shadow-inner group-active:scale-95 transition-transform"><CreditCard className="text-blue-600 h-7 w-7" /></div>
-              <span className="font-black uppercase text-xs tracking-[0.2em]">Cartão Débito/Crédito</span>
+            <Button variant="outline" className="w-full h-24 justify-start gap-8 border-none bg-slate-50 hover:bg-slate-100 rounded-[32px] px-10 transition-all" onClick={() => handleFinalize('card')}>
+              <div className="h-14 w-14 rounded-full bg-blue-100 flex items-center justify-center shadow-inner"><CreditCard className="text-blue-600 h-7 w-7" /></div>
+              <span className="font-black uppercase text-xs tracking-[0.2em]">Cartão</span>
             </Button>
           </div>
         </DialogContent>
