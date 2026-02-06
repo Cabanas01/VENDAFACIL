@@ -14,7 +14,7 @@ import {
   QrCode,
   UserCircle,
   CircleDollarSign,
-  CreditCard // Corrigido: CreditCard importado corretamente
+  CreditCard 
 } from 'lucide-react';
 import { useAuth } from '@/components/auth-provider';
 import { useToast } from '@/hooks/use-toast';
@@ -72,7 +72,8 @@ export default function NewSalePDVPage() {
         product_id: product.id,
         product_name_snapshot: product.name,
         qty: 1,
-        unit_price_cents: product.price_cents
+        unit_price_cents: product.price_cents,
+        stock_qty: product.stock_qty
       }]);
     }
   };
@@ -82,7 +83,7 @@ export default function NewSalePDVPage() {
     
     setIsSubmitting(true);
     try {
-      // PDV = Mesa 0 via rpc_get_or_create_open_comanda
+      // PDV = Mesa 0
       const comandaId = await getOrCreateComanda(0, customerName || 'Consumidor Balcão');
       
       for (const item of cart) {

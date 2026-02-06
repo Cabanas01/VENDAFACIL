@@ -5,21 +5,19 @@ import { supabase } from './supabase/client';
 /**
  * @fileOverview SERVIÇO CANÔNICO v5.3 (DEFINITIVO)
  * 
- * Regras de Ouro:
- * 1. store_id REMOVIDO (O banco resolve via auth.uid() por segurança).
- * 2. Nomes das funções são LITERAIS: 'rpc_get_or_create_open_comanda', etc.
- * 3. p_quantity sempre passa por Number() para garantir numeric no Postgres.
+ * Sincronizado com o hint do banco de dados:
+ * public.rpc_get_or_create_open_comanda(p_numero, p_store_id)
  */
 
 export const ComandaService = {
   /**
    * 1. Busca ou Cria Comanda Aberta
-   * Assinatura: rpc_get_or_create_open_comanda(p_table_number, p_customer_name)
+   * Assinatura Real: rpc_get_or_create_open_comanda(p_numero, p_store_id)
    */
-  async getOrCreateComanda(tableNumber: number, customerName?: string | null) {
+  async getOrCreateComanda(storeId: string, tableNumber: number) {
     const { data, error } = await supabase.rpc('rpc_get_or_create_open_comanda', {
-      p_table_number: Number(tableNumber),
-      p_customer_name: customerName && customerName.trim() !== '' ? customerName.trim() : null,
+      p_numero: Number(tableNumber),
+      p_store_id: storeId,
     });
 
     if (error) {
@@ -27,7 +25,7 @@ export const ComandaService = {
       throw new Error(error.message || 'Falha ao abrir comanda no servidor.');
     }
 
-    return data as string; // Retorna ID da comanda
+    return data as string; // Retorna ID da comanda (UUID)
   },
 
   /**

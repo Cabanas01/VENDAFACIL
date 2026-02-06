@@ -49,7 +49,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fetchAppData = useCallback(async (userId: string) => {
     setStoreStatus('loading_status');
     try {
-      // Leitura de dados via views ou selects sem p_store_id manual (RLS resolve)
       const [storeRes, prodRes, cmdRes, custRes, accessRes, cashRes] = await Promise.all([
         supabase.from('stores').select('*').single(),
         supabase.from('products').select('*').order('name'),
@@ -88,7 +87,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [fetchAppData]);
 
   const getOrCreateComanda = async (tableNumber: number, customerName: string | null) => {
-    return ComandaService.getOrCreateComanda(tableNumber, customerName);
+    if (!store?.id) throw new Error('Unidade não identificada.');
+    // Alinhado ao contrato: p_numero e p_store_id (conforme hint PGRST202)
+    return ComandaService.getOrCreateComanda(store.id, tableNumber);
   };
 
   const adicionarItem = async (comandaId: string, productId: string, quantity: number) => {
