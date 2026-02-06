@@ -32,7 +32,7 @@ const formatCurrency = (val: number) =>
 
 export default function ComandaDetailsPage() {
   const { id } = useParams();
-  const { store, adicionarItem, fecharVenda, products, refreshStatus } = useAuth();
+  const { store, adicionarItem, fecharVenda, products } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -76,16 +76,16 @@ export default function ComandaDetailsPage() {
     if (localCart.length === 0 || isSubmitting) return;
     setIsSubmitting(true);
     try {
+      // Chama rpc_add_item_to_sale para cada item
       for (const item of localCart) {
-        // Delega 100% do cálculo de preço e totais ao banco via RPC
         await adicionarItem(id as string, item.product.id, item.qty);
       }
-      toast({ title: 'Pedido Lançado!' });
+      toast({ title: 'Pedido Lançado com Sucesso!' });
       setLocalCart([]);
       setIsAddingItems(false);
       await fetchData();
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Falha ao Lançar', description: err.message });
+      toast({ variant: 'destructive', title: 'Falha ao lançar pedido', description: err.message });
     } finally {
       setIsSubmitting(false);
     }
@@ -95,15 +95,14 @@ export default function ComandaDetailsPage() {
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
-      // Faturamento atômico no servidor
+      // Chama fechar_comanda no backend
       await fecharVenda(id as string, method);
       
       toast({ title: 'Venda Concluída!' });
       
-      const { data: updatedSale } = await supabase.from('sales').select('*').eq('id', id).single();
-      
-      if (store && updatedSale) {
-        printReceipt({ ...updatedSale, items, payment_method: method } as Sale, store);
+      // Imprime recibo
+      if (store && sale) {
+        printReceipt({ ...sale, items, payment_method: method } as Sale, store);
       }
 
       router.push('/comandas');
@@ -128,7 +127,9 @@ export default function ComandaDetailsPage() {
           <Button variant="ghost" size="icon" onClick={() => router.push('/comandas')} className="h-12 w-12 rounded-full bg-white shadow-sm hover:bg-slate-50">
             <ArrowLeft />
           </Button>
-          <h1 className="text-4xl font-black font-headline uppercase tracking-tighter">Mesa {sale?.table_number}</h1>
+          <h1 className="text-4xl font-black font-headline uppercase tracking-tighter">
+            {sale?.table_number === 0 ? 'Balcão / PDV' : `Mesa ${sale?.table_number}`}
+          </h1>
           <Badge variant="outline" className="font-black uppercase border-primary/20 text-primary">Status: {sale?.status}</Badge>
         </div>
         <div className="text-right">
@@ -157,18 +158,18 @@ export default function ComandaDetailsPage() {
                   <TableCell className="px-6">
                     <div className="flex flex-col">
                       <span className="font-bold text-xs uppercase">{item.product_name_snapshot}</span>
-                      <span className="text-[9px] text-muted-foreground font-black uppercase">{formatCurrency(item.price_cents)} / un</span>
+                      <span className="text-[9px] text-muted-foreground font-black uppercase">{formatCurrency(item.unit_price)} / un</span>
                     </div>
                   </TableCell>
                   <TableCell className="text-center font-black text-xs">x{item.quantity}</TableCell>
                   <TableCell className="text-right px-6 font-black text-primary">
-                    {formatCurrency(item.subtotal_cents)}
+                    {formatCurrency(item.line_total)}
                   </TableCell>
                 </TableRow>
               ))}
               {items.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={3} className="text-center py-12 text-muted-foreground font-black uppercase text-[10px] tracking-widest opacity-40">Conta vazia</TableCell>
+                  <TableCell colSpan={3} className="text-center py-12 text-muted-foreground font-black uppercase text-[10px] tracking-widest opacity-40">Nenhum item lançado</TableCell>
                 </TableRow>
               )}
             </TableBody>
@@ -262,7 +263,9 @@ export default function ComandaDetailsPage() {
           <div className="p-10 bg-slate-900 text-white text-center relative">
             <button onClick={() => setIsClosing(false)} className="absolute right-6 top-6 h-10 w-10 rounded-full bg-white/10 flex items-center justify-center"><X className="h-5 w-5" /></button>
             <DialogTitle className="text-2xl font-black uppercase tracking-tighter">Pagamento</DialogTitle>
-            <DialogDescription className="text-white/40 uppercase font-bold text-[10px] mt-2 tracking-widest">Mesa {sale?.table_number} • {formatCurrency(sale?.total_cents || 0)}</DialogDescription>
+            <DialogDescription className="text-white/40 uppercase font-bold text-[10px] mt-2 tracking-widest">
+              {sale?.table_number === 0 ? 'BALCÃO' : `MESA ${sale?.table_number}`} • {formatCurrency(sale?.total_cents || 0)}
+            </DialogDescription>
           </div>
           <div className="p-10 space-y-4 bg-white">
             <Button variant="outline" className="w-full h-24 justify-start gap-8 border-none bg-slate-50 hover:bg-slate-100 rounded-[32px] px-10 transition-all" onClick={() => handleFinalize('cash')}>

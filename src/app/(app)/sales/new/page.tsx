@@ -55,8 +55,8 @@ export default function NewSalePage() {
     );
   }, [products, search]);
 
-  const cartTotal = useMemo(() => 
-    cart.reduce((sum, item) => sum + (Number(item.subtotal_cents) || 0), 0), 
+  const cartTotalDisplay = useMemo(() => 
+    cart.reduce((sum, item) => sum + (item.unit_price_cents * item.qty), 0), 
   [cart]);
 
   const addToCart = (product: Product) => {
@@ -91,22 +91,13 @@ export default function NewSalePage() {
   const handleFinalize = async (method: string) => {
     if (cart.length === 0 || isSubmitting || !store) return;
     
-    // v4.0: Identificação é agora obrigatória no PDV
-    if (!customerName.trim()) {
-      toast({ 
-        variant: 'destructive', 
-        title: 'Identificação Obrigatória', 
-        description: 'Por favor, informe o nome do cliente antes de concluir.' 
-      });
-      return;
-    }
-
     setIsSubmitting(true);
     try {
-      // v4.0: addSaleBalcao agora exige o nome do cliente para a RPC rpc_get_open_sale
-      const result = await addSaleBalcao(cart, method, customerName);
+      // Chama o wrapper do context que orquestra a RPC
+      const result = await addSaleBalcao(cart, method, customerName.trim() || 'Consumidor');
+      
       if (result) {
-        toast({ title: 'Venda Concluída!' });
+        toast({ title: 'Venda Finalizada!', description: `Total: ${formatCurrency(result.total_cents)}` });
         printReceipt(result, store);
         setCart([]);
         setCustomerName('');
@@ -115,8 +106,8 @@ export default function NewSalePage() {
     } catch (error: any) {
       toast({ 
         variant: 'destructive', 
-        title: 'Falha Técnica', 
-        description: error.message || 'Erro ao processar venda no servidor.' 
+        title: 'Erro ao processar venda', 
+        description: error.message || 'Falha técnica no servidor.' 
       });
     } finally {
       setIsSubmitting(false);
@@ -125,9 +116,11 @@ export default function NewSalePage() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)] animate-in fade-in duration-500">
-      <div className="mb-6">
-        <h1 className="text-3xl font-headline font-black uppercase tracking-tighter">FRENTE DE CAIXA</h1>
-        <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Venda Rápida de Balcão</p>
+      <div className="mb-6 flex justify-between items-end">
+        <div>
+          <h1 className="text-3xl font-headline font-black uppercase tracking-tighter">FRENTE DE CAIXA</h1>
+          <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Venda Rápida / Balcão</p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 overflow-hidden">
@@ -137,7 +130,7 @@ export default function NewSalePage() {
               <div className="relative">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                 <Input 
-                  placeholder="Pesquisar por nome ou código..." 
+                  placeholder="Pesquisar produto pelo nome ou código..." 
                   className="pl-12 h-14 text-lg bg-slate-50 border-none shadow-inner rounded-2xl"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -170,7 +163,7 @@ export default function NewSalePage() {
         <Card className="flex flex-col h-full border-primary/10 shadow-2xl overflow-hidden rounded-[40px] bg-background">
           <CardHeader className="p-6 bg-muted/20 border-b border-muted">
             <CardTitle className="flex items-center gap-3 text-sm font-black uppercase tracking-widest">
-              <ShoppingCart className="h-5 w-5 text-primary" /> Carrinho de Compras
+              <ShoppingCart className="h-5 w-5 text-primary" /> Carrinho
             </CardTitle>
           </CardHeader>
 
@@ -181,27 +174,27 @@ export default function NewSalePage() {
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
                       <p className="text-[11px] font-black uppercase leading-tight tracking-tight">{item.product_name_snapshot}</p>
-                      <p className="text-[10px] text-muted-foreground font-bold uppercase mt-1 opacity-60">{formatCurrency(item.unit_price_cents)}</p>
+                      <p className="text-[10px] text-muted-foreground font-bold uppercase mt-1">{formatCurrency(item.unit_price_cents)}</p>
                     </div>
                     <Button variant="ghost" size="icon" className="h-8 w-8 text-red-400 rounded-full" onClick={() => setCart(cart.filter(i => i.product_id !== item.product_id))}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center bg-slate-100/50 rounded-2xl p-1 border border-slate-200/50">
-                      <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => {
+                    <div className="flex items-center bg-slate-100 rounded-xl p-1">
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {
                         const newQty = item.qty - 1;
                         if (newQty < 1) setCart(cart.filter(i => i.product_id !== item.product_id));
                         else setCart(cart.map(i => i.product_id === item.product_id ? {...i, qty: newQty, subtotal_cents: newQty * i.unit_price_cents} : i));
-                      }}><Minus className="h-4 w-4" /></Button>
-                      <span className="w-12 text-center text-sm font-black">{item.qty}</span>
-                      <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => {
+                      }}><Minus className="h-3 w-3" /></Button>
+                      <span className="w-8 text-center text-xs font-black">{item.qty}</span>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {
                         if (item.qty >= item.stock_qty) return;
                         const newQty = item.qty + 1;
                         setCart(cart.map(i => i.product_id === item.product_id ? {...i, qty: newQty, subtotal_cents: newQty * i.unit_price_cents} : i));
-                      }}><Plus className="h-4 w-4" /></Button>
+                      }}><Plus className="h-3 w-3" /></Button>
                     </div>
-                    <span className="font-black text-lg text-slate-950 tracking-tighter">{formatCurrency(item.subtotal_cents)}</span>
+                    <span className="font-black text-sm text-slate-950">{formatCurrency(item.subtotal_cents)}</span>
                   </div>
                   <Separator className="opacity-30" />
                 </div>
@@ -217,15 +210,15 @@ export default function NewSalePage() {
 
           <CardFooter className="flex-none flex flex-col p-10 space-y-8 bg-slate-50/50 border-t border-muted/50">
             <div className="w-full flex justify-between items-end">
-              <span className="text-muted-foreground text-[10px] font-black uppercase tracking-[0.2em] opacity-60">TOTAL A RECEBER</span>
-              <span className="text-5xl font-black text-primary tracking-tighter">{formatCurrency(cartTotal)}</span>
+              <span className="text-muted-foreground text-[10px] font-black uppercase tracking-[0.2em] opacity-60">VALOR TOTAL</span>
+              <span className="text-5xl font-black text-primary tracking-tighter">{formatCurrency(cartTotalDisplay)}</span>
             </div>
             <Button 
               className="w-full h-20 text-sm font-black uppercase tracking-[0.2em] shadow-2xl shadow-primary/20 rounded-[24px]"
               disabled={cart.length === 0 || isSubmitting}
               onClick={() => setIsFinalizing(true)}
             >
-              FECHAR VENDA <ArrowRight className="ml-3 h-5 w-5" />
+              FINALIZAR VENDA <ArrowRight className="ml-3 h-5 w-5" />
             </Button>
           </CardFooter>
         </Card>
@@ -242,21 +235,20 @@ export default function NewSalePage() {
             </button>
             
             <div className="mb-10 pt-6 text-center space-y-2">
-              <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900 font-headline">FINALIZAÇÃO</h2>
-              <DialogDescription className="text-xs uppercase font-bold tracking-widest text-muted-foreground">Total: {formatCurrency(cartTotal)}</DialogDescription>
+              <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900 font-headline">PAGAMENTO</h2>
+              <DialogDescription className="text-xs uppercase font-bold tracking-widest text-muted-foreground">Total: {formatCurrency(cartTotalDisplay)}</DialogDescription>
             </div>
 
             <div className="space-y-8">
               <div className="space-y-3">
-                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground pl-2">Identificação do Cliente *</label>
+                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground pl-2">Identificação do Cliente</label>
                 <div className="relative">
                   <UserCircle className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground opacity-50" />
                   <Input 
-                    placeholder="Nome ou CPF..." 
+                    placeholder="Nome do consumidor (opcional)..." 
                     className="h-14 pl-12 rounded-2xl border-none bg-slate-100/50 font-bold text-lg focus-visible:ring-primary/20"
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
-                    autoFocus
                   />
                 </div>
               </div>
@@ -266,7 +258,7 @@ export default function NewSalePage() {
                   variant="outline" 
                   className="h-20 justify-start text-[11px] font-black uppercase tracking-[0.2em] gap-6 border-none bg-slate-50 shadow-sm hover:bg-slate-100 transition-all px-8 rounded-[24px] group" 
                   onClick={() => handleFinalize('cash')} 
-                  disabled={isSubmitting || !customerName.trim()}
+                  disabled={isSubmitting}
                 >
                   <div className="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center shrink-0 shadow-inner group-active:scale-95 transition-transform">
                     <Coins className="h-6 w-6 text-green-600" />
@@ -277,7 +269,7 @@ export default function NewSalePage() {
                 <Button 
                   className="h-20 justify-start text-[11px] font-black uppercase tracking-[0.2em] gap-6 border-none bg-cyan-400 text-white shadow-2xl shadow-cyan-400/30 hover:bg-cyan-500 transition-all px-8 rounded-[24px] group" 
                   onClick={() => handleFinalize('pix')} 
-                  disabled={isSubmitting || !customerName.trim()}
+                  disabled={isSubmitting}
                 >
                   <div className="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center shrink-0 shadow-inner group-active:scale-95 transition-transform">
                     <QrCode className="h-6 w-6 text-white" />
@@ -289,7 +281,7 @@ export default function NewSalePage() {
                   variant="outline" 
                   className="h-20 justify-start text-[11px] font-black uppercase tracking-[0.2em] gap-6 border-none bg-slate-50 shadow-sm hover:bg-slate-100 transition-all px-8 rounded-[24px] group" 
                   onClick={() => handleFinalize('card')} 
-                  disabled={isSubmitting || !customerName.trim()}
+                  disabled={isSubmitting}
                 >
                   <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center shrink-0 shadow-inner group-active:scale-95 transition-transform">
                     <CreditCard className="h-6 w-6 text-blue-600" />

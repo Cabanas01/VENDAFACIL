@@ -4,19 +4,19 @@ import { supabase } from './supabase/client';
 
 /**
  * @fileOverview Serviços de Integração RPC (Backend v4.0)
- * Concentra as chamadas transacionais para garantir sincronia com o PostgreSQL.
+ * Centraliza as chamadas transacionais para garantir sincronia com o PostgreSQL.
  */
 
 /**
  * Busca uma venda aberta para a mesa ou cria uma nova se não existir.
  * @param p_store_id ID da Loja (UUID)
  * @param p_table_number Número da Mesa (Integer)
- * @param p_customer_name Nome do Cliente (Text) - OBRIGATÓRIO v4.0
+ * @param p_customer_name Nome do Cliente (Text) - Opcional
  */
 export async function getOpenSaleRpc(
   storeId: string, 
   tableNumber: number, 
-  customerName: string
+  customerName: string | null = null
 ): Promise<string> {
   const { data, error } = await supabase.rpc('rpc_get_open_sale', {
     p_store_id: storeId,
@@ -26,11 +26,7 @@ export async function getOpenSaleRpc(
 
   if (error) {
     console.error('[RPC_GET_OPEN_SALE_ERROR]', error);
-    // Erro de assinatura (falta de parâmetro ou tipo errado)
-    if (error.message.includes('function') || error.message.includes('candidate')) {
-      throw new Error('Erro crítico: Assinatura da função de abertura inválida ou desatualizada.');
-    }
-    throw new Error('Falha ao abrir atendimento. Verifique os dados e tente novamente.');
+    throw new Error('Falha ao abrir atendimento no servidor.');
   }
 
   return data as string;
@@ -38,12 +34,19 @@ export async function getOpenSaleRpc(
 
 /**
  * Adiciona um item à venda. O banco resolve preço, subtotal e status.
+ * @param p_sale_id ID da Venda (UUID)
+ * @param p_product_id ID do Produto (UUID)
+ * @param p_quantity Quantidade (Numeric)
  */
-export async function addItemToSaleRpc(saleId: string, productId: string, quantity: number): Promise<void> {
+export async function addItemToSaleRpc(
+  saleId: string, 
+  productId: string, 
+  quantity: number
+): Promise<void> {
   const { error } = await supabase.rpc('rpc_add_item_to_sale', {
     p_sale_id: saleId,
     p_product_id: productId,
-    p_quantity: quantity
+    p_quantity: Number(quantity) // Garante Numeric
   });
 
   if (error) {
@@ -53,30 +56,23 @@ export async function addItemToSaleRpc(saleId: string, productId: string, quanti
 }
 
 /**
- * Fecha a venda calculando totais, atualizando caixa e status.
+ * Fecha a comanda calculando totais, atualizando caixa e status via RPC fechar_comanda.
+ * @param p_comanda_id ID da Venda/Comanda (UUID)
+ * @param p_forma_pagamento Método de Pagamento (Text)
  */
-export async function closeSaleRpc(saleId: string, paymentMethod: string): Promise<void> {
-  const { error } = await supabase.rpc('rpc_close_sale', {
-    p_sale_id: saleId,
-    p_payment_method: paymentMethod
+export async function fecharComandaRpc(
+  comandaId: string, 
+  formaPagamento: string
+): Promise<any> {
+  const { data, error } = await supabase.rpc('fechar_comanda', {
+    p_comanda_id: comandaId,
+    p_forma_pagamento: formaPagamento
   });
 
   if (error) {
-    console.error('[RPC_CLOSE_SALE_ERROR]', error);
+    console.error('[RPC_CLOSE_COMANDA_ERROR]', error);
     throw new Error(error.message || 'Falha ao finalizar venda no servidor.');
   }
-}
 
-/**
- * Conclui o preparo de um item individual (KDS/BDS).
- */
-export async function markItemDoneRpc(itemId: string): Promise<void> {
-  const { error } = await supabase.rpc('rpc_mark_item_done', {
-    p_item_id: itemId
-  });
-
-  if (error) {
-    console.error('[RPC_MARK_ITEM_DONE_ERROR]', error);
-    throw new Error(error.message || 'Falha ao concluir preparo do item.');
-  }
+  return data;
 }

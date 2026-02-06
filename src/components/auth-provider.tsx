@@ -5,8 +5,7 @@ import { supabase } from '@/lib/supabase/client';
 import { 
   getOpenSaleRpc, 
   addItemToSaleRpc, 
-  closeSaleRpc, 
-  markItemDoneRpc 
+  fecharComandaRpc
 } from '@/lib/rpc';
 import type { 
   Store, 
@@ -35,11 +34,10 @@ type AuthContextType = {
   refreshStatus: () => Promise<void>;
   createStore: (storeData: any) => Promise<void>;
   
-  // RPC Wrappers - Delegação total ao Banco v4.0
-  getOpenSale: (tableNumber: number, customerName: string) => Promise<string>;
+  // RPC Wrappers - Alinhados ao Backend
+  getOpenSale: (tableNumber: number, customerName: string | null) => Promise<string>;
   adicionarItem: (saleId: string, productId: string, quantity: number) => Promise<void>;
-  fecharVenda: (saleId: string, paymentMethodId: string) => Promise<void>;
-  marcarItemConcluido: (itemId: string) => Promise<void>;
+  fecharVenda: (saleId: string, paymentMethod: string) => Promise<void>;
   addSaleBalcao: (cart: CartItem[], paymentMethod: string, customerName: string) => Promise<Sale | null>;
   
   logout: () => Promise<void>;
@@ -115,7 +113,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, [fetchAppData]);
 
-  const getOpenSale = async (tableNumber: number, customerName: string) => {
+  const getOpenSale = async (tableNumber: number, customerName: string | null) => {
     if (!store?.id) throw new Error('Unidade não identificada.');
     return getOpenSaleRpc(store.id, tableNumber, customerName);
   };
@@ -124,24 +122,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await addItemToSaleRpc(saleId, productId, quantity);
   };
 
-  const fecharVenda = async (saleId: string, paymentMethodId: string) => {
-    await closeSaleRpc(saleId, paymentMethodId);
-    await refreshStatus();
-  };
-
-  const marcarItemConcluido = async (itemId: string) => {
-    await markItemDoneRpc(itemId);
+  const fecharVenda = async (saleId: string, paymentMethod: string) => {
+    await fecharComandaRpc(saleId, paymentMethod);
     await refreshStatus();
   };
 
   const addSaleBalcao = async (cart: CartItem[], paymentMethod: string, customerName: string) => {
     if (!store?.id) throw new Error('Unidade não identificada.');
     try {
+      // Venda de balcão usa mesa 0
       const saleId = await getOpenSale(0, customerName);
+      
       for (const item of cart) {
         await adicionarItem(saleId, item.product_id, item.qty);
       }
+      
       await fecharVenda(saleId, paymentMethod);
+      
       const { data: finalSale } = await supabase.from('sales').select('*, items:sale_items(*)').eq('id', saleId).single();
       return finalSale as Sale;
     } catch (err: any) {
@@ -171,7 +168,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider value={{ 
       user, store, accessStatus, products, comandas, customers, sales, cashRegisters, productionQueue, storeStatus,
-      refreshStatus, createStore, getOpenSale, adicionarItem, fecharVenda, marcarItemConcluido, addSaleBalcao, logout 
+      refreshStatus, createStore, getOpenSale, adicionarItem, fecharVenda, addSaleBalcao, logout 
     }}>
       {children}
     </AuthContext.Provider>
