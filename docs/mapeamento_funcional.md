@@ -1,45 +1,44 @@
-# 🗺️ Mapeamento Funcional Frontend — VendaFácil Brasil v4.0 (OFFICIAL)
+# 🗺️ Mapeamento Funcional Frontend — VendaFácil Brasil v4.0 (OFICIAL)
 
-Este documento define o contrato de integração definitiva entre o Frontend (Next.js) e o Backend (PostgreSQL/Supabase) versão 4.0. O sistema segue o padrão **RPC-First**.
+Este documento define o contrato de integração definitiva entre o Frontend (Next.js) e o Backend (PostgreSQL/Supabase). O sistema segue rigorosamente o padrão **RPC-First**.
 
-## 1. Arquitetura Geral
-- **Banco**: PostgreSQL (Supabase)
-- **Padrão**: RPC-First
-- **Fonte da Verdade**: Tabelas `sales` e `sale_items`.
-- **Integridade**: Toda lógica crítica reside no banco de dados.
+## 1. Arquitetura Base
+- **Frontend**: Next.js 15 + Supabase Client.
+- **Backend**: PostgreSQL (Autoridade Máxima).
+- **Regra de Ouro**: O frontend **NUNCA** calcula totais, soma subtotais para persistência ou define status financeiros manualmente. Tudo é delegado às RPCs.
 
 ## 2. Contrato de Escrita (RPCs v4.0)
-Todas as mutações financeiras e operacionais devem utilizar exclusivamente as seguintes funções:
+Todas as operações transacionais devem utilizar exclusivamente estas funções:
 
 | Função Frontend | RPC PostgreSQL | Responsabilidade |
 | :--- | :--- | :--- |
-| `getOpenSale(mesa)` | `rpc_get_open_sale` | Busca ID da venda/comanda aberta para uma mesa. |
-| `adicionarItem` | `rpc_add_item_to_sale` | Adiciona item à venda. Banco resolve preço e subtotal. |
-| `fecharVenda` | `rpc_close_sale` | Finaliza venda com lock transacional e gera financeiro. |
-| `marcarItemConcluido`| `rpc_mark_item_done` | Move item de 'pending' para 'done'. |
-| `concluirTudo` | `rpc_mark_sale_items_done`| Conclui todos os itens de uma venda de uma vez. |
+| `getOpenSale(mesa)` | `rpc_get_open_sale` | Localiza ou valida venda aberta para uma mesa/local. |
+| `adicionarItem` | `rpc_add_item_to_sale` | Adiciona item à venda. O banco resolve preço e subtotal. |
+| `fecharVenda` | `rpc_close_sale` | Finaliza venda com faturamento atômico e baixa no caixa. |
+| `marcarItemConcluido`| `rpc_mark_item_done` | Move item de 'pending' para 'done' (KDS/BDS). |
+| `concluirTudo` | `rpc_mark_sale_items_done`| Finaliza todos os itens de uma venda de uma vez. |
 
 ## 3. Regras de Integridade Financeira
 1.  **Moeda**: Valores circulam como inteiros (`price_cents`). Exibição via `value / 100`.
-2.  **subtotal_cents**: Coluna `GENERATED ALWAYS` na tabela `sale_items`.
-3.  **unit_price**: Capturado automaticamente pelo banco no momento da inserção via RPC.
+2.  **subtotal_cents**: Coluna `GENERATED ALWAYS` no banco. O frontend apenas lê para exibição.
+3.  **unit_price**: Capturado automaticamente pelo banco via RPC no momento da inserção.
 
 ## 4. Monitoramento de Produção (KDS / BDS)
 Os painéis operam sobre a view **`public.production_snapshot`**:
-- **Filtro Nativo**: Itens com `status = 'pending'`.
+- **Filtro Nativo**: Apenas itens com `status = 'pending'`.
 - **Filtro Destino**: `destino_preparo` ('cozinha' ou 'bar').
-- **Performance**: Utiliza índices parciais para resposta em milissegundos.
+- **Ação**: Chamar `rpc_mark_item_done` para remover da fila.
 
 ## 5. Máquina de Estados (Domínios)
-### Itens (`sale_items`)
-- `pending`: Aguardando preparo.
-- `done`: Finalizado/Entregue.
-- `cancelled`: Estornado.
-
-### Vendas (`sales`)
-- `open`: Comanda ativa (atendimento em curso).
+### Vendas (`sales.status`)
+- `open`: Atendimento em curso (Comanda).
 - `paid`: Venda concluída e paga.
 - `cancelled`: Venda anulada.
 
+### Itens (`sale_items.status`)
+- `pending`: Aguardando preparo/entrega.
+- `done`: Finalizado/Entregue.
+- `cancelled`: Estornado.
+
 ---
-*Versão 4.0 Consolidada. Qualquer divergência deve ser resolvida ajustando as RPCs no backend.*
+*Versão 4.0 Consolidada. Proibido o uso de .insert() ou .update() em tabelas financeiras pelo cliente.*

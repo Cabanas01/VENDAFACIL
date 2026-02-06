@@ -2,7 +2,7 @@
 
 /**
  * @fileOverview AuthProvider - Backend v4.0 Sync.
- * Implementa as novas RPCs: rpc_add_item_to_sale, rpc_close_sale, rpc_mark_item_done, rpc_get_open_sale.
+ * Central de orquestração RPC-First.
  */
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -115,7 +115,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const getOpenSale = async (mesa: string) => {
     const { data, error } = await supabase.rpc('rpc_get_open_sale', { p_mesa: mesa });
     if (error) throw error;
-    return data; // Retorna sale_id ou null
+    return data; 
   };
 
   const adicionarItem = async (saleId: string, productId: string, quantity: number) => {
@@ -123,7 +123,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       p_sale_id: saleId,
       p_product_id: productId,
       p_quantity: Math.floor(quantity),
-      p_unit_price: null // Banco resolve
+      p_unit_price: null 
     });
 
     if (error) throw error;
@@ -151,7 +151,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!store?.id) throw new Error('Loja não identificada.');
     
     try {
-      // No PDV de balcão, criamos um sale "open" na mesa "0" e fechamos em seguida
       const { data: saleId, error: openErr } = await supabase.from('sales').insert({
         store_id: store.id,
         status: 'open',
