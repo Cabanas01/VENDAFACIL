@@ -72,7 +72,7 @@ export default function ComandaDetailsPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Cálculo visual para o carrinho temporário (antes do banco processar)
+  // Cálculo visual para o carrinho temporário baseado no preço atual do produto
   const cartTotalDisplay = useMemo(() => 
     localCart.reduce((acc, i) => acc + (i.product.price_cents * i.qty), 0), 
   [localCart]);
@@ -81,6 +81,7 @@ export default function ComandaDetailsPage() {
     if (localCart.length === 0 || isSubmitting) return;
     setIsSubmitting(true);
     try {
+      // ✅ Chama adicionarItem que agora está blindado contra ".price"
       for (const item of localCart) {
         await adicionarItem(id as string, item.product.id, item.qty);
       }
@@ -121,12 +122,12 @@ export default function ComandaDetailsPage() {
     <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" onClick={() => router.push('/comandas')} className="rounded-full h-12 w-12"><ArrowLeft /></Button>
+          <button onClick={() => router.push('/comandas')} className="h-12 w-12 rounded-full bg-white shadow-sm flex items-center justify-center hover:bg-slate-50 transition-colors"><ArrowLeft /></button>
           <h1 className="text-4xl font-black font-headline uppercase tracking-tighter">Comanda #{comanda?.numero}</h1>
           <Badge variant="outline" className="font-black uppercase border-primary/20 text-primary">{comanda?.status}</Badge>
         </div>
         <div className="text-right">
-          <p className="text-[10px] font-black uppercase text-muted-foreground">Saldo da Conta</p>
+          <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Saldo da Conta</p>
           <p className="text-4xl font-black text-primary tracking-tighter">{formatCurrency(comanda?.total_cents || 0)}</p>
         </div>
       </div>
@@ -151,7 +152,7 @@ export default function ComandaDetailsPage() {
                   <TableCell className="px-6 font-bold text-xs uppercase tracking-tight">{item.product_name_snapshot || 'Produto'}</TableCell>
                   <TableCell className="text-center font-black text-xs">x{item.quantity}</TableCell>
                   <TableCell className="text-right px-6 font-black text-primary">
-                    {/* ✅ REGRA DE OURO: Exibe o line_total calculado pelo banco */}
+                    {/* ✅ Exibe line_total que agora é a fonte da verdade vinda do banco */}
                     {formatCurrency(item.line_total)}
                   </TableCell>
                 </TableRow>
@@ -196,16 +197,19 @@ export default function ComandaDetailsPage() {
                 />
               </div>
               <ScrollArea className="flex-1 p-6">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   {products.filter(p => p.active && p.name.toLowerCase().includes(search.toLowerCase())).map(p => (
-                    <Card key={p.id} className="cursor-pointer hover:border-primary transition-all shadow-sm group active:scale-95" onClick={() => {
+                    <Card key={p.id} className="cursor-pointer hover:border-primary transition-all shadow-sm group active:scale-95 border-primary/5 bg-background relative overflow-hidden h-36" onClick={() => {
                       const existing = localCart.find(i => i.product.id === p.id);
                       if (existing) setLocalCart(localCart.map(i => i.product.id === p.id ? {...i, qty: i.qty + 1} : i));
                       else setLocalCart([...localCart, {product: p, qty: 1}]);
                     }}>
-                      <CardContent className="p-5 text-center space-y-2">
-                        <p className="font-black uppercase text-[11px] leading-tight group-hover:text-primary transition-colors">{p.name}</p>
-                        <p className="font-black text-lg text-primary tracking-tighter">{formatCurrency(p.price_cents)}</p>
+                      <CardContent className="p-5 flex flex-col justify-between h-full text-left">
+                        <h3 className="font-black text-[11px] leading-tight line-clamp-2 uppercase tracking-tighter text-slate-900">{p.name}</h3>
+                        <div className="flex items-end justify-between">
+                          <span className="text-primary font-black text-xl tracking-tighter">{formatCurrency(p.price_cents)}</span>
+                          <span className="text-[10px] font-black text-slate-300 uppercase">{p.stock_qty} UN</span>
+                        </div>
                       </CardContent>
                     </Card>
                   ))}
@@ -236,7 +240,7 @@ export default function ComandaDetailsPage() {
                   <span className="font-black text-primary">{formatCurrency(cartTotalDisplay)}</span>
                 </div>
                 <Button className="w-full h-16 font-black uppercase text-xs tracking-[0.2em] rounded-2xl shadow-lg shadow-primary/20" disabled={localCart.length === 0 || isSubmitting} onClick={handleAddItemsFinal}>
-                  {isSubmitting ? <Loader2 className="animate-spin" /> : 'Lançar na Conta'}
+                  {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Lançar na Conta'}
                 </Button>
               </div>
             </div>

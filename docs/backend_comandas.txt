@@ -1,14 +1,15 @@
-
 -- ======================================================
 -- 🛠️ BACKEND DEFINITIVO: VENDAFÁCIL BRASIL
--- FOCO: ELIMINAR AMBIGUIDADE DE FUNÇÕES (BEST CANDIDATE)
+-- FOCO: ELIMINAR AMBIGUIDADE DE FUNÇÕES E COLUNAS GERADAS
 -- ======================================================
 
--- 1️⃣ LIMPEZA: Removendo versões antigas para evitar "best candidate" error
+-- 1️⃣ LIMPEZA: Removendo versões antigas para evitar conflito de assinaturas
 DROP FUNCTION IF EXISTS public.rpc_add_item_to_comanda(uuid, uuid, integer, integer);
 DROP FUNCTION IF EXISTS public.rpc_add_item_to_comanda(uuid, uuid, numeric, numeric);
+DROP FUNCTION IF EXISTS public.rpc_add_item_to_comanda(uuid, uuid, numeric);
 
 -- 2️⃣ FUNÇÃO: ADICIONAR ITEM À COMANDA (Versão Única e Segura)
+-- ✅ NÃO insere na coluna line_total (Postgres calcula automaticamente)
 CREATE OR REPLACE FUNCTION public.rpc_add_item_to_comanda(
     p_comanda_id UUID,
     p_product_id UUID,
@@ -21,15 +22,18 @@ DECLARE
     v_prod_target TEXT;
     v_final_price NUMERIC;
 BEGIN
+    -- 1. Identificar contexto
     SELECT store_id INTO v_store_id FROM public.comandas WHERE id = p_comanda_id;
     SELECT name, production_target INTO v_prod_name, v_prod_target FROM public.products WHERE id = p_product_id;
     
+    -- 2. Resolver preço (Prioridade: Parâmetro > Cadastro do Produto)
     IF p_unit_price IS NULL OR p_unit_price = 0 THEN
         SELECT price_cents INTO v_final_price FROM public.products WHERE id = p_product_id;
     ELSE
         v_final_price := p_unit_price;
     END IF;
 
+    -- 3. Inserir item (line_total omitido para respeitar GENERATED ALWAYS)
     INSERT INTO public.order_items (
         store_id, comanda_id, product_id, product_name_snapshot,
         quantity, unit_price, status, destino_preparo
@@ -38,8 +42,10 @@ BEGIN
         p_quantity, v_final_price, 'pending', v_prod_target
     );
 
+    -- 4. Baixa estoque
     UPDATE public.products SET stock_qty = stock_qty - p_quantity WHERE id = p_product_id;
-    RETURN 'Item adicionado com sucesso';
+    
+    RETURN 'Item lançado com sucesso';
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -54,6 +60,7 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- 4️⃣ FUNÇÃO: FECHAR COMANDA E GERAR VENDA (Atômica)
+-- ✅ Utiliza SUM(line_total) para faturamento preciso
 CREATE OR REPLACE FUNCTION public.rpc_close_comanda_to_sale(
     p_comanda_id UUID,
     p_payment_method_id TEXT,
@@ -65,18 +72,22 @@ DECLARE
     v_store_id UUID;
 BEGIN
     SELECT store_id INTO v_store_id FROM public.comandas WHERE id = p_comanda_id;
+    
+    -- Calcula total baseado na coluna gerada pelo banco
     SELECT COALESCE(SUM(line_total), 0) INTO v_total_cents 
     FROM public.order_items WHERE comanda_id = p_comanda_id AND status != 'canceled';
 
+    -- Cria registro de venda
     INSERT INTO public.sales (
         store_id, comanda_id, total_cents, payment_method, cash_register_id
     ) VALUES (
         v_store_id, p_comanda_id, v_total_cents, p_payment_method_id, p_cash_register_id
     ) RETURNING id INTO v_sale_id;
 
+    -- Vincula itens à venda e atualiza status
     UPDATE public.order_items SET sale_id = v_sale_id, status = 'done' WHERE comanda_id = p_comanda_id;
     UPDATE public.comandas SET status = 'fechada' WHERE id = p_comanda_id;
 
-    RETURN jsonb_build_object('success', true, 'sale_id', v_sale_id);
+    RETURN jsonb_build_object('success', true, 'sale_id', v_sale_id, 'total', v_total_cents);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

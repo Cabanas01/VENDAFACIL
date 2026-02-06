@@ -78,7 +78,7 @@ export type OrderItem = {
   readonly sale_id?: string | null;
   readonly quantity: number;
   readonly unit_price: number;
-  readonly line_total: number;
+  readonly line_total: number; // Campo calculado pelo banco
   readonly status: OrderItemStatus;
   readonly created_at: string;
   readonly product_name_snapshot?: string;
