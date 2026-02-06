@@ -3,7 +3,7 @@
 import { supabase } from './supabase/client';
 
 /**
- * @fileOverview Adapter Robusto COMANDA-FIRST (Backend v5.2)
+ * @fileOverview Adapter Robusto COMANDA-FIRST (Backend v5.3)
  * 
  * Implementa as únicas 4 mutações permitidas, garantindo atomicidade e
  * conformidade com o PostgreSQL.

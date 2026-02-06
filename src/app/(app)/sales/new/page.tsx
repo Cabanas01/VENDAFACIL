@@ -2,7 +2,7 @@
 
 /**
  * @fileOverview Frente de Caixa (PDV Balcão).
- * Sincronizado com v5.2: PDV = Comanda Mesa 0.
+ * Sincronizado com v5.3: PDV = Comanda Mesa 0.
  */
 
 import { useState, useMemo } from 'react';
