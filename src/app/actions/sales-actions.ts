@@ -1,7 +1,7 @@
 'use server';
 
 /**
- * @fileOverview Server Action para Processamento de Vendas - Sincronizado com Mapeamento Oficial.
+ * @fileOverview Server Action para Processamento de Vendas - Sincronizado com Mapeamento v3.0.
  */
 
 import { getSupabaseAdmin } from '@/lib/supabase/admin';

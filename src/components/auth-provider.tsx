@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * @fileOverview AuthProvider - Motor de Dados Sincronizado (Versão Mapeada).
- * Centraliza toda a lógica de escrita via PostgreSQL Functions mapeadas oficialmente.
+ * @fileOverview AuthProvider - Motor de Dados Sincronizado v3.0.
+ * Centraliza toda a lógica de escrita via RPCs Oficiais (Schema Public).
  */
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -16,8 +16,7 @@ import type {
   CartItem,
   Customer,
   User,
-  ComandaTotalView,
-  OrderItem
+  ComandaTotalView
 } from '@/lib/types';
 
 type AuthContextType = {
@@ -111,21 +110,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const abrirComanda = async (mesa: string, cliente: string) => {
     if (!store?.id) throw new Error('Contexto de loja ausente.');
-    const identificacao = mesa?.toString().trim();
-    if (!identificacao) throw new Error('Identificação da comanda é obrigatória');
-
+    
+    // Chamada RPC Oficial: abrir_comanda
     const { data, error } = await supabase.rpc('abrir_comanda', {
       p_store_id: store.id,
-      p_mesa: identificacao,
+      p_mesa: mesa.toString(),
       p_cliente_nome: cliente || 'Consumidor'
     });
 
     if (error) throw error;
     await refreshStatus();
-    return data; // O mapeamento indica que retorna uuid
+    return data; // retorna o uuid da comanda
   };
 
   const adicionarItem = async (comandaId: string, productId: string, quantity: number) => {
+    // Chamada RPC Oficial: adicionar_item_comanda
     const { error } = await supabase.rpc('adicionar_item_comanda', {
       p_comanda_id: comandaId,
       p_product_id: productId,
@@ -137,6 +136,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const fecharComanda = async (comandaId: string, paymentMethodId: string) => {
+    // Chamada RPC Oficial: fechar_comanda
     const { error } = await supabase.rpc('fechar_comanda', {
       p_comanda_id: comandaId,
       p_forma_pagamento: paymentMethodId
@@ -149,7 +149,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const addSale = async (cart: CartItem[], paymentMethod: string) => {
     if (!store?.id) throw new Error('Loja não identificada.');
     try {
-      // Fluxo mapeado: Abrir Comanda '0' (PDV) -> Adicionar Itens -> Fechar
+      // Fluxo RPC-First: Comanda '0' (PDV) -> Lançar Itens -> Fechar
       const comandaId = await abrirComanda('0', 'Consumidor Final');
       
       for (const item of cart) {
@@ -166,12 +166,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
       return lastSale as Sale;
     } catch (err: any) {
-      console.error('[SALE_ERROR]', err);
+      console.error('[PDV_FLOW_ERROR]', err);
       throw err;
     }
   };
 
   const marcarItemConcluido = async (itemId: string) => {
+    // Chamada RPC Oficial: finalizar_preparo_item
     const { error } = await supabase.rpc('finalizar_preparo_item', { 
       p_item_id: itemId 
     });

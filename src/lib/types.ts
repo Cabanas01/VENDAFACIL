@@ -64,7 +64,7 @@ export type Product = {
   active: boolean;
   barcode?: string;
   created_at: string;
-  production_target: 'kitchen' | 'bar' | 'none';
+  production_target: 'cozinha' | 'bar' | 'nenhum';
   prep_time_minutes: number;
 };
 
