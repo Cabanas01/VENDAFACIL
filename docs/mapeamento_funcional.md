@@ -1,30 +1,51 @@
-# 🗺️ Mapeamento Funcional: VendaFácil Brasil (Versão 2.1)
+# 🗺️ Mapeamento Funcional Frontend: VendaFácil Brasil (Versão 2.2)
 
-Este documento descreve a arquitetura de funções do frontend e seu contrato estrito com o backend RPC-First.
+Este documento descreve a arquitetura de funções do frontend e seu contrato estrito com o backend definitivo. O princípio fundamental é **RPC-First**: o frontend é um consumidor de funções, não um manipulador de tabelas.
 
-## 1. Motor de Dados (AuthProvider)
-Localizado em: `src/components/auth-provider.tsx`
+## 1. Núcleo de Dados (`AuthProvider.tsx`)
+Localizado em: `src/components/auth-provider.tsx`. Este é o motor que proíbe qualquer escrita direta nas tabelas de faturamento.
 
 | Função | Parâmetros | Responsabilidade | Contrato RPC |
 | :--- | :--- | :--- | :--- |
-| `abrirComanda` | `mesa, cliente` | Insere registro em `comandas` com status 'aberta'. | Direct Insert (Table `comandas`) |
-| `adicionarItem` | `comandaId, productId, qty, [price]` | Lança item na conta. O banco calcula o total e destino. | `rpc_add_item_to_comanda` (4 params) |
-| `fecharComanda` | `comandaId, method` | Gera a venda e limpa a comanda de forma atômica. | `rpc_close_comanda_to_sale` (3 params) |
-| `marcarItemConcluido`| `itemId` | Finaliza o preparo no KDS/BDS. | `rpc_mark_order_item_done` (1 param) |
-| `addSale` | `cart, method` | Fluxo sequencial para vendas diretas no balcão. | Sequence: Open -> Add -> Close |
-| `refreshStatus` | - | Revalida todos os dados locais com o PostgreSQL. | Multi-table fetch |
+| `abrirComanda` | `mesa, cliente` | Inicia um atendimento. No PDV, mesa = "0". | Direct Insert (`comandas`) |
+| `adicionarItem` | `comandaId, productId, qty, [price]` | Lança item. Banco calcula `line_total`. | `rpc_add_item_to_comanda` (4 params) |
+| `fecharComanda` | `comandaId, method` | Soma totais, gera venda e fecha conta. | `rpc_close_comanda_to_sale` (3 params) |
+| `marcarItemConcluido` | `itemId` | Finaliza preparo no KDS/BDS. | `rpc_mark_order_item_done` (1 param) |
+| `addSale` | `cart, method` | Fluxo sequencial para vendas rápidas no balcão. | Sequence: Open -> Add -> Close |
+| `refreshStatus` | - | Sincroniza dados locais com o estado real do banco. | Multi-table fetch |
 
-## 2. Inteligência Artificial (Genkit)
-Localizada em: `src/ai/flows/`
+## 2. Fluxos Operacionais
 
-- **`ai-chat-flow.ts`**: `askAi` - Processa consultas contextuais baseadas em estoque e lucro bruto.
-- **`summarize-financial-reports.ts`**: Analisa relatórios financeiros e extrai ações práticas.
+### 🛒 Ponto de Venda (PDV)
+- **Localização**: `/sales/new`
+- **Regra**: Utiliza exclusivamente `price_cents`. Não tenta calcular subtotais para persistência.
+- **Ação**: Ao finalizar, delega ao banco a criação do registro de venda atômico.
 
-## 3. Regras de Ouro (Contrato Frontend-Backend)
-1. **Nunca Calcular Totais**: O frontend exibe `line_total` retornado pelo banco, mas nunca tenta salvá-lo.
-2. **Preços em Cents**: Toda comunicação de valores usa inteiros (`price_cents`).
-3. **Status Restritos**: Itens de pedido aceitam estritamente `pending`, `done` ou `canceled`.
-4. **Parâmetros Nomeados**: Todas as chamadas `supabase.rpc()` devem usar o objeto de parâmetros com prefixo `p_`.
+### 📋 Gestão de Comandas
+- **Localização**: `/comandas`
+- **Regra**: Consome a VIEW `v_comandas_totais`. O frontend nunca tenta somar os itens da tela para obter o total da conta; ele lê o que o banco processou.
+
+### 🍳 Monitores de Produção (KDS/BDS)
+- **Localização**: `/painel/cozinha` e `/painel/bar`
+- **Filtro**: Exibe apenas itens com `status = 'pending'`.
+- **Transição**: O botão de conclusão dispara `rpc_mark_order_item_done`. O item desaparece da tela apenas após o banco confirmar a transição para `done`.
+
+## 3. Gestão e Inteligência
+
+### 📊 Dashboard e Relatórios
+- **Cálculo de CMV**: O frontend percorre as vendas, busca o `cost_cents` no catálogo e projeta a margem de lucro.
+- **Faturamento**: Baseia-se na coluna `total_cents` das vendas ou `line_total` dos itens (todas persistidas como inteiros).
+
+### 🤖 Inteligência Artificial
+- **Snapshot**: A IA recebe um objeto JSON contendo o estado atual do estoque e das vendas do período.
+- **Contexto**: Analisa tendências de faturamento e riscos de ruptura de estoque.
+
+## 4. Regras de Ouro (Contrato Inviolável)
+
+1.  **Preços em Centavos**: `price_cents` no catálogo, `unit_price` na venda. Exibição via `/ 100`.
+2.  **Status Restritos**: Itens de pedido aceitam apenas `pending`, `done` ou `canceled`.
+3.  **Coluna line_total**: É de apenas leitura (`GENERATED ALWAYS`). Tentativas de envio via frontend gerarão erro 400.
+4.  **Parâmetros Nomeados**: Chamadas `supabase.rpc()` devem usar objetos com chaves prefixadas com `p_`.
 
 ---
-*Documentação técnica sincronizada com a Versão 2.1 do Backend Definitivo.*
+*Documentação sincronizada com o Backend Definitivo v2.2.*
