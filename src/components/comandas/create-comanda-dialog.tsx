@@ -41,7 +41,7 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
   const onSubmit = async (values: ComandaFormValues) => {
     setIsSubmitting(true);
     try {
-      const comandaId = await getOrCreateComanda(values.mesa, values.cliente || null);
+      const comandaId = await getOrCreateComanda(Number(values.mesa), values.cliente || null);
 
       toast({ 
         title: 'Atendimento Iniciado', 
@@ -57,7 +57,7 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
       toast({ 
         variant: 'destructive', 
         title: 'Erro ao abrir mesa', 
-        description: err.message 
+        description: err.message || 'Verifique sua conexão.' 
       });
     } finally {
       setIsSubmitting(false);
@@ -91,7 +91,7 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
                         type="number" 
                         placeholder="Ex: 12" 
                         {...field} 
-                        className="h-12 font-bold focus-visible:ring-primary/20" 
+                        className="h-12 font-bold" 
                         autoFocus 
                       />
                     </FormControl>
@@ -113,7 +113,7 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
                           placeholder="Ex: Cliente Mesa 12" 
                           {...field} 
                           value={field.value || ''}
-                          className="h-12 pl-10 font-bold focus-visible:ring-primary/20" 
+                          className="h-12 pl-10 font-bold" 
                         />
                       </div>
                     </FormControl>
@@ -124,7 +124,7 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
             </div>
 
             <DialogFooter className="pt-4 gap-3 sm:flex-row-reverse">
-              <Button type="submit" disabled={isSubmitting} className="flex-1 h-12 font-black uppercase text-[11px] tracking-widest shadow-lg shadow-primary/20">
+              <Button type="submit" disabled={isSubmitting} className="flex-1 h-12 font-black uppercase text-[11px] tracking-widest shadow-lg">
                 {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                 Confirmar Abertura
               </Button>

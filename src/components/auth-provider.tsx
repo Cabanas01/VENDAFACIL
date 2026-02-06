@@ -26,10 +26,10 @@ type AuthContextType = {
   refreshStatus: () => Promise<void>;
   createStore: (storeData: any) => Promise<void>;
   
-  // Interface Canônica v5.3
+  // Interface do Provedor sincronizada com ComandaService
   getOrCreateComanda: (tableNumber: number, customerName: string | null) => Promise<string>;
   adicionarItem: (comandaId: string, productId: string, quantity: number) => Promise<void>;
-  finalizarAtendimento: (comandaId: string, paymentMethod: 'cash' | 'pix' | 'card') => Promise<void>;
+  finalizarAtendimento: (comandaId: string, paymentMethod: 'dinheiro' | 'pix' | 'cartao') => Promise<void>;
   concluirPreparo: (itemId: string) => Promise<void>;
   
   logout: () => Promise<void>;
@@ -100,8 +100,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [fetchAppData]);
 
   const getOrCreateComanda = async (tableNumber: number, customerName: string | null) => {
-    if (!store?.id) throw new Error('Sessão de loja não identificada.');
-    return ComandaService.getOrCreateComanda(store.id, tableNumber, customerName);
+    return ComandaService.getOrCreateComanda(tableNumber, customerName);
   };
 
   const adicionarItem = async (comandaId: string, productId: string, quantity: number) => {
@@ -109,7 +108,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await refreshStatus();
   };
 
-  const finalizarAtendimento = async (comandaId: string, paymentMethod: 'cash' | 'pix' | 'card') => {
+  const finalizarAtendimento = async (comandaId: string, paymentMethod: 'dinheiro' | 'pix' | 'cartao') => {
     await ComandaService.finalizarAtendimento(comandaId, paymentMethod);
     await refreshStatus();
   };

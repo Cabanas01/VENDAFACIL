@@ -2,7 +2,7 @@
 
 /**
  * @fileOverview Frente de Caixa (PDV Balcão).
- * Unificado com a arquitetura COMANDA-FIRST v5.3: PDV = Mesa 0.
+ * Alinhado ao contrato v5.3: PDV = Mesa 0.
  */
 
 import { useState, useMemo } from 'react';
@@ -13,7 +13,6 @@ import {
   Plus, 
   Minus, 
   Trash2, 
-  CreditCard, 
   Loader2, 
   ArrowRight,
   X,
@@ -82,20 +81,20 @@ export default function NewSalePDVPage() {
     }
   };
 
-  const handleFinalize = async (method: 'cash' | 'pix' | 'card') => {
+  const handleFinalize = async (method: 'dinheiro' | 'pix' | 'cartao') => {
     if (cart.length === 0 || isSubmitting) return;
     
     setIsSubmitting(true);
     try {
-      // 1. Ativa Comanda Balcão (Mesa 0)
+      // 1. Obtém/Cria Comanda Balcão (Mesa 0)
       const comandaId = await getOrCreateComanda(0, customerName || 'Consumidor Balcão');
       
-      // 2. Lança Itens via RPC (Tipagem Numeric Garantida)
+      // 2. Lança Itens via RPC Atômica
       for (const item of cart) {
         await adicionarItem(comandaId, item.product_id, item.qty);
       }
       
-      // 3. Fecha Atendimento Atômico
+      // 3. Finaliza via RPC
       await finalizarAtendimento(comandaId, method);
       
       toast({ title: 'Venda Finalizada!', description: `Total: ${formatCurrency(cartTotalDisplay)}` });
@@ -211,7 +210,7 @@ export default function NewSalePDVPage() {
               disabled={cart.length === 0 || isSubmitting}
               onClick={() => setIsFinalizing(true)}
             >
-              CONCLUIR VENDA <ArrowRight className="ml-3 h-5 w-5" />
+              FECHAR VENDA <ArrowRight className="ml-3 h-5 w-5" />
             </Button>
           </CardFooter>
         </Card>
@@ -226,17 +225,17 @@ export default function NewSalePDVPage() {
             
             <div className="mb-10 pt-6 text-center space-y-2">
               <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900 font-headline">PAGAMENTO BALCÃO</h2>
-              <DialogDescription className="text-xs uppercase font-bold tracking-widest text-muted-foreground">Total Consolidado: {formatCurrency(cartTotalDisplay)}</DialogDescription>
+              <DialogDescription className="text-xs uppercase font-bold tracking-widest text-muted-foreground">Total: {formatCurrency(cartTotalDisplay)}</DialogDescription>
             </div>
 
             <div className="space-y-8">
               <div className="space-y-3">
-                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground pl-2">Nome do Cliente (Opcional)</label>
+                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground pl-2">Cliente (Opcional)</label>
                 <div className="relative">
                   <UserCircle className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground opacity-50" />
                   <input 
-                    placeholder="Identificar cliente..." 
-                    className="w-full h-14 pl-12 rounded-2xl border-none bg-slate-100/50 font-bold text-lg focus:ring-2 focus:ring-primary/20 transition-all"
+                    placeholder="Identificar consumidor..." 
+                    className="w-full h-14 pl-12 rounded-2xl border-none bg-slate-100/50 font-bold text-lg"
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
                   />
@@ -244,17 +243,17 @@ export default function NewSalePDVPage() {
               </div>
               
               <div className="grid grid-cols-1 gap-4">
-                <Button variant="outline" className="h-20 justify-start gap-6 border-none bg-slate-50 hover:bg-slate-100 rounded-[24px] px-8 transition-all" onClick={() => handleFinalize('cash')} disabled={isSubmitting}>
+                <Button variant="outline" className="h-20 justify-start gap-6 border-none bg-slate-50 hover:bg-slate-100 rounded-[24px] px-8" onClick={() => handleFinalize('dinheiro')} disabled={isSubmitting}>
                   <div className="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center shadow-inner"><CircleDollarSign className="text-green-600 h-6 w-6" /></div>
                   <span className="font-black uppercase text-[11px] tracking-[0.2em]">Dinheiro</span>
                 </Button>
 
-                <Button className="h-20 justify-start gap-6 border-none bg-cyan-400 text-white hover:bg-cyan-500 rounded-[24px] px-8 shadow-xl transition-all" onClick={() => handleFinalize('pix')} disabled={isSubmitting}>
+                <Button className="h-20 justify-start gap-6 border-none bg-cyan-400 text-white hover:bg-cyan-500 rounded-[24px] px-8 shadow-xl" onClick={() => handleFinalize('pix')} disabled={isSubmitting}>
                   <div className="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center shadow-inner"><QrCode className="h-6 w-6 text-white" /></div>
                   <span className="font-black uppercase text-[11px] tracking-[0.2em]">PIX QR Code</span>
                 </Button>
 
-                <Button variant="outline" className="h-20 justify-start gap-6 border-none bg-slate-50 hover:bg-slate-100 rounded-[24px] px-8 transition-all" onClick={() => handleFinalize('card')} disabled={isSubmitting}>
+                <Button variant="outline" className="h-20 justify-start gap-6 border-none bg-slate-50 hover:bg-slate-100 rounded-[24px] px-8" onClick={() => handleFinalize('cartao')} disabled={isSubmitting}>
                   <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center shadow-inner"><CreditCard className="h-6 w-6 text-blue-600" /></div>
                   <span className="font-black uppercase text-[11px] tracking-[0.2em]">Cartão</span>
                 </Button>
@@ -263,9 +262,9 @@ export default function NewSalePDVPage() {
           </div>
 
           {isSubmitting && (
-            <div className="absolute inset-0 bg-background/80 flex flex-col items-center justify-center z-50 backdrop-blur-sm animate-in fade-in duration-300">
+            <div className="absolute inset-0 bg-background/80 flex flex-col items-center justify-center z-50 backdrop-blur-sm">
               <Loader2 className="h-14 w-14 animate-spin text-primary mb-6" />
-              <p className="text-[11px] font-black uppercase tracking-[0.3em] text-primary">Sincronizando Banco...</p>
+              <p className="text-[11px] font-black uppercase tracking-[0.3em]">Sincronizando...</p>
             </div>
           )}
         </DialogContent>

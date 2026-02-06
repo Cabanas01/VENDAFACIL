@@ -3,37 +3,41 @@
 import { supabase } from './supabase/client';
 
 /**
- * @fileOverview Adapter Robusto COMANDA-FIRST (Backend v5.3)
+ * @fileOverview SERVIÇO CANÔNICO v5.3 (Obrigatório)
  * 
- * Centraliza as 4 únicas mutações permitidas, garantindo atomicidade e 
- * conformidade rigorosa com os tipos do PostgreSQL.
+ * Regra de Ouro: Componentes não chamam supabase.rpc() direto.
+ * store_id não é passado no payload (resolvido via auth.uid() no backend).
  */
 
 export const ComandaService = {
   /**
-   * 1. Busca comanda aberta ou cria nova (Mesa 0 = PDV).
+   * 1. Abre ou Obtém Comanda Aberta
+   * Assinatura: rpc_get_or_create_open_comanda(p_table_number, p_customer_name)
    */
-  async getOrCreateComanda(storeId: string, tableNumber: number, customerName?: string | null) {
+  async getOrCreateComanda(tableNumber: number, customerName?: string | null) {
     const { data, error } = await supabase.rpc('rpc_get_or_create_open_comanda', {
-      p_store_id: storeId,
-      p_table_number: Math.floor(tableNumber),
+      p_table_number: Number(tableNumber),
       p_customer_name: customerName ?? null,
     });
 
     if (error) {
-      console.error('[RPC_ERROR] rpc_get_or_create_open_comanda:', error);
-      throw new Error(error.message);
+      console.error('[RPC_ERROR] getOrCreateComanda:', error);
+      throw error;
     }
 
-    return data as string; // Retorna comanda_id (UUID)
+    return data as string; // Retorna comanda_id
   },
 
   /**
-   * 2. Adiciona item à comanda.
-   * p_quantity é enviado como Number para ser interpretado como numeric no Postgres.
-   * O frontend NUNCA envia preços ou totais.
+   * 2. Adiciona Item à Comanda
+   * Assinatura: rpc_add_item_to_comanda(p_comanda_id, p_product_id, p_quantity)
+   * p_quantity forçado para Number para evitar ambiguidade (numeric vs integer)
    */
   async adicionarItem(comandaId: string, productId: string, quantity: number) {
+    if (Number.isNaN(quantity) || quantity <= 0) {
+      throw new Error('Quantidade inválida para lançamento.');
+    }
+
     const { error } = await supabase.rpc('rpc_add_item_to_comanda', {
       p_comanda_id: comandaId,
       p_product_id: productId,
@@ -41,28 +45,30 @@ export const ComandaService = {
     });
 
     if (error) {
-      console.error('[RPC_ERROR] rpc_add_item_to_comanda:', error);
-      throw new Error(error.message);
+      console.error('[RPC_ERROR] adicionarItem:', error);
+      throw error;
     }
   },
 
   /**
-   * 3. Fecha comanda, gera venda e registra pagamento (Atômico).
+   * 3. Fecha Atendimento e Gera Venda
+   * Assinatura: rpc_close_comanda_to_sale(p_comanda_id, p_payment_method)
    */
-  async finalizarAtendimento(comandaId: string, paymentMethod: 'cash' | 'pix' | 'card') {
+  async finalizarAtendimento(comandaId: string, paymentMethod: 'dinheiro' | 'pix' | 'cartao') {
     const { error } = await supabase.rpc('rpc_close_comanda_to_sale', {
       p_comanda_id: comandaId,
       p_payment_method: paymentMethod,
     });
 
     if (error) {
-      console.error('[RPC_ERROR] rpc_close_comanda_to_sale:', error);
-      throw new Error(error.message);
+      console.error('[RPC_ERROR] finalizarAtendimento:', error);
+      throw error;
     }
   },
 
   /**
-   * 4. Conclui item na produção (KDS/BDS).
+   * 4. Conclui Item na Produção (KDS/BDS)
+   * Assinatura: rpc_mark_order_item_done(p_order_item_id)
    */
   async concluirPreparo(orderItemId: string) {
     const { error } = await supabase.rpc('rpc_mark_order_item_done', {
@@ -70,8 +76,8 @@ export const ComandaService = {
     });
 
     if (error) {
-      console.error('[RPC_ERROR] rpc_mark_order_item_done:', error);
-      throw new Error(error.message);
+      console.error('[RPC_ERROR] concluirPreparo:', error);
+      throw error;
     }
   }
 };
