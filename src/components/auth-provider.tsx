@@ -1,10 +1,8 @@
-
 'use client';
 
 /**
  * @fileOverview AuthProvider - Motor de Dados Sincronizado v3.0.
  * Centraliza toda a lógica de escrita via RPCs Oficiais (Schema Public).
- * Seguindo estritamente o mapeamento definitivo do backend.
  */
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -18,8 +16,7 @@ import type {
   CartItem,
   Customer,
   User,
-  ComandaTotalView,
-  OrderItem
+  ComandaTotalView
 } from '@/lib/types';
 
 type AuthContextType = {
@@ -69,7 +66,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (storeId) {
-        // Busca de dados normalizada usando nomes de colunas oficiais
         const [storeRes, prodRes, cmdRes, custRes, accessRes, salesRes, cashRes] = await Promise.all([
           supabase.from('stores').select('*').eq('id', storeId).single(),
           supabase.from('products').select('*').eq('store_id', storeId).order('name'),
@@ -82,8 +78,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         setStore(storeRes.data || null);
         setProducts(prodRes.data || []);
-        
-        // No frontend, tratamos as comandas abertas como nossa view principal
         setComandas(cmdRes.data || []);
         setCustomers(custRes.data || []);
         setSales(salesRes.data || []);
@@ -116,8 +110,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const abrirComanda = async (mesa: string, cliente: string) => {
     if (!store?.id) throw new Error('Contexto de loja ausente.');
-    
-    // Inserção direta conforme mapeamento: Insere em comandas com status aberta
     const { data, error } = await supabase
       .from('comandas')
       .insert({
@@ -135,7 +127,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const adicionarItem = async (comandaId: string, productId: string, quantity: number, unitPrice?: number) => {
-    // RPC Oficial: p_unit_price é obrigatório (cents ou null)
     const { error } = await supabase.rpc('rpc_add_item_to_comanda', {
       p_comanda_id: comandaId,
       p_product_id: productId,
@@ -148,7 +139,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const fecharComanda = async (comandaId: string, paymentMethodId: string, cashRegisterId?: string) => {
-    // RPC Oficial: rpc_close_comanda_to_sale (fechamento atômico)
     const { error } = await supabase.rpc('rpc_close_comanda_to_sale', {
       p_comanda_id: comandaId,
       p_payment_method_id: paymentMethodId,
@@ -159,16 +149,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await refreshStatus();
   };
 
+  const marcarItemConcluido = async (itemId: string) => {
+    const { error } = await supabase.rpc('rpc_mark_order_item_done', { 
+      p_item_id: itemId 
+    });
+    if (error) throw error;
+    await refreshStatus();
+  };
+
   const addSale = async (cart: CartItem[], paymentMethod: string) => {
     if (!store?.id) throw new Error('Loja não identificada.');
     try {
-      // Fluxo Seguro: Comanda '0' (PDV) -> RPC Adicionar -> RPC Fechar
       const comandaId = await abrirComanda('0', 'Consumidor Final');
-      
       for (const item of cart) {
         await adicionarItem(comandaId, item.product_id, item.qty, item.unit_price_cents);
       }
-      
       await fecharComanda(comandaId, paymentMethod);
       
       const { data: lastSale } = await supabase
@@ -182,15 +177,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error('[PDV_FLOW_ERROR]', err);
       throw err;
     }
-  };
-
-  const marcarItemConcluido = async (itemId: string) => {
-    // RPC Oficial: rpc_mark_order_item_done
-    const { error } = await supabase.rpc('rpc_mark_order_item_done', { 
-      p_item_id: itemId 
-    });
-    if (error) throw error;
-    await refreshStatus();
   };
 
   const createStore = async (storeData: any) => {
