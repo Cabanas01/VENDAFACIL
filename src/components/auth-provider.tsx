@@ -158,6 +158,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const addSale = async (cart: CartItem[], paymentMethod: string) => {
     if (!store?.id) throw new Error('Loja não identificada.');
     try {
+      // No PDV direto, abrimos uma comanda "0" (ou balcão) e fechamos imediatamente via RPCs transacionais
       const comandaId = await abrirComanda('0', 'Consumidor Final');
       for (const item of cart) {
         await adicionarItem(comandaId, item.product_id, item.qty);
