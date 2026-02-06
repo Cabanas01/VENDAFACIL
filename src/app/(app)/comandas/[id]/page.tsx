@@ -73,6 +73,7 @@ export default function ComandaDetailsPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // REGRA DE OURO: Somatório visual para a UI. Persistência usa line_total do banco.
   const cartTotalDisplay = useMemo(() => 
     localCart.reduce((acc, i) => acc + (i.product.price_cents * i.qty), 0), 
   [localCart]);
@@ -103,6 +104,7 @@ export default function ComandaDetailsPage() {
       toast({ title: 'Atendimento Concluído!' });
       
       if (store && comanda) {
+        // Enviar sale mockado para impressão (o banco já criou o real)
         const saleMock: any = { 
           total_cents: comanda.total_cents, 
           items: items.map(i => ({ 
@@ -200,6 +202,7 @@ export default function ComandaDetailsPage() {
         </Card>
       </div>
 
+      {/* DIALOGS MANUTENÇÃO (REVISADOS) */}
       <Dialog open={isAddingItems} onOpenChange={setIsAddingItems}>
         <DialogContent className="sm:max-w-4xl p-0 overflow-hidden rounded-[32px] border-none shadow-2xl">
           <div className="flex h-[75vh]">

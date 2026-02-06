@@ -27,6 +27,7 @@ export default function CozinhaPage() {
   const fetchPedidos = useCallback(async () => {
     if (!store?.id) return;
     
+    // REGRA DE OURO: Buscar apenas 'pending'.
     const { data, error } = await supabase
       .from('v_painel_cozinha')
       .select('*')
