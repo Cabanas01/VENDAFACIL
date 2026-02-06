@@ -68,31 +68,36 @@ export type Product = {
   prep_time_minutes: number;
 };
 
-export type OrderItemStatus = 'pending' | 'done' | 'canceled';
+// V4.0 State Machine: pending -> done -> cancelled
+export type OrderItemStatus = 'pending' | 'done' | 'cancelled';
 
 export type SaleItem = {
   readonly id: string;
   readonly store_id: string;
   readonly product_id: string;
-  readonly comanda_id?: string | null;
-  readonly sale_id?: string | null;
+  readonly sale_id: string;
   readonly quantity: number;
   readonly unit_price: number;
-  readonly subtotal_cents: number; // Mapeado da coluna física/gerada
+  readonly subtotal_cents: number;
   readonly status: OrderItemStatus;
   readonly created_at: string;
   readonly product_name_snapshot?: string;
   readonly destino_preparo?: string;
 };
 
+// V4.0 State Machine: open -> paid -> cancelled
+export type SaleStatus = 'open' | 'paid' | 'cancelled';
+
 export type Sale = {
   id: string;
   store_id: string;
   customer_id?: string | null;
-  comanda_id?: string | null;
   created_at: string;
   total_cents: number;
   payment_method: string | null;
+  status: SaleStatus;
+  mesa?: string | null;
+  cliente_nome?: string | null;
   items?: SaleItem[];
 };
 
@@ -127,24 +132,16 @@ export type Customer = {
     created_at: string;
 };
 
-export type ComandaTotalView = {
-  id: string;
-  store_id: string;
-  numero: string; 
-  mesa: string | null;
-  status: string;
-  cliente_nome: string | null;
-  total_cents: number;
-};
-
-export type PainelProducaoView = {
+// V4.0 View Mapping
+export type ProductionSnapshotView = {
   item_id: string;
-  comanda_id: string;
-  comanda_numero: string;
+  sale_id: string;
+  sale_number: string;
   mesa: string | null;
   produto: string;
   qty: number;
   status: OrderItemStatus;
+  destino_preparo: string;
   created_at: string;
   store_id: string;
 };

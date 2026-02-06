@@ -1,9 +1,8 @@
 'use client';
 
 /**
- * @fileOverview AuthProvider - Motor de Dados Sincronizado v3.1.
- * Centraliza toda a lógica de escrita via RPCs Oficiais (v3.1).
- * Segue a regra de ouro: Frontend não calcula totais financeiros.
+ * @fileOverview AuthProvider - Backend v4.0 Sync.
+ * Implementa as novas RPCs: rpc_add_item_to_sale, rpc_close_sale, rpc_mark_item_done, rpc_get_open_sale.
  */
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -17,7 +16,7 @@ import type {
   CartItem,
   Customer,
   User,
-  ComandaTotalView
+  ProductionSnapshotView
 } from '@/lib/types';
 
 type AuthContextType = {
@@ -25,20 +24,21 @@ type AuthContextType = {
   store: Store | null;
   accessStatus: StoreAccessStatus | null;
   products: Product[];
-  comandas: ComandaTotalView[];
+  comandas: Sale[];
   sales: Sale[];
   customers: Customer[];
   cashRegisters: CashRegister[];
+  productionQueue: ProductionSnapshotView[];
   storeStatus: 'loading_auth' | 'loading_status' | 'ready' | 'no_store' | 'error';
   
   refreshStatus: () => Promise<void>;
   createStore: (storeData: any) => Promise<void>;
   
-  abrirComanda: (mesa: string, cliente: string) => Promise<string>;
-  adicionarItem: (comandaId: string, productId: string, quantity: number) => Promise<void>;
-  fecharComanda: (comandaId: string, paymentMethodId: string, cashRegisterId?: string) => Promise<void>;
+  getOpenSale: (mesa: string) => Promise<string | null>;
+  adicionarItem: (saleId: string, productId: string, quantity: number) => Promise<void>;
+  fecharVenda: (saleId: string, paymentMethodId: string, cashRegisterId?: string) => Promise<void>;
   marcarItemConcluido: (itemId: string) => Promise<void>;
-  addSale: (cart: CartItem[], paymentMethod: string) => Promise<Sale | null>;
+  addSaleBalcao: (cart: CartItem[], paymentMethod: string) => Promise<Sale | null>;
   
   logout: () => Promise<void>;
 };
@@ -49,11 +49,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [store, setStore] = useState<Store | null>(null);
   const [accessStatus, setAccessStatus] = useState<StoreAccessStatus | null>(null);
-  const [comandas, setComandas] = useState<ComandaTotalView[]>([]);
+  const [comandas, setComandas] = useState<Sale[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [cashRegisters, setCashRegistersState] = useState<CashRegister[]>([]);
+  const [productionQueue, setProductionQueue] = useState<ProductionSnapshotView[]>([]);
   const [storeStatus, setStoreStatus] = useState<'loading_auth' | 'loading_status' | 'ready' | 'no_store' | 'error'>('loading_auth');
 
   const fetchAppData = useCallback(async (userId: string) => {
@@ -67,14 +68,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (storeId) {
-        const [storeRes, prodRes, cmdRes, custRes, accessRes, salesRes, cashRes] = await Promise.all([
+        const [storeRes, prodRes, cmdRes, custRes, accessRes, salesRes, cashRes, queueRes] = await Promise.all([
           supabase.from('stores').select('*').eq('id', storeId).single(),
           supabase.from('products').select('*').eq('store_id', storeId).order('name'),
-          supabase.from('v_comandas_totais').select('*').eq('store_id', storeId).eq('status', 'aberta').order('numero', { ascending: true }),
+          supabase.from('sales').select('*').eq('store_id', storeId).eq('status', 'open').order('created_at', { ascending: true }),
           supabase.from('customers').select('*').eq('store_id', storeId).order('name'),
           supabase.rpc('get_store_access_status', { p_store_id: storeId }),
-          supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeId).order('created_at', { ascending: false }).limit(50),
-          supabase.from('cash_registers').select('*').eq('store_id', storeId).order('opened_at', { ascending: false })
+          supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeId).eq('status', 'paid').order('created_at', { ascending: false }).limit(50),
+          supabase.from('cash_registers').select('*').eq('store_id', storeId).order('opened_at', { ascending: false }),
+          supabase.from('production_snapshot').select('*').eq('store_id', storeId)
         ]);
 
         setStore(storeRes.data || null);
@@ -83,6 +85,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setCustomers(custRes.data || []);
         setSales(salesRes.data || []);
         setCashRegistersState(cashRes.data || []);
+        setProductionQueue(queueRes.data || []);
         setAccessStatus(accessRes.data?.[0] || null);
         setStoreStatus('ready');
       } else {
@@ -109,34 +112,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, [fetchAppData]);
 
-  const abrirComanda = async (mesa: string, cliente: string) => {
-    if (!store?.id) throw new Error('Contexto de loja ausente.');
-    const { data, error } = await supabase.rpc('abrir_comanda', {
-      p_mesa: mesa.toString(),
-      p_cliente_nome: cliente || 'Consumidor Final'
-    });
-
+  const getOpenSale = async (mesa: string) => {
+    const { data, error } = await supabase.rpc('rpc_get_open_sale', { p_mesa: mesa });
     if (error) throw error;
-    await refreshStatus();
-    return data;
+    return data; // Retorna sale_id ou null
   };
 
-  const adicionarItem = async (comandaId: string, productId: string, quantity: number) => {
-    // Banco resolve preço unitário e line_total automaticamente v3.1
-    const { error } = await supabase.rpc('adicionar_item_comanda', {
-      p_comanda_id: comandaId,
+  const adicionarItem = async (saleId: string, productId: string, quantity: number) => {
+    const { error } = await supabase.rpc('rpc_add_item_to_sale', {
+      p_sale_id: saleId,
       p_product_id: productId,
-      p_quantity: Math.floor(quantity)
+      p_quantity: Math.floor(quantity),
+      p_unit_price: null // Banco resolve
     });
 
     if (error) throw error;
     await refreshStatus();
   };
 
-  const fecharComanda = async (comandaId: string, paymentMethodId: string, cashRegisterId?: string) => {
-    // Operação atômica no PostgreSQL v3.1
-    const { error } = await supabase.rpc('fechar_comanda', {
-      p_comanda_id: comandaId,
+  const fecharVenda = async (saleId: string, paymentMethodId: string, cashRegisterId?: string) => {
+    const { error } = await supabase.rpc('rpc_close_sale', {
+      p_sale_id: saleId,
       p_payment_method_id: paymentMethodId,
       p_cash_register_id: cashRegisterId ?? null
     });
@@ -146,32 +142,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const marcarItemConcluido = async (itemId: string) => {
-    const { error } = await supabase.rpc('marcar_item_concluido', { 
-      p_item_id: itemId 
-    });
+    const { error } = await supabase.rpc('rpc_mark_item_done', { p_item_id: itemId });
     if (error) throw error;
     await refreshStatus();
   };
 
-  const addSale = async (cart: CartItem[], paymentMethod: string) => {
+  const addSaleBalcao = async (cart: CartItem[], paymentMethod: string) => {
     if (!store?.id) throw new Error('Loja não identificada.');
+    
     try {
-      // Fluxo atômico para PDV Direto (Mesa 0)
-      const comandaId = await abrirComanda('0', 'Consumidor Final');
+      // No PDV de balcão, criamos um sale "open" na mesa "0" e fechamos em seguida
+      const { data: saleId, error: openErr } = await supabase.from('sales').insert({
+        store_id: store.id,
+        status: 'open',
+        mesa: '0',
+        cliente_nome: 'Consumidor Final'
+      }).select('id').single();
+
+      if (openErr) throw openErr;
+
       for (const item of cart) {
-        await adicionarItem(comandaId, item.product_id, item.qty);
+        await adicionarItem(saleId.id, item.product_id, item.qty);
       }
-      await fecharComanda(comandaId, paymentMethod);
+
+      await fecharVenda(saleId.id, paymentMethod);
       
       const { data: lastSale } = await supabase
         .from('sales')
         .select('*, items:sale_items(*)')
-        .eq('comanda_id', comandaId)
-        .maybeSingle();
+        .eq('id', saleId.id)
+        .single();
         
       return lastSale as Sale;
     } catch (err: any) {
-      console.error('[PDV_FLOW_ERROR]', err);
+      console.error('[PDV_BALCAO_ERROR]', err);
       throw err;
     }
   };
@@ -196,8 +200,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider value={{ 
-      user, store, accessStatus, products, comandas, customers, sales, cashRegisters, storeStatus,
-      refreshStatus, createStore, abrirComanda, adicionarItem, fecharComanda, marcarItemConcluido, addSale, logout 
+      user, store, accessStatus, products, comandas, customers, sales, cashRegisters, productionQueue, storeStatus,
+      refreshStatus, createStore, getOpenSale, adicionarItem, fecharVenda, marcarItemConcluido, addSaleBalcao, logout 
     }}>
       {children}
     </AuthContext.Provider>

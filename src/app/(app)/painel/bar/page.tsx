@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * @fileOverview Painel Bar (BDS) - Sincronizado com Mapeamento RPC v3.1.
- * Filtra apenas itens com status 'pending' e destino 'bar' na tabela sale_items.
+ * @fileOverview Painel Bar (BDS) - Sync v4.0.
+ * Consome a View production_snapshot.
  */
 
 import { useEffect, useState, useCallback } from 'react';
@@ -18,34 +18,20 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 
 export default function BarPage() {
-  const { store, marcarItemConcluido } = useAuth();
+  const { store, marcarItemConcluido, productionQueue, refreshStatus } = useAuth();
   const { toast } = useToast();
-  const [pedidos, setPedidos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchPedidos = useCallback(async () => {
-    if (!store?.id) return;
-    
-    // Busca direta na tabela física sale_items conforme v3.1
-    const { data, error } = await supabase
-      .from('sale_items')
-      .select('*, comandas(numero, mesa)')
-      .eq('store_id', store.id)
-      .eq('status', 'pending')
-      .eq('destino_preparo', 'bar')
-      .order('created_at', { ascending: true });
-
-    if (!error) {
-      setPedidos(data || []);
-    }
+    setLoading(true);
+    await refreshStatus();
     setLoading(false);
-  }, [store?.id]);
+  }, [refreshStatus]);
 
   useEffect(() => {
     fetchPedidos();
-    // Monitoramento Realtime para sale_items
     const channel = supabase
-      .channel('bds_sync')
+      .channel('bds_v4')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sale_items' }, () => fetchPedidos())
       .subscribe();
     
@@ -61,7 +47,9 @@ export default function BarPage() {
     }
   };
 
-  if (loading) return (
+  const filteredItems = productionQueue.filter(p => p.destino_preparo === 'bar');
+
+  if (loading && productionQueue.length === 0) return (
     <div className="h-[60vh] flex flex-col items-center justify-center gap-4">
       <Loader2 className="animate-spin text-cyan-600 h-8 w-8" />
       <p className="font-black uppercase text-[10px] tracking-widest text-muted-foreground animate-pulse">Sincronizando Bar...</p>
@@ -71,19 +59,19 @@ export default function BarPage() {
   return (
     <div className="space-y-10 animate-in fade-in duration-500">
       <div className="flex items-center justify-between">
-        <PageHeader title="Bar (BDS)" subtitle="Monitor de bebidas e drinks." />
+        <PageHeader title="Bar (BDS)" subtitle="Monitor de bebidas v4.0." />
         <Badge variant="outline" className="h-10 px-4 gap-2 font-black uppercase text-xs border-cyan-200 bg-cyan-50 text-cyan-600">
-          <GlassWater className="h-4 w-4 text-cyan-600" /> {pedidos.length} Bebidas
+          <GlassWater className="h-4 w-4 text-cyan-600" /> {filteredItems.length} Drinks
         </Badge>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-        {pedidos.map(p => (
-          <Card key={p.id} className="border-none shadow-xl overflow-hidden bg-background animate-in zoom-in-95 duration-300">
+        {filteredItems.map(p => (
+          <Card key={p.item_id} className="border-none shadow-xl overflow-hidden bg-background animate-in zoom-in-95 duration-300">
             <div className="px-6 py-4 flex justify-between items-center border-b bg-cyan-500/5 border-cyan-500/10">
               <div className="flex flex-col">
-                <span className="text-xl font-black font-headline uppercase leading-none">Mesa {p.comandas?.mesa || 'Balcão'}</span>
-                <span className="text-[9px] font-bold text-cyan-600 uppercase mt-1">Comanda #{p.comandas?.numero}</span>
+                <span className="text-xl font-black font-headline uppercase leading-none">Mesa {p.mesa || 'Balcão'}</span>
+                <span className="text-[9px] font-bold text-cyan-600 uppercase mt-1">Ref: {p.sale_number}</span>
               </div>
               <div className="flex items-center gap-2 text-[10px] font-black uppercase text-muted-foreground">
                 <Clock className="h-3 w-3" /> {formatDistanceToNow(parseISO(p.created_at), { locale: ptBR })}
@@ -92,22 +80,22 @@ export default function BarPage() {
             
             <CardContent className="p-8 space-y-6">
               <div className="flex justify-between items-start">
-                <p className="text-3xl font-black leading-tight uppercase tracking-tight text-cyan-700">{p.product_name_snapshot}</p>
+                <p className="text-3xl font-black leading-tight uppercase tracking-tight text-cyan-700">{p.produto}</p>
                 <div className="h-16 w-16 rounded-2xl bg-cyan-50 flex items-center justify-center text-4xl font-black text-cyan-600 border border-cyan-100 shadow-inner">
-                  {p.quantity}
+                  {p.qty}
                 </div>
               </div>
               <Button 
                 className="w-full h-16 font-black uppercase text-xs tracking-widest bg-cyan-600 hover:bg-cyan-700 shadow-xl shadow-cyan-600/20 transition-all active:scale-95" 
-                onClick={() => handleConcluir(p.id)}
+                onClick={() => handleConcluir(p.item_id)}
               >
-                <CheckCircle2 className="mr-2 h-5 w-5" /> Entregar Bebida
+                <CheckCircle2 className="mr-2 h-5 w-5" /> Confirmar Entrega
               </Button>
             </CardContent>
           </Card>
         ))}
 
-        {pedidos.length === 0 && (
+        {filteredItems.length === 0 && (
           <div className="col-span-full py-40 text-center opacity-20 border-4 border-dashed rounded-[40px] border-cyan-100 font-black uppercase tracking-[0.3em]">
             <History className="h-20 w-20 mx-auto mb-4 text-cyan-600" />
             Bar em Ordem

@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * @fileOverview Painel Cozinha (KDS) - Sincronizado com Mapeamento v3.1.
- * Opera exclusivamente sobre a tabela física sale_items com status 'pending'.
+ * @fileOverview Painel Cozinha (KDS) - Sync v4.0.
+ * Consome a View production_snapshot.
  */
 
 import { useEffect, useState, useCallback } from 'react';
@@ -18,33 +18,20 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 
 export default function CozinhaPage() {
-  const { store, marcarItemConcluido } = useAuth();
+  const { store, marcarItemConcluido, productionQueue, refreshStatus } = useAuth();
   const { toast } = useToast();
-  const [pedidos, setPedidos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchPedidos = useCallback(async () => {
-    if (!store?.id) return;
-    
-    // Sincronizado com v3.1: sale_items é a fonte de verdade
-    const { data, error } = await supabase
-      .from('sale_items')
-      .select('*, comandas(numero, mesa)')
-      .eq('store_id', store.id)
-      .eq('status', 'pending')
-      .eq('destino_preparo', 'cozinha')
-      .order('created_at', { ascending: true });
-
-    if (!error) {
-      setPedidos(data || []);
-    }
+    setLoading(true);
+    await refreshStatus();
     setLoading(false);
-  }, [store?.id]);
+  }, [refreshStatus]);
 
   useEffect(() => {
     fetchPedidos();
     const channel = supabase
-      .channel('kds_sync')
+      .channel('kds_v4')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sale_items' }, () => fetchPedidos())
       .subscribe();
     
@@ -54,13 +41,15 @@ export default function CozinhaPage() {
   const handleConcluir = async (itemId: string) => {
     try {
       await marcarItemConcluido(itemId);
-      toast({ title: 'Pedido Concluído!' });
+      toast({ title: 'Prato Pronto!' });
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Erro ao concluir', description: err.message });
     }
   };
 
-  if (loading) return (
+  const filteredItems = productionQueue.filter(p => p.destino_preparo === 'cozinha');
+
+  if (loading && productionQueue.length === 0) return (
     <div className="h-[60vh] flex flex-col items-center justify-center gap-4">
       <Loader2 className="animate-spin text-primary h-8 w-8" />
       <p className="font-black uppercase text-[10px] tracking-widest text-muted-foreground animate-pulse">Sincronizando Cozinha...</p>
@@ -70,19 +59,19 @@ export default function CozinhaPage() {
   return (
     <div className="space-y-10 animate-in fade-in duration-500">
       <div className="flex items-center justify-between">
-        <PageHeader title="Cozinha (KDS)" subtitle="Monitor de produção em tempo real." />
+        <PageHeader title="Cozinha (KDS)" subtitle="Monitor de produção v4.0." />
         <Badge variant="outline" className="h-10 px-4 gap-2 font-black uppercase text-xs border-primary/20 bg-primary/5 text-primary">
-          <ChefHat className="h-4 w-4 text-primary" /> {pedidos.length} Pedidos
+          <ChefHat className="h-4 w-4 text-primary" /> {filteredItems.length} Pedidos
         </Badge>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-        {pedidos.map(p => (
-          <Card key={p.id} className="border-none shadow-xl overflow-hidden bg-background animate-in zoom-in-95 duration-300">
+        {filteredItems.map(p => (
+          <Card key={p.item_id} className="border-none shadow-xl overflow-hidden bg-background animate-in zoom-in-95 duration-300">
             <div className="px-6 py-4 flex justify-between items-center border-b bg-muted/30">
               <div className="flex flex-col">
-                <span className="text-xl font-black font-headline uppercase leading-none">Mesa {p.comandas?.mesa || 'Balcão'}</span>
-                <span className="text-[9px] font-bold text-muted-foreground uppercase mt-1">Comanda #{p.comandas?.numero}</span>
+                <span className="text-xl font-black font-headline uppercase leading-none">Mesa {p.mesa || 'Balcão'}</span>
+                <span className="text-[9px] font-bold text-muted-foreground uppercase mt-1">Ref: {p.sale_number}</span>
               </div>
               <div className="flex items-center gap-2 text-[10px] font-black uppercase text-muted-foreground">
                 <Clock className="h-3 w-3" /> {formatDistanceToNow(parseISO(p.created_at), { locale: ptBR })}
@@ -91,25 +80,25 @@ export default function CozinhaPage() {
             
             <CardContent className="p-8 space-y-6">
               <div className="flex justify-between items-start">
-                <p className="text-3xl font-black leading-tight uppercase tracking-tight">{p.product_name_snapshot}</p>
+                <p className="text-3xl font-black leading-tight uppercase tracking-tight">{p.produto}</p>
                 <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center text-4xl font-black text-primary border border-primary/10 shadow-inner">
-                  {p.quantity}
+                  {p.qty}
                 </div>
               </div>
               <Button 
                 className="w-full h-16 font-black uppercase text-xs tracking-widest shadow-xl shadow-primary/20 transition-all active:scale-95" 
-                onClick={() => handleConcluir(p.id)}
+                onClick={() => handleConcluir(p.item_id)}
               >
-                <CheckCircle2 className="mr-2 h-5 w-5" /> Confirmar Saída
+                <CheckCircle2 className="mr-2 h-5 w-5" /> Liberar para Entrega
               </Button>
             </CardContent>
           </Card>
         ))}
 
-        {pedidos.length === 0 && (
+        {filteredItems.length === 0 && (
           <div className="col-span-full py-40 text-center opacity-20 border-4 border-dashed rounded-[40px] font-black uppercase tracking-[0.3em]">
             <ChefHat className="h-20 w-20 mx-auto mb-4" />
-            Cozinha em Ordem
+            Cozinha Limpa
           </div>
         )}
       </div>
