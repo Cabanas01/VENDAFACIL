@@ -27,7 +27,6 @@ export default function CozinhaPage() {
   const fetchPedidos = useCallback(async () => {
     if (!store?.id) return;
     
-    // Busca itens pendentes destinados à cozinha. REGRA: Status pending apenas.
     const { data, error } = await supabase
       .from('v_painel_cozinha')
       .select('*')
@@ -54,7 +53,6 @@ export default function CozinhaPage() {
     try {
       await marcarItemConcluido(itemId);
       toast({ title: 'Pedido Concluído!' });
-      // O realtime atualizará a lista automaticamente.
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Erro ao concluir', description: err.message });
     }

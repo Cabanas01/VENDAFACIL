@@ -27,7 +27,6 @@ export default function BarPage() {
   const fetchPedidos = useCallback(async () => {
     if (!store?.id) return;
     
-    // Busca itens pendentes destinados ao bar.
     const { data, error } = await supabase
       .from('v_painel_bar')
       .select('*')

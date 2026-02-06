@@ -131,8 +131,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const adicionarItem = async (comandaId: string, productId: string, quantity: number, priceOverrideCents?: number) => {
-    // REGRA DE OURO: SEMPRE envia os 4 parâmetros.
-    // p_quantity e p_unit_price forçados como numeric para evitar ambiguidade.
     const { error } = await supabase.rpc('rpc_add_item_to_comanda', {
       p_comanda_id: comandaId,
       p_product_id: productId,
@@ -147,7 +145,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fecharComanda = async (comandaId: string, paymentMethodId: string) => {
     const cashRegister = cashRegisters.find(cr => !cr.closed_at);
     
-    // REGRA DE OURO: Fechamento atômico delega soma ao banco.
     const { error } = await supabase.rpc('rpc_close_comanda_to_sale', {
       p_comanda_id: comandaId,
       p_payment_method_id: paymentMethodId,
@@ -161,7 +158,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const addSale = async (cart: CartItem[], paymentMethod: string) => {
     if (!store?.id) throw new Error('Loja não identificada.');
     try {
-      // Fluxo Seguro: Abre Comanda PDV -> Lança via RPC -> Fecha via RPC
       const comandaId = await abrirComanda('0', 'Consumidor Final');
       for (const item of cart) {
         await adicionarItem(comandaId, item.product_id, item.qty);
@@ -182,7 +178,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const marcarItemConcluido = async (itemId: string) => {
-    // REGRA DE OURO: Somente via RPC para respeitar check constraints.
     const { error } = await supabase.rpc('rpc_mark_order_item_done', { 
       p_item_id: itemId 
     });
