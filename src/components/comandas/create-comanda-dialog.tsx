@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -41,7 +42,7 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
   const onSubmit = async (values: ComandaFormValues) => {
     setIsSubmitting(true);
     try {
-      // Chama a RPC rpc_get_open_sale com a nova assinatura de 3 parâmetros
+      // Chama a RPC sincronizada com 3 parâmetros
       const saleId = await getOpenSale(values.mesa, values.cliente);
 
       toast({ 
@@ -53,14 +54,12 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
       form.reset();
       
       if (onSuccess) await onSuccess();
-      
-      // Navega para o atendimento ativo
       router.push(`/comandas/${saleId}`);
     } catch (err: any) {
       toast({ 
         variant: 'destructive', 
         title: 'Erro ao abrir atendimento', 
-        description: err.message || 'Falha na comunicação com o servidor.' 
+        description: err.message || 'Falha técnica no servidor.' 
       });
     } finally {
       setIsSubmitting(false);

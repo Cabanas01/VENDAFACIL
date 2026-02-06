@@ -1,3 +1,4 @@
+
 'use client';
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -34,8 +35,8 @@ type AuthContextType = {
   refreshStatus: () => Promise<void>;
   createStore: (storeData: any) => Promise<void>;
   
-  // RPC Wrappers - Alinhados ao Backend v4.0
-  getOpenSale: (tableNumber: number, customerName: string | null) => Promise<string>;
+  // RPC Wrappers - Alinhados ao Backend
+  getOpenSale: (tableNumber: number, customerName: string) => Promise<string>;
   adicionarItem: (saleId: string, productId: string, quantity: number) => Promise<void>;
   fecharVenda: (saleId: string, paymentMethod: string) => Promise<void>;
   addSaleBalcao: (cart: CartItem[], paymentMethod: string, customerName: string) => Promise<Sale | null>;
@@ -113,7 +114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, [fetchAppData]);
 
-  const getOpenSale = async (tableNumber: number, customerName: string | null) => {
+  const getOpenSale = async (tableNumber: number, customerName: string) => {
     if (!store?.id) throw new Error('Unidade não identificada.');
     return getOpenSaleRpc(store.id, tableNumber, customerName);
   };
@@ -130,7 +131,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const addSaleBalcao = async (cart: CartItem[], paymentMethod: string, customerName: string) => {
     if (!store?.id) throw new Error('Unidade não identificada.');
     try {
-      // Venda de balcão usa mesa 0 por padrão no RPC-First
+      // No RPC-First, balcão usa mesa 0
       const saleId = await getOpenSaleRpc(store.id, 0, customerName);
       
       for (const item of cart) {

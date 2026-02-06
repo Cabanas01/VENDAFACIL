@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
@@ -77,7 +78,6 @@ export default function ComandaDetailsPage() {
     if (localCart.length === 0 || isSubmitting) return;
     setIsSubmitting(true);
     try {
-      // Chama a RPC rpc_add_item_to_sale para cada item do carrinho
       for (const item of localCart) {
         await adicionarItem(id as string, item.product.id, item.qty);
       }
@@ -96,9 +96,7 @@ export default function ComandaDetailsPage() {
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
-      // Chama rpc_close_sale delegando toda a lógica ao banco
       await fecharVenda(id as string, method);
-      
       toast({ title: 'Venda Concluída!' });
       
       if (store && sale) {
@@ -163,12 +161,12 @@ export default function ComandaDetailsPage() {
                   <TableCell className="px-6">
                     <div className="flex flex-col">
                       <span className="font-bold text-xs uppercase">{item.product_name_snapshot}</span>
-                      <span className="text-[9px] text-muted-foreground font-black uppercase">{formatCurrency(item.unit_price)} / un</span>
+                      <span className="text-[9px] text-muted-foreground font-black uppercase">{formatCurrency(item.price_cents)} / un</span>
                     </div>
                   </TableCell>
                   <TableCell className="text-center font-black text-xs">x{item.quantity}</TableCell>
                   <TableCell className="text-right px-6 font-black text-primary">
-                    {formatCurrency(item.line_total)}
+                    {formatCurrency(item.subtotal_cents)}
                   </TableCell>
                 </TableRow>
               ))}
