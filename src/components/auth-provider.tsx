@@ -124,7 +124,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const adicionarItem = async (comandaId: string, productId: string, quantity: number) => {
-    // ✅ Regra de Ouro: Forçar numeric e remover p_unit_price para o banco buscar o valor correto
+    // ✅ Regra de Ouro: Forçar numeric e remover line_total para o banco calcular
     const { error } = await supabase.rpc('rpc_add_item_to_comanda', {
       p_comanda_id: comandaId,
       p_product_id: productId,

@@ -2,7 +2,7 @@
 
 /**
  * @fileOverview Server Action para Processamento de Vendas (PDV Direto).
- * Sincronizada para remover referências a colunas inexistentes e usar RPCs numéricas.
+ * Sincronizada para remover referências a colunas inexistentes e forçar tipos numéricos.
  */
 
 import { getSupabaseAdmin } from '@/lib/supabase/admin';

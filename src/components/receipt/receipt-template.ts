@@ -2,7 +2,7 @@
 
 import type { Sale, Store } from '@/lib/types';
 
-const paymentMethodLabels = {
+const paymentMethodLabels: Record<string, string> = {
   dinheiro: 'DINHEIRO',
   pix: 'PIX QR CODE',
   credito: 'CARTÃO CRÉDITO',

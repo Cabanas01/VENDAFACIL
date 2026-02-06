@@ -1,9 +1,8 @@
-
 'use client';
 
 /**
- * @fileOverview Ponto de Venda (PDV) - Design Premium Cyan
- * Sincronizado para fidelidade visual absoluta à imagem enviada.
+ * @fileOverview Ponto de Venda (PDV) - Design Premium Clean
+ * Sincronizado para fidelidade visual absoluta à imagem e correção de erros.
  */
 
 import { useState, useMemo } from 'react';
@@ -176,7 +175,7 @@ export default function NewSalePage() {
                   className="group cursor-pointer hover:border-primary transition-all active:scale-[0.98] shadow-sm border-primary/5 bg-background relative overflow-hidden h-36"
                   onClick={() => addToCart(product)}
                 >
-                  <CardContent className="p-5 flex flex-col justify-between h-full">
+                  <CardContent className="p-5 flex flex-col justify-between h-full text-left">
                     <h3 className="font-black text-[11px] leading-tight line-clamp-2 uppercase tracking-tighter text-slate-900">{product.name}</h3>
                     <div className="flex items-end justify-between">
                       <span className="text-primary font-black text-xl tracking-tighter">{formatCurrency(product.price_cents)}</span>
