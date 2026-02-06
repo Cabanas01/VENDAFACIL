@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { 
   Search, 
   ShoppingCart, 
@@ -13,7 +14,8 @@ import {
   ArrowRight,
   X,
   QrCode,
-  UserCircle
+  UserCircle,
+  CircleDollarSign
 } from 'lucide-react';
 import { useAuth } from '@/components/auth-provider';
 import { useToast } from '@/hooks/use-toast';
@@ -29,15 +31,15 @@ import {
   DialogTitle,
   DialogDescription
 } from '@/components/ui/dialog';
-import type { Product, CartItem, Sale } from '@/lib/types';
-import { printReceipt } from '@/lib/print-receipt';
+import type { Product, CartItem } from '@/lib/types';
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((value || 0) / 100);
 
-export default function NewSalePage() {
-  const { products, addSaleBalcao, store } = useAuth();
+export default function NewSalePDVPage() {
+  const { products, getOrCreateComanda, adicionarItem, finalizarAtendimento } = useAuth();
   const { toast } = useToast();
+  const router = useRouter();
   
   const [search, setSearch] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -62,57 +64,42 @@ export default function NewSalePage() {
   const addToCart = (product: Product) => {
     const existing = cart.find(item => item.product_id === product.id);
     if (existing) {
-      if (existing.qty >= product.stock_qty) {
-        toast({ variant: 'destructive', title: 'Estoque insuficiente' });
-        return;
-      }
       setCart(cart.map(item => item.product_id === product.id 
-        ? { ...item, qty: item.qty + 1, subtotal_cents: (item.qty + 1) * item.unit_price_cents } 
+        ? { ...item, qty: item.qty + 1 } 
         : item
       ));
     } else {
-      if (product.stock_qty <= 0) {
-        toast({ variant: 'destructive', title: 'Produto sem estoque' });
-        return;
-      }
       setCart([...cart, {
         product_id: product.id,
         product_name_snapshot: product.name,
-        product_barcode_snapshot: product.barcode || null,
         qty: 1,
-        unit_price_cents: product.price_cents,
-        subtotal_cents: product.price_cents,
-        stock_qty: product.stock_qty,
-        destino_preparo: product.production_target || 'nenhum'
+        unit_price_cents: product.price_cents
       }]);
     }
   };
 
-  const handleFinalize = async (method: string) => {
-    if (cart.length === 0 || isSubmitting || !store) return;
+  const handleFinalize = async (method: 'cash' | 'pix' | 'card') => {
+    if (cart.length === 0 || isSubmitting) return;
     
     setIsSubmitting(true);
     try {
-      // A função addSaleBalcao no context já usa o novo Adapter com Fallback
-      const result = await addSaleBalcao(cart, method, customerName.trim() || 'Consumidor Balcão');
+      // 1. Cria comanda Balcão (Table 0)
+      const comandaId = await getOrCreateComanda(0, customerName || 'Consumidor Balcão');
       
-      if (result) {
-        toast({ title: 'Venda Finalizada!', description: `Saldo: ${formatCurrency(result.total_cents)}` });
-        if (store) printReceipt(result, store);
-        setCart([]);
-        setCustomerName('');
-        setIsFinalizing(false);
+      // 2. Lança Itens
+      for (const item of cart) {
+        await adicionarItem(comandaId, item.product_id, item.qty);
       }
-    } catch (error: any) {
-      const isSchemaError = error.message.includes('schema cache') || error.message.includes('not found');
       
-      toast({ 
-        variant: 'destructive', 
-        title: isSchemaError ? 'Erro de Sincronização' : 'Erro ao processar venda', 
-        description: isSchemaError 
-          ? 'O sistema está atualizando as regras de preço. Tente novamente em 30 segundos.' 
-          : error.message 
-      });
+      // 3. Fecha Atendimento
+      await finalizarAtendimento(comandaId, method);
+      
+      toast({ title: 'Venda Concluída!', description: `Total: ${formatCurrency(cartTotalDisplay)}` });
+      setCart([]);
+      setIsFinalizing(false);
+      router.push('/sales');
+    } catch (error: any) {
+      toast({ variant: 'destructive', title: 'Erro no PDV', description: error.message });
     } finally {
       setIsSubmitting(false);
     }
@@ -122,8 +109,8 @@ export default function NewSalePage() {
     <div className="flex flex-col h-[calc(100vh-8rem)] animate-in fade-in duration-500">
       <div className="mb-6 flex justify-between items-end">
         <div>
-          <h1 className="text-3xl font-headline font-black uppercase tracking-tighter">FRENTE DE CAIXA</h1>
-          <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Venda Rápida / Balcão</p>
+          <h1 className="text-3xl font-headline font-black uppercase tracking-tighter">BALCÃO / PDV</h1>
+          <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Fluxo de venda direta rápida</p>
         </div>
       </div>
 
@@ -134,7 +121,7 @@ export default function NewSalePage() {
               <div className="relative">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                 <Input 
-                  placeholder="Pesquisar produto pelo nome ou código..." 
+                  placeholder="Pesquisar produto..." 
                   className="pl-12 h-14 text-lg bg-slate-50 border-none shadow-inner rounded-2xl"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -167,7 +154,7 @@ export default function NewSalePage() {
         <Card className="flex flex-col h-full border-primary/10 shadow-2xl overflow-hidden rounded-[40px] bg-background">
           <CardHeader className="p-6 bg-muted/20 border-b border-muted">
             <CardTitle className="flex items-center gap-3 text-sm font-black uppercase tracking-widest">
-              <ShoppingCart className="h-5 w-5 text-primary" /> Carrinho
+              <ShoppingCart className="h-5 w-5 text-primary" /> Carrinho Atual
             </CardTitle>
           </CardHeader>
 
@@ -189,16 +176,14 @@ export default function NewSalePage() {
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {
                         const newQty = item.qty - 1;
                         if (newQty < 1) setCart(cart.filter(i => i.product_id !== item.product_id));
-                        else setCart(cart.map(i => i.product_id === item.product_id ? {...i, qty: newQty, subtotal_cents: newQty * i.unit_price_cents} : i));
+                        else setCart(cart.map(i => i.product_id === item.product_id ? {...i, qty: newQty} : i));
                       }}><Minus className="h-3 w-3" /></Button>
                       <span className="w-8 text-center text-xs font-black">{item.qty}</span>
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {
-                        if (item.qty >= item.stock_qty) return;
-                        const newQty = item.qty + 1;
-                        setCart(cart.map(i => i.product_id === item.product_id ? {...i, qty: newQty, subtotal_cents: newQty * i.unit_price_cents} : i));
+                        setCart(cart.map(i => i.product_id === item.product_id ? {...i, qty: i.qty + 1} : i));
                       }}><Plus className="h-3 w-3" /></Button>
                     </div>
-                    <span className="font-black text-sm text-slate-950">{formatCurrency(item.subtotal_cents)}</span>
+                    <span className="font-black text-sm text-slate-950">{formatCurrency(item.qty * item.unit_price_cents)}</span>
                   </div>
                   <Separator className="opacity-30" />
                 </div>
@@ -206,7 +191,7 @@ export default function NewSalePage() {
               {cart.length === 0 && (
                 <div className="py-40 text-center space-y-6 opacity-20">
                   <ShoppingCart className="h-16 w-16 mx-auto" />
-                  <p className="text-[11px] font-black uppercase tracking-[0.25em]">CARRINHO VAZIO</p>
+                  <p className="text-[11px] font-black uppercase tracking-[0.25em]">Venda Vazia</p>
                 </div>
               )}
             </div>
@@ -214,7 +199,7 @@ export default function NewSalePage() {
 
           <CardFooter className="flex-none flex flex-col p-10 space-y-8 bg-slate-50/50 border-t border-muted/50">
             <div className="w-full flex justify-between items-end">
-              <span className="text-muted-foreground text-[10px] font-black uppercase tracking-[0.2em] opacity-60">VALOR TOTAL</span>
+              <span className="text-muted-foreground text-[10px] font-black uppercase tracking-[0.2em] opacity-60">VALOR ESTIMADO</span>
               <span className="text-5xl font-black text-primary tracking-tighter">{formatCurrency(cartTotalDisplay)}</span>
             </div>
             <Button 
@@ -222,7 +207,7 @@ export default function NewSalePage() {
               disabled={cart.length === 0 || isSubmitting}
               onClick={() => setIsFinalizing(true)}
             >
-              FECHAR PEDIDO <ArrowRight className="ml-3 h-5 w-5" />
+              FECHAR VENDA <ArrowRight className="ml-3 h-5 w-5" />
             </Button>
           </CardFooter>
         </Card>
@@ -231,26 +216,23 @@ export default function NewSalePage() {
       <Dialog open={isFinalizing} onOpenChange={setIsFinalizing}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl rounded-[40px]">
           <div className="p-10 bg-white relative">
-            <button 
-              onClick={() => setIsFinalizing(false)}
-              className="absolute right-8 top-8 h-12 w-12 rounded-full bg-slate-50 flex items-center justify-center text-slate-400"
-            >
+            <button onClick={() => setIsFinalizing(false)} className="absolute right-8 top-8 h-12 w-12 rounded-full bg-slate-50 flex items-center justify-center text-slate-400">
               <X className="h-6 w-6" />
             </button>
             
             <div className="mb-10 pt-6 text-center space-y-2">
-              <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900 font-headline">PAGAMENTO</h2>
-              <DialogDescription className="text-xs uppercase font-bold tracking-widest text-muted-foreground">Total: {formatCurrency(cartTotalDisplay)}</DialogDescription>
+              <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900 font-headline">IDENTIFICAÇÃO E PAGAMENTO</h2>
+              <DialogDescription className="text-xs uppercase font-bold tracking-widest text-muted-foreground">Valor: {formatCurrency(cartTotalDisplay)}</DialogDescription>
             </div>
 
             <div className="space-y-8">
               <div className="space-y-3">
-                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground pl-2">Identificação do Cliente</label>
+                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground pl-2">Nome do Cliente</label>
                 <div className="relative">
                   <UserCircle className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground opacity-50" />
                   <input 
-                    placeholder="Nome do consumidor (opcional)..." 
-                    className="w-full h-14 pl-12 rounded-2xl border-none bg-slate-100/50 font-bold text-lg focus:ring-primary/20 outline-none"
+                    placeholder="Consumidor Final..." 
+                    className="w-full h-14 pl-12 rounded-2xl border-none bg-slate-100/50 font-bold text-lg"
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
                   />
@@ -258,39 +240,19 @@ export default function NewSalePage() {
               </div>
               
               <div className="grid grid-cols-1 gap-4">
-                <Button 
-                  variant="outline" 
-                  className="h-20 justify-start text-[11px] font-black uppercase tracking-[0.2em] gap-6 border-none bg-slate-50 shadow-sm hover:bg-slate-100 transition-all px-8 rounded-[24px] group" 
-                  onClick={() => handleFinalize('cash')} 
-                  disabled={isSubmitting}
-                >
-                  <div className="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center shrink-0 shadow-inner group-active:scale-95 transition-transform">
-                    <Coins className="h-6 w-6 text-green-600" />
-                  </div>
-                  <span>DINHEIRO</span>
+                <Button variant="outline" className="h-20 justify-start gap-6 border-none bg-slate-50 hover:bg-slate-100 rounded-[24px] px-8" onClick={() => handleFinalize('cash')} disabled={isSubmitting}>
+                  <div className="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center"><CircleDollarSign className="text-green-600 h-6 w-6" /></div>
+                  <span className="font-black uppercase text-[11px] tracking-[0.2em]">DINHEIRO</span>
                 </Button>
 
-                <Button 
-                  className="h-20 justify-start text-[11px] font-black uppercase tracking-[0.2em] gap-6 border-none bg-cyan-400 text-white shadow-2xl shadow-cyan-400/30 hover:bg-cyan-500 transition-all px-8 rounded-[24px] group" 
-                  onClick={() => handleFinalize('pix')} 
-                  disabled={isSubmitting}
-                >
-                  <div className="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center shrink-0 shadow-inner group-active:scale-95 transition-transform">
-                    <QrCode className="h-6 w-6 text-white" />
-                  </div>
-                  <span>PIX QR CODE</span>
+                <Button className="h-20 justify-start gap-6 border-none bg-cyan-400 text-white hover:bg-cyan-500 rounded-[24px] px-8 shadow-xl" onClick={() => handleFinalize('pix')} disabled={isSubmitting}>
+                  <div className="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center"><QrCode className="h-6 w-6 text-white" /></div>
+                  <span className="font-black uppercase text-[11px] tracking-[0.2em]">PIX</span>
                 </Button>
 
-                <Button 
-                  variant="outline" 
-                  className="h-20 justify-start text-[11px] font-black uppercase tracking-[0.2em] gap-6 border-none bg-slate-50 shadow-sm hover:bg-slate-100 transition-all px-8 rounded-[24px] group" 
-                  onClick={() => handleFinalize('card')} 
-                  disabled={isSubmitting}
-                >
-                  <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center shrink-0 shadow-inner group-active:scale-95 transition-transform">
-                    <CreditCard className="h-6 w-6 text-blue-600" />
-                  </div>
-                  <span>CARTÃO</span>
+                <Button variant="outline" className="h-20 justify-start gap-6 border-none bg-slate-50 hover:bg-slate-100 rounded-[24px] px-8" onClick={() => handleFinalize('card')} disabled={isSubmitting}>
+                  <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center"><CreditCard className="h-6 w-6 text-blue-600" /></div>
+                  <span className="font-black uppercase text-[11px] tracking-[0.2em]">CARTÃO</span>
                 </Button>
               </div>
             </div>
@@ -299,7 +261,7 @@ export default function NewSalePage() {
           {isSubmitting && (
             <div className="absolute inset-0 bg-background/80 flex flex-col items-center justify-center z-50 backdrop-blur-sm">
               <Loader2 className="h-14 w-14 animate-spin text-primary mb-6" />
-              <p className="text-[11px] font-black uppercase tracking-[0.3em] text-primary animate-pulse">PROCESSANDO...</p>
+              <p className="text-[11px] font-black uppercase tracking-[0.3em] text-primary">GERANDO VENDA...</p>
             </div>
           )}
         </DialogContent>

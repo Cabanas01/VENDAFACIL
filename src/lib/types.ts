@@ -65,56 +65,56 @@ export type Product = {
   barcode?: string;
   created_at: string;
   production_target: 'cozinha' | 'bar' | 'nenhum';
-  prep_time_minutes: number;
 };
 
 export type OrderItemStatus = 'pending' | 'done' | 'cancelled';
 
-export type SaleItem = {
+export type ComandaItem = {
   id: string;
-  store_id: string;
+  comanda_id: string;
   product_id: string;
-  sale_id: string;
+  product_name_snapshot: string;
   quantity: number;
   unit_price: number;
   line_total: number;
   status: OrderItemStatus;
+  destino_preparo: string;
   created_at: string;
-  product_name_snapshot?: string;
-  destino_preparo?: string;
 };
 
-export type SaleStatus = 'open' | 'paid' | 'cancelled';
+export type ComandaStatus = 'aberta' | 'fechada' | 'cancelada';
+
+export type Comanda = {
+  id: string;
+  store_id: string;
+  numero: number;
+  mesa: string | null;
+  cliente_nome: string | null;
+  status: ComandaStatus;
+  total_cents: number;
+  created_at: string;
+  items?: ComandaItem[];
+};
 
 export type Sale = {
   id: string;
   store_id: string;
-  customer_id?: string | null;
-  created_at: string;
+  comanda_id: string;
   total_cents: number;
-  payment_method: string | null;
-  status: SaleStatus;
-  mesa?: string | null;
-  cliente_nome?: string | null;
-  items?: SaleItem[];
+  payment_method: 'cash' | 'pix' | 'card';
+  created_at: string;
 };
 
 export type CartItem = {
   product_id: string;
   product_name_snapshot: string;
-  product_barcode_snapshot?: string | null;
   qty: number;
   unit_price_cents: number;
-  subtotal_cents: number;
-  stock_qty: number;
-  destino_preparo: string;
 };
 
 export type CashRegister = {
   id: string;
   store_id: string;
-  opened_by: string;
-  closed_by?: string | null;
   opened_at: string;
   closed_at: string | null;
   opening_amount_cents: number;
@@ -133,8 +133,7 @@ export type Customer = {
 
 export type ProductionSnapshotView = {
   item_id: string;
-  sale_id: string;
-  sale_number: string;
+  comanda_id: string;
   mesa: string | null;
   produto: string;
   qty: number;
@@ -144,18 +143,9 @@ export type ProductionSnapshotView = {
   store_id: string;
 };
 
-export type TableInfo = {
-  id: string;
-  store_id: string;
-  number: number;
-  status: string;
-  public_token: string;
-};
-
 export type StoreAccessStatus = {
     acesso_liberado: boolean;
     data_fim_acesso: string | null;
     plano_nome: string;
-    plano_tipo: string | null;
     mensagem: string;
 }

@@ -3,14 +3,15 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { 
-  getOpenSaleRpc, 
-  addItemToSaleRpc, 
-  closeSaleRpc
+  getOrCreateOpenComandaRpc,
+  addItemToComandaRpc,
+  closeComandaToSaleRpc,
+  markOrderItemDoneRpc
 } from '@/lib/rpc';
 import type { 
   Store, 
   Product, 
-  Sale, 
+  Comanda,
   CashRegister, 
   StoreAccessStatus,
   CartItem,
@@ -24,21 +25,19 @@ type AuthContextType = {
   store: Store | null;
   accessStatus: StoreAccessStatus | null;
   products: Product[];
-  comandas: Sale[];
-  sales: Sale[];
+  comandas: Comanda[];
   customers: Customer[];
   cashRegisters: CashRegister[];
-  productionQueue: ProductionSnapshotView[];
   storeStatus: 'loading_auth' | 'loading_status' | 'ready' | 'no_store' | 'error';
   
   refreshStatus: () => Promise<void>;
   createStore: (storeData: any) => Promise<void>;
   
-  // RPC Wrappers - Sincronizados com Adapter src/lib/rpc.ts
-  getOpenSale: (tableNumber: number, customerName: string | null) => Promise<string>;
-  adicionarItem: (saleId: string, productId: string, quantity: number) => Promise<void>;
-  fecharVenda: (saleId: string, paymentMethod: string) => Promise<void>;
-  addSaleBalcao: (cart: CartItem[], paymentMethod: string, customerName: string) => Promise<Sale | null>;
+  // Mutações Seguras (COMANDA-FIRST)
+  getOrCreateComanda: (tableNumber: number, customerName: string | null) => Promise<string>;
+  adicionarItem: (comandaId: string, productId: string, quantity: number) => Promise<void>;
+  finalizarAtendimento: (comandaId: string, paymentMethod: 'cash' | 'pix' | 'card') => Promise<void>;
+  concluirPreparo: (itemId: string) => Promise<void>;
   
   logout: () => Promise<void>;
 };
@@ -49,12 +48,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [store, setStore] = useState<Store | null>(null);
   const [accessStatus, setAccessStatus] = useState<StoreAccessStatus | null>(null);
-  const [comandas, setComandas] = useState<Sale[]>([]);
+  const [comandas, setComandas] = useState<Comanda[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [sales, setSales] = useState<Sale[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [cashRegisters, setCashRegistersState] = useState<CashRegister[]>([]);
-  const [productionQueue, setProductionQueue] = useState<ProductionSnapshotView[]>([]);
   const [storeStatus, setStoreStatus] = useState<'loading_auth' | 'loading_status' | 'ready' | 'no_store' | 'error'>('loading_auth');
 
   const fetchAppData = useCallback(async (userId: string) => {
@@ -69,24 +66,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (storeId) {
-        const [storeRes, prodRes, cmdRes, custRes, accessRes, salesRes, cashRes, queueRes] = await Promise.all([
+        const [storeRes, prodRes, cmdRes, custRes, accessRes, cashRes] = await Promise.all([
           supabase.from('stores').select('*').eq('id', storeId).single(),
           supabase.from('products').select('*').eq('store_id', storeId).order('name'),
-          supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeId).eq('status', 'open').order('created_at', { ascending: true }),
+          supabase.from('comandas').select('*, items:order_items(*)').eq('store_id', storeId).eq('status', 'aberta').order('created_at', { ascending: true }),
           supabase.from('customers').select('*').eq('store_id', storeId).order('name'),
           supabase.rpc('get_store_access_status', { p_store_id: storeId }),
-          supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeId).eq('status', 'closed').order('created_at', { ascending: false }).limit(50),
-          supabase.from('cash_registers').select('*').eq('store_id', storeId).order('opened_at', { ascending: false }),
-          supabase.from('production_snapshot').select('*').eq('store_id', storeId).eq('status', 'pending')
+          supabase.from('cash_registers').select('*').eq('store_id', storeId).order('opened_at', { ascending: false })
         ]);
 
         setStore(storeRes.data || null);
         setProducts(prodRes.data || []);
         setComandas(cmdRes.data || []);
         setCustomers(custRes.data || []);
-        setSales(salesRes.data || []);
         setCashRegistersState(cashRes.data || []);
-        setProductionQueue(queueRes.data || []);
         setAccessStatus(accessRes.data?.[0] || null);
         setStoreStatus('ready');
       } else {
@@ -113,38 +106,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, [fetchAppData]);
 
-  const getOpenSale = async (tableNumber: number, customerName: string | null) => {
-    if (!store?.id) throw new Error('Unidade não identificada. Recarregue a página.');
-    return getOpenSaleRpc(store.id, tableNumber, customerName);
+  // Implementações COMANDA-FIRST
+  const getOrCreateComanda = async (tableNumber: number, customerName: string | null) => {
+    if (!store?.id) throw new Error('Unidade não identificada.');
+    return getOrCreateOpenComandaRpc(store.id, tableNumber, customerName);
   };
 
-  const adicionarItem = async (saleId: string, productId: string, quantity: number) => {
-    await addItemToSaleRpc(saleId, productId, quantity);
-  };
-
-  const fecharVenda = async (saleId: string, paymentMethod: string) => {
-    await closeSaleRpc(saleId, paymentMethod);
+  const adicionarItem = async (comandaId: string, productId: string, quantity: number) => {
+    await addItemToComandaRpc(comandaId, productId, quantity);
     await refreshStatus();
   };
 
-  const addSaleBalcao = async (cart: CartItem[], paymentMethod: string, customerName: string) => {
-    if (!store?.id) throw new Error('Unidade não identificada.');
-    try {
-      // No RPC-First, balcão usa mesa 0. Identificação obrigatória para conformidade.
-      const saleId = await getOpenSaleRpc(store.id, 0, customerName);
-      
-      for (const item of cart) {
-        await addItemToSaleRpc(saleId, item.product_id, item.qty);
-      }
-      
-      await closeSaleRpc(saleId, paymentMethod);
-      
-      const { data: finalSale } = await supabase.from('sales').select('*, items:sale_items(*)').eq('id', saleId).single();
-      return finalSale as Sale;
-    } catch (err: any) {
-      console.error('[PDV_BALCAO_FATAL]', err);
-      throw err;
-    }
+  const finalizarAtendimento = async (comandaId: string, paymentMethod: 'cash' | 'pix' | 'card') => {
+    await closeComandaToSaleRpc(comandaId, paymentMethod);
+    await refreshStatus();
+  };
+
+  const concluirPreparo = async (itemId: string) => {
+    await markOrderItemDoneRpc(itemId);
+    await refreshStatus();
   };
 
   const createStore = async (storeData: any) => {
@@ -167,8 +147,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider value={{ 
-      user, store, accessStatus, products, comandas, customers, sales, cashRegisters, productionQueue, storeStatus,
-      refreshStatus, createStore, getOpenSale, adicionarItem, fecharVenda, addSaleBalcao, logout 
+      user, store, accessStatus, products, comandas, customers, cashRegisters, storeStatus,
+      refreshStatus, createStore, getOrCreateComanda, adicionarItem, finalizarAtendimento, concluirPreparo, logout 
     }}>
       {children}
     </AuthContext.Provider>

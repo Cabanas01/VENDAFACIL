@@ -15,7 +15,7 @@ import { useRouter } from 'next/navigation';
 
 const comandaSchema = z.object({
   mesa: z.coerce.number().int().min(1, 'Informe o número da mesa'),
-  cliente: z.string().optional().transform(val => val && val.trim() !== '' ? val.trim() : null),
+  cliente: z.string().optional().nullable(),
 });
 
 type ComandaFormValues = z.infer<typeof comandaSchema>;
@@ -25,7 +25,7 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
 }) {
-  const { getOpenSale } = useAuth();
+  const { getOrCreateComanda } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -33,7 +33,7 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
   const form = useForm<ComandaFormValues>({
     resolver: zodResolver(comandaSchema),
     defaultValues: { 
-      mesa: 0,
+      mesa: 1,
       cliente: '' 
     }
   });
@@ -41,28 +41,23 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
   const onSubmit = async (values: ComandaFormValues) => {
     setIsSubmitting(true);
     try {
-      // Chama a wrapper que possui fallback para Schema Cache
-      const saleId = await getOpenSale(values.mesa, values.cliente || null);
+      const comandaId = await getOrCreateComanda(values.mesa, values.cliente || null);
 
       toast({ 
         title: 'Atendimento Iniciado', 
-        description: `Mesa ${values.mesa} pronta para lançamento.` 
+        description: `Mesa ${values.mesa} aberta com sucesso.` 
       });
 
       onOpenChange(false);
       form.reset();
       
       if (onSuccess) await onSuccess();
-      router.push(`/comandas/${saleId}`);
+      router.push(`/comandas/${comandaId}`);
     } catch (err: any) {
-      const isSchemaError = err.message.includes('schema cache') || err.message.includes('not found');
-      
       toast({ 
         variant: 'destructive', 
-        title: isSchemaError ? 'Sincronização em andamento' : 'Erro ao abrir mesa', 
-        description: isSchemaError 
-          ? 'O servidor está atualizando as regras de negócio. Aguarde 30s e tente novamente.' 
-          : err.message 
+        title: 'Erro ao abrir mesa', 
+        description: err.message 
       });
     } finally {
       setIsSubmitting(false);
@@ -77,7 +72,7 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
             <ClipboardList className="h-6 w-6 text-primary" />
           </div>
           <DialogHeader>
-            <DialogTitle className="text-2xl font-black font-headline uppercase tracking-tighter">Iniciar Atendimento</DialogTitle>
+            <DialogTitle className="text-2xl font-black font-headline uppercase tracking-tighter">Novo Atendimento</DialogTitle>
             <DialogDescription className="text-sm font-medium">Informe a mesa para controle de consumo.</DialogDescription>
           </DialogHeader>
         </div>

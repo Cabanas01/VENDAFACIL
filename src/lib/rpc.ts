@@ -3,124 +3,83 @@
 import { supabase } from './supabase/client';
 
 /**
- * @fileOverview Adapter Robusto de Integração RPC (Backend v4.0)
+ * @fileOverview Adapter Robusto COMANDA-FIRST (Backend v5.0)
  * 
- * Implementa estratégias de Fallback para Schema Cache (PGRST202)
- * e resolução de ambiguidade de tipos para PostgreSQL (Best Candidate).
+ * Centraliza as únicas 4 mutações financeiras permitidas no sistema.
  */
 
 /**
- * Busca uma venda aberta ou cria uma nova.
- * Implementa Fallback: Tenta 3 parâmetros, se falhar por cache, tenta 2.
+ * 1. Abre ou Obtém Comanda Ativa.
+ * Mesa 0 = PDV Balcão.
  */
-export async function getOpenSaleRpc(
+export async function getOrCreateOpenComandaRpc(
   storeId: string, 
   tableNumber: number, 
   customerName: string | null = null
 ): Promise<string> {
-  const tableInt = Math.floor(tableNumber);
-  const finalCustomerName = customerName && customerName.trim() !== '' ? customerName.trim() : null;
-
-  console.debug('[RPC_GET_OPEN_SALE] Tentando assinatura completa (3 params)', { storeId, tableInt, finalCustomerName });
-
-  // Tentativa 1: Assinatura Completa (v4.0)
-  const attempt1 = await supabase.rpc('rpc_get_open_sale', {
+  const { data, error } = await supabase.rpc('rpc_get_or_create_open_comanda', {
     p_store_id: storeId,
-    p_table_number: tableInt,
-    p_customer_name: finalCustomerName
-  });
-
-  if (!attempt1.error) return attempt1.data as string;
-
-  // Detecção de Erro de Schema Cache ou Assinatura Inexistente
-  const isSchemaError = 
-    attempt1.error.code === 'PGRST202' || 
-    attempt1.error.message.includes('Could not find the function') ||
-    attempt1.error.message.includes('best candidate');
-
-  if (isSchemaError) {
-    console.warn('[RPC_GET_OPEN_SALE] Fallback acionado: Assinatura de 3 parâmetros falhou. Tentando 2 parâmetros.');
-    
-    const attempt2 = await supabase.rpc('rpc_get_open_sale', {
-      p_store_id: storeId,
-      p_table_number: tableInt
-    } as any); // Type cast para permitir fallback se o TS reclamar da assinatura
-
-    if (!attempt2.error) return attempt2.data as string;
-    
-    throw new Error(attempt2.error.message || 'Falha ao consultar mesa ativa (Fallback)');
-  }
-
-  throw new Error(attempt1.error.message || 'Falha ao consultar mesa ativa');
-}
-
-/**
- * Adiciona um item à venda.
- * Resolve ambiguidade de tipo (numeric vs integer) enviando como string primeiro.
- */
-export async function addItemToSaleRpc(
-  saleId: string, 
-  productId: string, 
-  quantity: number
-): Promise<void> {
-  console.debug('[RPC_ADD_ITEM] Lançando item', { saleId, productId, quantity });
-
-  // Tentativa 1: Enviar quantidade como STRING (Força o Postgres a fazer cast para numeric e evita ambiguidade)
-  const attempt1 = await supabase.rpc('rpc_add_item_to_sale', {
-    p_sale_id: saleId,
-    p_product_id: productId,
-    p_quantity: String(quantity) as any // Coerção para Numeric no lado do servidor
-  });
-
-  if (!attempt1.error) return;
-
-  // Se falhar por erro de tipo, tenta como Number purista
-  if (attempt1.error.message.includes('candidate') || attempt1.error.message.includes('type')) {
-    console.warn('[RPC_ADD_ITEM] Fallback de tipo acionado para p_quantity.');
-    const attempt2 = await supabase.rpc('rpc_add_item_to_sale', {
-      p_sale_id: saleId,
-      p_product_id: productId,
-      p_quantity: Number(quantity)
-    });
-
-    if (!attempt2.error) return;
-    throw new Error(attempt2.error.message || 'Falha ao lançar item (Fallback de tipo)');
-  }
-
-  throw new Error(attempt1.error.message || 'Falha ao lançar item no pedido');
-}
-
-/**
- * Fecha a venda e gera o faturamento.
- * Normaliza métodos de pagamento para os enums do banco.
- */
-export async function closeSaleRpc(
-  saleId: string, 
-  paymentMethod: string
-): Promise<any> {
-  // Mapa de normalização
-  const methodMap: Record<string, string> = {
-    'Dinheiro': 'cash',
-    'Pix QR Code': 'pix',
-    'Cartão': 'card',
-    'cash': 'cash',
-    'pix': 'pix',
-    'card': 'card'
-  };
-
-  const finalMethod = methodMap[paymentMethod] || 'cash';
-
-  console.debug('[RPC_CLOSE_SALE] Finalizando faturamento', { saleId, finalMethod });
-
-  const { data, error } = await supabase.rpc('fechar_comanda', {
-    p_comanda_id: saleId,
-    p_forma_pagamento: finalMethod
+    p_table_number: Math.floor(tableNumber),
+    p_customer_name: customerName || null
   });
 
   if (error) {
-    console.error('[RPC_CLOSE_SALE_ERROR]', error);
-    throw new Error(error.message || 'Falha ao finalizar faturamento no servidor.');
+    console.error('[RPC_ERROR] rpc_get_or_create_open_comanda:', error);
+    throw new Error(error.message);
   }
 
-  return data;
+  return data as string;
+}
+
+/**
+ * 2. Adiciona Item à Comanda.
+ * p_quantity é forçado para numeric (Number) para evitar erro de overload.
+ */
+export async function addItemToComandaRpc(
+  comandaId: string, 
+  productId: string, 
+  quantity: number
+): Promise<void> {
+  const { error } = await supabase.rpc('rpc_add_item_to_comanda', {
+    p_comanda_id: comandaId,
+    p_product_id: productId,
+    p_quantity: Number(quantity) // Força Numeric
+  });
+
+  if (error) {
+    console.error('[RPC_ERROR] rpc_add_item_to_comanda:', error);
+    throw new Error(error.message);
+  }
+}
+
+/**
+ * 3. Fecha Comanda e Gera Venda (Atômico).
+ */
+export async function closeComandaToSaleRpc(
+  comandaId: string, 
+  paymentMethod: 'cash' | 'pix' | 'card'
+): Promise<void> {
+  const { error } = await supabase.rpc('rpc_close_comanda_to_sale', {
+    p_comanda_id: comandaId,
+    p_payment_method: paymentMethod
+  });
+
+  if (error) {
+    console.error('[RPC_ERROR] rpc_close_comanda_to_sale:', error);
+    throw new Error(error.message);
+  }
+}
+
+/**
+ * 4. Conclui Item de Produção (KDS/BDS).
+ */
+export async function markOrderItemDoneRpc(orderItemId: string): Promise<void> {
+  const { error } = await supabase.rpc('rpc_mark_order_item_done', {
+    p_order_item_id: orderItemId
+  });
+
+  if (error) {
+    console.error('[RPC_ERROR] rpc_mark_order_item_done:', error);
+    throw new Error(error.message);
+  }
 }
