@@ -11,9 +11,9 @@ import {
   Coins, 
   Loader2, 
   ArrowRight,
-  Printer,
   X,
-  QrCode
+  QrCode,
+  UserCircle
 } from 'lucide-react';
 import { useAuth } from '@/components/auth-provider';
 import { useToast } from '@/hooks/use-toast';
@@ -22,7 +22,6 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
   DialogContent,
@@ -44,6 +43,7 @@ export default function NewSalePage() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [customerName, setCustomerName] = useState('');
 
   const filteredProducts = useMemo(() => {
     const term = (search || '').toLowerCase();
@@ -90,19 +90,34 @@ export default function NewSalePage() {
 
   const handleFinalize = async (method: string) => {
     if (cart.length === 0 || isSubmitting || !store) return;
+    
+    // v4.0: Identificação é agora obrigatória no PDV
+    if (!customerName.trim()) {
+      toast({ 
+        variant: 'destructive', 
+        title: 'Identificação Obrigatória', 
+        description: 'Por favor, informe o nome do cliente antes de concluir.' 
+      });
+      return;
+    }
 
     setIsSubmitting(true);
     try {
-      // O addSaleBalcao orquestra as RPCs oficiais na ordem correta
-      const result = await addSaleBalcao(cart, method);
+      // v4.0: addSaleBalcao agora exige o nome do cliente para a RPC rpc_get_open_sale
+      const result = await addSaleBalcao(cart, method, customerName);
       if (result) {
         toast({ title: 'Venda Concluída!' });
         printReceipt(result, store);
         setCart([]);
+        setCustomerName('');
         setIsFinalizing(false);
       }
     } catch (error: any) {
-      toast({ variant: 'destructive', title: 'Falha ao processar venda', description: error.message });
+      toast({ 
+        variant: 'destructive', 
+        title: 'Falha Técnica', 
+        description: error.message || 'Erro ao processar venda no servidor.' 
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -210,7 +225,7 @@ export default function NewSalePage() {
               disabled={cart.length === 0 || isSubmitting}
               onClick={() => setIsFinalizing(true)}
             >
-              FINALIZAR VENDA <ArrowRight className="ml-3 h-5 w-5" />
+              FECHAR VENDA <ArrowRight className="ml-3 h-5 w-5" />
             </Button>
           </CardFooter>
         </Card>
@@ -226,46 +241,62 @@ export default function NewSalePage() {
               <X className="h-6 w-6" />
             </button>
             
-            <div className="mb-12 pt-6 text-center">
-              <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900 font-headline">PAGAMENTO</h2>
-              <DialogDescription className="text-xs uppercase font-bold tracking-widest text-muted-foreground mt-2">Selecione o meio de recebimento</DialogDescription>
+            <div className="mb-10 pt-6 text-center space-y-2">
+              <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900 font-headline">FINALIZAÇÃO</h2>
+              <DialogDescription className="text-xs uppercase font-bold tracking-widest text-muted-foreground">Total: {formatCurrency(cartTotal)}</DialogDescription>
             </div>
-            
-            <div className="grid grid-cols-1 gap-5">
-              <Button 
-                variant="outline" 
-                className="h-24 justify-start text-[11px] font-black uppercase tracking-[0.2em] gap-8 border-none bg-slate-50 shadow-sm hover:bg-slate-100 transition-all px-10 rounded-[32px] group" 
-                onClick={() => handleFinalize('cash')} 
-                disabled={isSubmitting}
-              >
-                <div className="h-16 w-16 rounded-full bg-green-100 flex items-center justify-center shrink-0 shadow-inner group-active:scale-95 transition-transform">
-                  <Coins className="h-8 w-8 text-green-600" />
-                </div>
-                <span>DINHEIRO EM ESPÉCIE</span>
-              </Button>
 
-              <Button 
-                className="h-24 justify-start text-[11px] font-black uppercase tracking-[0.2em] gap-8 border-none bg-cyan-400 text-white shadow-2xl shadow-cyan-400/30 hover:bg-cyan-500 transition-all px-10 rounded-[32px] group" 
-                onClick={() => handleFinalize('pix')} 
-                disabled={isSubmitting}
-              >
-                <div className="h-16 w-16 rounded-full bg-white/20 flex items-center justify-center shrink-0 shadow-inner group-active:scale-95 transition-transform">
-                  <QrCode className="h-8 w-8 text-white" />
+            <div className="space-y-8">
+              <div className="space-y-3">
+                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground pl-2">Identificação do Cliente *</label>
+                <div className="relative">
+                  <UserCircle className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground opacity-50" />
+                  <Input 
+                    placeholder="Nome ou CPF..." 
+                    className="h-14 pl-12 rounded-2xl border-none bg-slate-100/50 font-bold text-lg focus-visible:ring-primary/20"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    autoFocus
+                  />
                 </div>
-                <span>PIX QR CODE</span>
-              </Button>
+              </div>
+              
+              <div className="grid grid-cols-1 gap-4">
+                <Button 
+                  variant="outline" 
+                  className="h-20 justify-start text-[11px] font-black uppercase tracking-[0.2em] gap-6 border-none bg-slate-50 shadow-sm hover:bg-slate-100 transition-all px-8 rounded-[24px] group" 
+                  onClick={() => handleFinalize('cash')} 
+                  disabled={isSubmitting || !customerName.trim()}
+                >
+                  <div className="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center shrink-0 shadow-inner group-active:scale-95 transition-transform">
+                    <Coins className="h-6 w-6 text-green-600" />
+                  </div>
+                  <span>DINHEIRO</span>
+                </Button>
 
-              <Button 
-                variant="outline" 
-                className="h-24 justify-start text-[11px] font-black uppercase tracking-[0.2em] gap-8 border-none bg-slate-50 shadow-sm hover:bg-slate-100 transition-all px-10 rounded-[32px] group" 
-                onClick={() => handleFinalize('card')} 
-                disabled={isSubmitting}
-              >
-                <div className="h-16 w-16 rounded-full bg-blue-100 flex items-center justify-center shrink-0 shadow-inner group-active:scale-95 transition-transform">
-                  <CreditCard className="h-8 w-8 text-blue-600" />
-                </div>
-                <span>CARTÃO DÉBITO/CRÉDITO</span>
-              </Button>
+                <Button 
+                  className="h-20 justify-start text-[11px] font-black uppercase tracking-[0.2em] gap-6 border-none bg-cyan-400 text-white shadow-2xl shadow-cyan-400/30 hover:bg-cyan-500 transition-all px-8 rounded-[24px] group" 
+                  onClick={() => handleFinalize('pix')} 
+                  disabled={isSubmitting || !customerName.trim()}
+                >
+                  <div className="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center shrink-0 shadow-inner group-active:scale-95 transition-transform">
+                    <QrCode className="h-6 w-6 text-white" />
+                  </div>
+                  <span>PIX QR CODE</span>
+                </Button>
+
+                <Button 
+                  variant="outline" 
+                  className="h-20 justify-start text-[11px] font-black uppercase tracking-[0.2em] gap-6 border-none bg-slate-50 shadow-sm hover:bg-slate-100 transition-all px-8 rounded-[24px] group" 
+                  onClick={() => handleFinalize('card')} 
+                  disabled={isSubmitting || !customerName.trim()}
+                >
+                  <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center shrink-0 shadow-inner group-active:scale-95 transition-transform">
+                    <CreditCard className="h-6 w-6 text-blue-600" />
+                  </div>
+                  <span>CARTÃO</span>
+                </Button>
+              </div>
             </div>
           </div>
 

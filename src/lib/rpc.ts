@@ -11,16 +11,26 @@ import { supabase } from './supabase/client';
  * Busca uma venda aberta para a mesa ou cria uma nova se não existir.
  * @param p_store_id ID da Loja (UUID)
  * @param p_table_number Número da Mesa (Integer)
+ * @param p_customer_name Nome do Cliente (Text) - OBRIGATÓRIO v4.0
  */
-export async function getOpenSaleRpc(storeId: string, tableNumber: number): Promise<string> {
+export async function getOpenSaleRpc(
+  storeId: string, 
+  tableNumber: number, 
+  customerName: string
+): Promise<string> {
   const { data, error } = await supabase.rpc('rpc_get_open_sale', {
     p_store_id: storeId,
-    p_table_number: Math.floor(tableNumber)
+    p_table_number: Math.floor(tableNumber),
+    p_customer_name: customerName
   });
 
   if (error) {
     console.error('[RPC_GET_OPEN_SALE_ERROR]', error);
-    throw new Error(error.message || 'Falha ao processar abertura de mesa.');
+    // Erro de assinatura (falta de parâmetro ou tipo errado)
+    if (error.message.includes('function') || error.message.includes('candidate')) {
+      throw new Error('Erro crítico: Assinatura da função de abertura inválida ou desatualizada.');
+    }
+    throw new Error('Falha ao abrir atendimento. Verifique os dados e tente novamente.');
   }
 
   return data as string;

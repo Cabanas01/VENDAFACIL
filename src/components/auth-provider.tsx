@@ -35,12 +35,12 @@ type AuthContextType = {
   refreshStatus: () => Promise<void>;
   createStore: (storeData: any) => Promise<void>;
   
-  // RPC Wrappers - Delegação total ao Banco
-  getOpenSale: (tableNumber: number) => Promise<string>;
+  // RPC Wrappers - Delegação total ao Banco v4.0
+  getOpenSale: (tableNumber: number, customerName: string) => Promise<string>;
   adicionarItem: (saleId: string, productId: string, quantity: number) => Promise<void>;
   fecharVenda: (saleId: string, paymentMethodId: string) => Promise<void>;
   marcarItemConcluido: (itemId: string) => Promise<void>;
-  addSaleBalcao: (cart: CartItem[], paymentMethod: string) => Promise<Sale | null>;
+  addSaleBalcao: (cart: CartItem[], paymentMethod: string, customerName: string) => Promise<Sale | null>;
   
   logout: () => Promise<void>;
 };
@@ -115,9 +115,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, [fetchAppData]);
 
-  const getOpenSale = async (tableNumber: number) => {
+  const getOpenSale = async (tableNumber: number, customerName: string) => {
     if (!store?.id) throw new Error('Unidade não identificada.');
-    return getOpenSaleRpc(store.id, tableNumber);
+    return getOpenSaleRpc(store.id, tableNumber, customerName);
   };
 
   const adicionarItem = async (saleId: string, productId: string, quantity: number) => {
@@ -134,10 +134,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await refreshStatus();
   };
 
-  const addSaleBalcao = async (cart: CartItem[], paymentMethod: string) => {
+  const addSaleBalcao = async (cart: CartItem[], paymentMethod: string, customerName: string) => {
     if (!store?.id) throw new Error('Unidade não identificada.');
     try {
-      const saleId = await getOpenSale(0);
+      const saleId = await getOpenSale(0, customerName);
       for (const item of cart) {
         await adicionarItem(saleId, item.product_id, item.qty);
       }
