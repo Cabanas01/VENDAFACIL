@@ -1,10 +1,5 @@
 'use client';
 
-/**
- * @fileOverview Painel Bar (BDS) - SaaS Core v4.0.
- * Sincronizado com a View production_snapshot.
- */
-
 import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/components/auth-provider';
 import { supabase } from '@/lib/supabase/client';
@@ -56,7 +51,7 @@ export default function BarPage() {
   const handleConcluir = async (itemId: string) => {
     try {
       await marcarItemConcluido(itemId);
-      toast({ title: 'Drink Servido!' });
+      toast({ title: 'Drink Entregue!' });
       await fetchPedidos();
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Erro', description: err.message });
@@ -73,7 +68,7 @@ export default function BarPage() {
   return (
     <div className="space-y-10 animate-in fade-in duration-500">
       <div className="flex items-center justify-between">
-        <PageHeader title="Bar (BDS)" subtitle="Monitor de bebidas v4.0." />
+        <PageHeader title="Bar (BDS)" subtitle="Monitor de bebidas." />
         <Badge variant="outline" className="h-10 px-4 gap-2 font-black uppercase text-xs border-cyan-200 bg-cyan-50 text-cyan-600">
           <GlassWater className="h-4 w-4 text-cyan-600" /> {pedidos.length} Pedidos Ativos
         </Badge>
@@ -103,7 +98,7 @@ export default function BarPage() {
                 className="w-full h-16 font-black uppercase text-xs tracking-widest bg-cyan-600 hover:bg-cyan-700 shadow-xl shadow-cyan-600/20 transition-all active:scale-95" 
                 onClick={() => handleConcluir(p.item_id)}
               >
-                <CheckCircle2 className="mr-2 h-5 w-5" /> Marcar como Entregue
+                <CheckCircle2 className="mr-2 h-5 w-5" /> Concluir Preparo
               </Button>
             </CardContent>
           </Card>

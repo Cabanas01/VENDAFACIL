@@ -1,10 +1,5 @@
 'use client';
 
-/**
- * @fileOverview Ponto de Venda (PDV) - SaaS Core v4.0.
- * Fluxo sequencial seguro: Abre Mesa 0 -> Lança Itens via RPC -> Fecha Venda via RPC.
- */
-
 import { useState, useMemo } from 'react';
 import { 
   Search, 
@@ -97,7 +92,8 @@ export default function NewSalePage() {
         qty: 1,
         unit_price_cents: product.price_cents,
         subtotal_cents: product.price_cents,
-        stock_qty: product.stock_qty
+        stock_qty: product.stock_qty,
+        destino_preparo: product.production_target || 'nenhum'
       }]);
     }
   };
@@ -125,7 +121,6 @@ export default function NewSalePage() {
 
     setIsSubmitting(true);
     try {
-      // Chama a wrapper unificada que segue o fluxo RPC v4.0
       const result = await addSaleBalcao(cart, method);
       if (result) {
         toast({ title: 'Venda Concluída!' });
@@ -144,7 +139,7 @@ export default function NewSalePage() {
     <div className="flex flex-col h-[calc(100vh-8rem)] animate-in fade-in duration-500">
       <div className="mb-6 flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-headline font-black uppercase tracking-tighter">PONTO DE VENDA</h1>
+          <h1 className="text-3xl font-headline font-black uppercase tracking-tighter">BALCÃO / PDV</h1>
           <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">{store?.name || 'VendaFácil'}</p>
         </div>
       </div>
@@ -157,7 +152,7 @@ export default function NewSalePage() {
               <div className="relative">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                 <Input 
-                  placeholder="Pesquisar produto ou bipar código..." 
+                  placeholder="Pesquisar produto..." 
                   className="pl-12 h-14 text-lg bg-slate-50 border-none shadow-inner rounded-2xl"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -236,7 +231,7 @@ export default function NewSalePage() {
 
               <CardFooter className="flex-none flex flex-col p-10 space-y-8 bg-slate-50/50 border-t border-muted/50">
                 <div className="w-full flex justify-between items-end">
-                  <span className="text-muted-foreground text-[10px] font-black uppercase tracking-[0.2em] opacity-60">TOTAL DA VENDA</span>
+                  <span className="text-muted-foreground text-[10px] font-black uppercase tracking-[0.2em] opacity-60">VALOR TOTAL</span>
                   <span className="text-5xl font-black text-primary tracking-tighter">{formatCurrency(cartTotal)}</span>
                 </div>
                 <Button 
@@ -244,7 +239,7 @@ export default function NewSalePage() {
                   disabled={cart.length === 0 || isSubmitting}
                   onClick={() => setIsFinalizing(true)}
                 >
-                  {isSubmitting ? <Loader2 className="h-6 w-6 animate-spin" /> : 'CONFIRMAR VENDA'} <ArrowRight className="ml-3 h-5 w-5" />
+                  {isSubmitting ? <Loader2 className="h-6 w-6 animate-spin" /> : 'CONCLUIR VENDA'} <ArrowRight className="ml-3 h-5 w-5" />
                 </Button>
               </CardFooter>
             </TabsContent>
@@ -256,7 +251,7 @@ export default function NewSalePage() {
                     <div key={sale.id} className="p-5 bg-background rounded-[24px] border border-primary/5 space-y-4 shadow-sm group hover:border-primary/20 transition-all">
                       <div className="flex justify-between items-start">
                         <div>
-                          <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-60">Venda #{sale.id.substring(0,8)}</p>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-60">Transação #{sale.id.substring(0,8)}</p>
                           <p className="text-[9px] font-bold text-muted-foreground mt-1 uppercase">{new Date(sale.created_at).toLocaleTimeString()}</p>
                         </div>
                         <Button variant="ghost" size="icon" className="h-9 w-9 text-primary opacity-0 group-hover:opacity-100 transition-all bg-primary/5 rounded-full" onClick={() => printReceipt(sale, store!)}>
@@ -287,7 +282,7 @@ export default function NewSalePage() {
             </button>
             
             <div className="mb-12 pt-6 text-center">
-              <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900 font-headline">FORMA DE PAGAMENTO</h2>
+              <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900 font-headline">PAGAMENTO</h2>
             </div>
             
             <div className="grid grid-cols-1 gap-5">

@@ -1,12 +1,14 @@
 'use client';
 
-/**
- * @fileOverview AuthProvider - SaaS Core v4.0.
- * Sincronizado com o padrão RPC-First. Escrita direta em tabelas financeiras é PROIBIDA.
- */
-
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/client';
+import { 
+  getOpenSaleRpc, 
+  openSaleRpc, 
+  addItemToSaleRpc, 
+  closeSaleRpc, 
+  markItemDoneRpc 
+} from '@/lib/rpc';
 import type { 
   Store, 
   Product, 
@@ -37,8 +39,8 @@ type AuthContextType = {
   // RPC Wrappers
   getOpenSale: (tableNumber: number) => Promise<string | null>;
   openSale: (tableNumber: number, customerName: string) => Promise<string>;
-  adicionarItem: (saleId: string, productId: string, quantity: number) => Promise<void>;
-  fecharVenda: (saleId: string, paymentMethodId: string, cashRegisterId?: string) => Promise<void>;
+  adicionarItem: (saleId: string, productId: string, quantity: number, destino: string) => Promise<void>;
+  fecharVenda: (saleId: string, paymentMethodId: string) => Promise<void>;
   marcarItemConcluido: (itemId: string) => Promise<void>;
   addSaleBalcao: (cart: CartItem[], paymentMethod: string) => Promise<Sale | null>;
   
@@ -114,54 +116,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, [fetchAppData]);
 
-  // --- RPC Wrappers (Obrigatorios) ---
+  // --- RPC Wrappers ---
 
   const getOpenSale = async (tableNumber: number) => {
     if (!store?.id) return null;
-    const { data, error } = await supabase.rpc('rpc_get_open_sale', { 
-      p_store_id: store.id,
-      p_table_number: tableNumber 
-    });
-    if (error) throw error;
-    return (data as any)?.[0]?.sale_id || null; 
+    return getOpenSaleRpc(store.id, tableNumber);
   };
 
   const openSale = async (tableNumber: number, customerName: string) => {
     if (!store?.id) throw new Error('Loja não identificada.');
-    const { data, error } = await supabase.rpc('rpc_open_sale', {
-      p_store_id: store.id,
-      p_table_number: tableNumber,
-      p_customer_name: customerName
-    });
-    if (error) throw error;
-    return data as string;
+    return openSaleRpc(store.id, tableNumber, customerName);
   };
 
-  const adicionarItem = async (saleId: string, productId: string, quantity: number) => {
-    const { error } = await supabase.rpc('rpc_add_item_to_sale', {
-      p_sale_id: saleId,
-      p_product_id: productId,
-      p_quantity: Math.floor(quantity)
-    });
-    if (error) throw error;
+  const adicionarItem = async (saleId: string, productId: string, quantity: number, destino: string) => {
+    await addItemToSaleRpc(saleId, productId, quantity, destino);
     await refreshStatus();
   };
 
-  const fecharVenda = async (saleId: string, paymentMethodId: string, cashRegisterId?: string) => {
-    const { error } = await supabase.rpc('rpc_close_sale', {
-      p_sale_id: saleId,
-      p_payment_method_id: paymentMethodId,
-      p_cash_register_id: cashRegisterId ?? null
-    });
-    if (error) throw error;
+  const fecharVenda = async (saleId: string, paymentMethodId: string) => {
+    await closeSaleRpc(saleId, paymentMethodId);
     await refreshStatus();
   };
 
   const marcarItemConcluido = async (itemId: string) => {
-    const { error } = await supabase.rpc('rpc_mark_item_done', { 
-      p_item_id: itemId 
-    });
-    if (error) throw error;
+    await markItemDoneRpc(itemId);
     await refreshStatus();
   };
 
@@ -169,7 +147,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!store?.id) throw new Error('Loja não identificada.');
     
     try {
-      // Fluxo PDV Direto: Mesa 0
+      // Busca mesa 0 (balcão)
       let saleId = await getOpenSale(0);
 
       if (!saleId) {
@@ -177,7 +155,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       for (const item of cart) {
-        await adicionarItem(saleId, item.product_id, item.qty);
+        await adicionarItem(saleId, item.product_id, item.qty, item.destino_preparo);
       }
 
       await fecharVenda(saleId, paymentMethod);

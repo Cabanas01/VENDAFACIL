@@ -1,10 +1,5 @@
 'use client';
 
-/**
- * @fileOverview Painel Cozinha (KDS) - SaaS Core v4.0.
- * Sincronizado com a View production_snapshot.
- */
-
 import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/components/auth-provider';
 import { supabase } from '@/lib/supabase/client';
@@ -19,7 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import type { ProductionSnapshotView } from '@/lib/types';
 
 export default function CozinhaPage() {
-  const { store, marcarItemConcluido, refreshStatus } = useAuth();
+  const { store, marcarItemConcluido } = useAuth();
   const { toast } = useToast();
   const [pedidos, setPedidos] = useState<ProductionSnapshotView[]>([]);
   const [loading, setLoading] = useState(true);
@@ -27,7 +22,6 @@ export default function CozinhaPage() {
   const fetchPedidos = useCallback(async () => {
     if (!store?.id) return;
     try {
-      // Regra v4.0: Consumir exclusivamente a View production_snapshot
       const { data, error } = await supabase
         .from('production_snapshot')
         .select('*')
@@ -74,7 +68,7 @@ export default function CozinhaPage() {
   return (
     <div className="space-y-10 animate-in fade-in duration-500">
       <div className="flex items-center justify-between">
-        <PageHeader title="Cozinha (KDS)" subtitle="Produção em tempo real v4.0." />
+        <PageHeader title="Cozinha (KDS)" subtitle="Produção em tempo real." />
         <Badge variant="outline" className="h-10 px-4 gap-2 font-black uppercase text-xs border-primary/20 bg-primary/5 text-primary">
           <ChefHat className="h-4 w-4 text-primary" /> {pedidos.length} Pedidos Pendentes
         </Badge>

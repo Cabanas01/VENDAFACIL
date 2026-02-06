@@ -1,10 +1,5 @@
 'use client';
 
-/**
- * @fileOverview Gestão de Comanda Individual (PDV Operacional).
- * Sincronizado com o contrato RPC-First v4.0.
- */
-
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/components/auth-provider';
@@ -82,7 +77,8 @@ export default function ComandaDetailsPage() {
     setIsSubmitting(true);
     try {
       for (const item of localCart) {
-        await adicionarItem(id as string, item.product.id, item.qty);
+        // Envia apenas o necessário. O banco resolve o preço via RPC.
+        await adicionarItem(id as string, item.product.id, item.qty, item.product.production_target);
       }
       toast({ title: 'Pedido Lançado!' });
       setLocalCart([]);
@@ -138,7 +134,7 @@ export default function ComandaDetailsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <Card className="lg:col-span-2 border-none shadow-sm overflow-hidden bg-background">
           <CardHeader className="bg-muted/10 border-b flex flex-row items-center justify-between py-4">
-            <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Itens Consumidos</CardTitle>
+            <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Itens Lançados</CardTitle>
             <Button size="sm" className="font-black uppercase text-[10px] h-9" onClick={() => setIsAddingItems(true)}>+ Novo Pedido</Button>
           </CardHeader>
           <Table>
@@ -184,13 +180,12 @@ export default function ComandaDetailsPage() {
               onClick={() => setIsClosing(true)} 
               disabled={!sale || sale.total_cents <= 0}
             >
-              <CheckCircle2 className="mr-3 h-6 w-6" /> Fechar Venda
+              <CheckCircle2 className="mr-3 h-6 w-6" /> Fechar Atendimento
             </Button>
           </CardContent>
         </Card>
       </div>
 
-      {/* DIALOGS */}
       <Dialog open={isAddingItems} onOpenChange={setIsAddingItems}>
         <DialogContent className="sm:max-w-4xl p-0 overflow-hidden rounded-[32px] border-none shadow-2xl">
           <div className="flex h-[75vh]">
@@ -244,11 +239,11 @@ export default function ComandaDetailsPage() {
               </ScrollArea>
               <div className="p-6 border-t bg-white space-y-4">
                 <div className="flex justify-between items-center px-2">
-                  <span className="text-[9px] font-black uppercase text-muted-foreground">A Lançar</span>
+                  <span className="text-[9px] font-black uppercase text-muted-foreground">Total Local</span>
                   <span className="font-black text-primary">{formatCurrency(cartTotalDisplay)}</span>
                 </div>
                 <Button className="w-full h-16 font-black uppercase text-xs tracking-widest rounded-2xl shadow-lg shadow-primary/20" disabled={localCart.length === 0 || isSubmitting} onClick={handleAddItemsFinal}>
-                  {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Lançar Pedido'}
+                  {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Lançar no Pedido'}
                 </Button>
               </div>
             </div>
@@ -260,8 +255,8 @@ export default function ComandaDetailsPage() {
         <DialogContent className="sm:max-w-md p-0 overflow-hidden rounded-[40px] border-none shadow-2xl">
           <div className="p-10 bg-slate-900 text-white text-center relative">
             <button onClick={() => setIsClosing(false)} className="absolute right-6 top-6 h-10 w-10 rounded-full bg-white/10 flex items-center justify-center"><X className="h-5 w-5" /></button>
-            <DialogTitle className="text-2xl font-black uppercase tracking-tighter">Receber Pagamento</DialogTitle>
-            <DialogDescription className="text-white/40 uppercase font-bold text-[10px] mt-2 tracking-widest">Mesa {sale?.mesa} • {formatCurrency(sale?.total_cents || 0)}</DialogDescription>
+            <DialogTitle className="text-2xl font-black uppercase tracking-tighter">Finalizar Pagamento</DialogTitle>
+            <DialogDescription className="text-white/40 uppercase font-bold text-[10px] mt-2 tracking-widest">Mesa {sale?.mesa} • Total: {formatCurrency(sale?.total_cents || 0)}</DialogDescription>
           </div>
           <div className="p-10 space-y-4 bg-white">
             <Button variant="outline" className="w-full h-24 justify-start gap-8 border-none bg-slate-50 hover:bg-slate-100 rounded-[32px] px-10 transition-all" onClick={() => handleFinalize('cash')}>

@@ -39,14 +39,16 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
     setIsSubmitting(true);
 
     try {
-      // Fluxo Obrigatorio v4.0: Check -> Create
+      // Fluxo RPC Separado: Primeiro busca
       let saleId = await getOpenSale(values.mesa);
 
       if (!saleId) {
+        // Se não existe, cria
         saleId = await openSale(values.mesa, values.cliente_nome);
         toast({ title: 'Atendimento Iniciado!', description: `Mesa ${values.mesa} aberta com sucesso.` });
       } else {
-        toast({ title: 'Atendimento Localizado', description: `Redirecionando para a mesa ${values.mesa}.` });
+        // Se já existe, apenas redireciona
+        toast({ title: 'Atendimento Localizado', description: `Redirecionando para a mesa ${values.mesa} já aberta.` });
       }
 
       onOpenChange(false);
@@ -56,7 +58,7 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
     } catch (err: any) {
       toast({ 
         variant: 'destructive', 
-        title: 'Falha ao Abrir', 
+        title: 'Falha na Operação', 
         description: err.message || 'Erro ao processar abertura de mesa.' 
       });
     } finally {
@@ -84,7 +86,7 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
               name="mesa"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Número da Mesa *</FormLabel>
+                  <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Número da Mesa / Local *</FormLabel>
                   <FormControl>
                     <Input type="number" placeholder="Ex: 15" {...field} className="h-12 font-bold focus-visible:ring-primary/20" autoFocus />
                   </FormControl>
@@ -98,10 +100,10 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
               name="cliente_nome"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nome do Cliente *</FormLabel>
+                  <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Identificação do Cliente *</FormLabel>
                   <FormControl>
                     <div className="relative">
-                      <Input placeholder="Como devemos chamar o cliente?" {...field} className="h-12 pl-10 font-bold" />
+                      <Input placeholder="Nome do cliente" {...field} className="h-12 pl-10 font-bold" />
                       <UserPlus className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     </div>
                   </FormControl>

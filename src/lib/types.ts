@@ -68,25 +68,22 @@ export type Product = {
   prep_time_minutes: number;
 };
 
-// V4.0 State Machine: pending -> done -> cancelled
 export type OrderItemStatus = 'pending' | 'done' | 'cancelled';
 
 export type SaleItem = {
-  readonly id: string;
-  readonly store_id: string;
-  readonly product_id: string;
-  readonly sale_id: string;
-  readonly quantity: number;
-  readonly unit_price: number;
-  readonly line_total: number; // Coluna gerada no banco (readonly)
-  readonly subtotal_cents: number; // Alias legado para line_total
-  readonly status: OrderItemStatus;
-  readonly created_at: string;
-  readonly product_name_snapshot?: string;
-  readonly destino_preparo?: string;
+  id: string;
+  store_id: string;
+  product_id: string;
+  sale_id: string;
+  quantity: number;
+  unit_price: number;
+  line_total: number;
+  status: OrderItemStatus;
+  created_at: string;
+  product_name_snapshot?: string;
+  destino_preparo?: string;
 };
 
-// V4.0 State Machine: open -> paid -> cancelled
 export type SaleStatus = 'open' | 'paid' | 'cancelled';
 
 export type Sale = {
@@ -110,6 +107,7 @@ export type CartItem = {
   unit_price_cents: number;
   subtotal_cents: number;
   stock_qty: number;
+  destino_preparo: string;
 };
 
 export type CashRegister = {
@@ -133,7 +131,6 @@ export type Customer = {
     created_at: string;
 };
 
-// V4.0 View Mapping (production_snapshot)
 export type ProductionSnapshotView = {
   item_id: string;
   sale_id: string;
