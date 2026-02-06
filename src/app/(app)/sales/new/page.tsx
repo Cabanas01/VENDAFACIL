@@ -2,7 +2,7 @@
 
 /**
  * @fileOverview Ponto de Venda (PDV) - Design Premium Clean
- * Sincronizado para fidelidade visual absoluta à imagem e correção de erros.
+ * Sincronizado para fidelidade visual absoluta à imagem e correção de erros de precificação.
  */
 
 import { useState, useMemo } from 'react';
@@ -47,7 +47,6 @@ const formatCurrency = (value: number) =>
 export default function NewSalePage() {
   const { products, sales, addSale, store } = useAuth();
   const { toast } = useToast();
-  const router = useRouter();
   
   const [search, setSearch] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -151,7 +150,6 @@ export default function NewSalePage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 overflow-hidden">
         
-        {/* COLUNA ESQUERDA: CATÁLOGO */}
         <div className="lg:col-span-2 flex flex-col space-y-4 overflow-hidden">
           <Card className="flex-none bg-background border-none shadow-sm">
             <CardContent className="p-4">
@@ -179,7 +177,7 @@ export default function NewSalePage() {
                     <h3 className="font-black text-[11px] leading-tight line-clamp-2 uppercase tracking-tighter text-slate-900">{product.name}</h3>
                     <div className="flex items-end justify-between">
                       <span className="text-primary font-black text-xl tracking-tighter">{formatCurrency(product.price_cents)}</span>
-                      <span className="text-[10px] font-black text-slate-300 uppercase">{product.stock_qty} un</span>
+                      <span className="text-[10px] font-black text-slate-300 uppercase">{product.stock_qty} UN</span>
                     </div>
                   </CardContent>
                 </Card>
@@ -188,7 +186,6 @@ export default function NewSalePage() {
           </ScrollArea>
         </div>
 
-        {/* COLUNA DIREITA: CARRINHO */}
         <Card className="flex flex-col h-full border-primary/10 shadow-2xl overflow-hidden rounded-[40px] bg-background">
           <Tabs defaultValue="cart" className="flex flex-col h-full">
             <CardHeader className="p-0 bg-muted/20">
@@ -278,7 +275,6 @@ export default function NewSalePage() {
         </Card>
       </div>
 
-      {/* MODAL DE PAGAMENTO (DESIGN PREMIUM FIEL À IMAGEM) */}
       <Dialog open={isFinalizing} onOpenChange={setIsFinalizing}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl rounded-[40px]">
           <div className="p-10 bg-white relative">

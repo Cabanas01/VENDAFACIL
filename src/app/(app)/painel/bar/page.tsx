@@ -11,7 +11,7 @@ import { supabase } from '@/lib/supabase/client';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { GlassWater, Clock, History, Loader2, CheckCircle2 } from 'lucide-react';
+import { GlassWater, Clock, History, Loader2, CheckCircle2, MapPin } from 'lucide-react';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
@@ -27,7 +27,7 @@ export default function BarPage() {
   const fetchPedidos = useCallback(async () => {
     if (!store?.id) return;
     
-    // ✅ Regra: Buscar apenas itens pendentes
+    // Busca itens pendentes destinados ao bar
     const { data, error } = await supabase
       .from('v_painel_bar')
       .select('*')
@@ -51,7 +51,6 @@ export default function BarPage() {
   }, [fetchPedidos]);
 
   const handleConcluir = async (itemId: string) => {
-    if (!itemId) return;
     try {
       await marcarItemConcluido(itemId);
       toast({ title: 'Bebida Servida!' });

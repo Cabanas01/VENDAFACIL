@@ -64,7 +64,7 @@ export type Product = {
   active: boolean;
   barcode?: string;
   created_at: string;
-  production_target: 'cozinha' | 'bar' | 'nenhum';
+  production_target: 'kitchen' | 'bar' | 'none';
   prep_time_minutes: number;
 };
 
@@ -78,10 +78,11 @@ export type OrderItem = {
   readonly sale_id?: string | null;
   readonly quantity: number;
   readonly unit_price: number;
-  readonly line_total: number; // Coluna GENERATED ALWAYS no Postgres
+  readonly line_total: number;
   readonly status: OrderItemStatus;
   readonly created_at: string;
   readonly product_name_snapshot?: string;
+  readonly destino_preparo?: string;
 };
 
 export type Sale = {
