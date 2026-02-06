@@ -1,4 +1,4 @@
-# 🗺️ Mapeamento Funcional Frontend: VendaFácil Brasil (Versão 2.2)
+# 🗺️ Mapeamento Funcional Frontend: VendaFácil Brasil
 
 Este documento descreve a arquitetura de funções do frontend e seu contrato estrito com o backend definitivo. O princípio fundamental é **RPC-First**: o frontend é um consumidor de funções, não um manipulador de tabelas.
 
@@ -19,7 +19,7 @@ Localizado em: `src/components/auth-provider.tsx`. Este é o motor que proíbe q
 ### 🛒 Ponto de Venda (PDV)
 - **Localização**: `/sales/new`
 - **Regra**: Utiliza exclusivamente `price_cents`. Não tenta calcular subtotais para persistência.
-- **Ação**: Ao finalizar, delega ao banco a criação do registro de venda atômico.
+- **Ação**: Ao finalizar, delega ao banco a criação do registro de venda atômico via `fecharComanda`.
 
 ### 📋 Gestão de Comandas
 - **Localização**: `/comandas`
@@ -35,10 +35,6 @@ Localizado em: `src/components/auth-provider.tsx`. Este é o motor que proíbe q
 ### 📊 Dashboard e Relatórios
 - **Cálculo de CMV**: O frontend percorre as vendas, busca o `cost_cents` no catálogo e projeta a margem de lucro.
 - **Faturamento**: Baseia-se na coluna `total_cents` das vendas ou `line_total` dos itens (todas persistidas como inteiros).
-
-### 🤖 Inteligência Artificial
-- **Snapshot**: A IA recebe um objeto JSON contendo o estado atual do estoque e das vendas do período.
-- **Contexto**: Analisa tendências de faturamento e riscos de ruptura de estoque.
 
 ## 4. Regras de Ouro (Contrato Inviolável)
 

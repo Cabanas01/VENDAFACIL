@@ -22,18 +22,24 @@ import { startOfDay, endOfDay } from 'date-fns';
 import { printReceipt } from '@/lib/print-receipt';
 
 const formatCurrency = (value: number) =>
-  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value / 100);
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((value || 0) / 100);
 
 const paymentMethodIcons = {
   cash: <Coins className="h-4 w-4" />,
   pix: <PiggyBank className="h-4 w-4" />,
   card: <CreditCard className="h-4 w-4" />,
+  dinheiro: <Coins className="h-4 w-4" />,
+  credito: <CreditCard className="h-4 w-4" />,
+  debito: <CreditCard className="h-4 w-4" />,
 };
 
-const paymentMethodLabels = {
+const paymentMethodLabels: Record<string, string> = {
   cash: 'Dinheiro',
   pix: 'Pix',
   card: 'Cartão',
+  dinheiro: 'Dinheiro',
+  credito: 'Crédito',
+  debito: 'Débito'
 };
 
 export default function SalesPage() {
@@ -44,7 +50,8 @@ export default function SalesPage() {
   const [paymentFilter, setPaymentFilter] = useState('all');
 
   const filteredSales = useMemo(() => {
-    return sales
+    const safeSales = Array.isArray(sales) ? sales : [];
+    return safeSales
       .filter(sale => {
         if (!dateRange?.from) return true;
         const fromDate = startOfDay(dateRange.from);
@@ -58,159 +65,173 @@ export default function SalesPage() {
         const lowerCaseQuery = searchQuery.toLowerCase();
         return (
           sale.id.toLowerCase().includes(lowerCaseQuery) ||
-          sale.items.some(
+          (sale.items || []).some(
             item =>
-              item.product_name_snapshot.toLowerCase().includes(lowerCaseQuery) ||
-              (item.product_barcode_snapshot &&
-                item.product_barcode_snapshot.toLowerCase().includes(lowerCaseQuery))
+              item.product_name_snapshot?.toLowerCase().includes(lowerCaseQuery)
           )
         );
       });
   }, [sales, dateRange, searchQuery, paymentFilter]);
 
   const kpiData = useMemo(() => {
-    const totalCents = filteredSales.reduce((sum, sale) => sum + sale.total_cents, 0);
+    const totalCents = filteredSales.reduce((sum, sale) => sum + (sale.total_cents || 0), 0);
     const salesCount = filteredSales.length;
     const averageTicket = salesCount > 0 ? totalCents / salesCount : 0;
     return { totalCents, salesCount, averageTicket };
   }, [filteredSales]);
 
   return (
-    <>
-      <PageHeader title="Vendas" subtitle="Histórico e detalhes das transações.">
-        <Button onClick={() => router.push('/sales/new')}>
+    <div className="space-y-8 animate-in fade-in duration-500">
+      <PageHeader title="Histórico de Vendas" subtitle="Controle total das transações realizadas em sua unidade.">
+        <Button onClick={() => router.push('/sales/new')} className="font-black uppercase text-[10px] tracking-widest shadow-lg shadow-primary/20">
           <PlusCircle className="mr-2 h-4 w-4" /> Nova Venda
         </Button>
       </PageHeader>
 
-      <div className="space-y-6">
-        {/* KPI Cards */}
-        <div className="grid gap-6 md:grid-cols-3">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Faturamento do período</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(kpiData.totalCents)}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Vendas no período</CardTitle>
-              <ShoppingCart className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{kpiData.salesCount}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Ticket Médio</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(kpiData.averageTicket)}</div>
-            </CardContent>
-          </Card>
-        </div>
+      <div className="grid gap-6 md:grid-cols-3">
+        <Card className="border-none shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Faturamento Período</CardTitle>
+            <DollarSign className="h-4 w-4 text-primary" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-black tracking-tighter">{formatCurrency(kpiData.totalCents)}</div>
+          </CardContent>
+        </Card>
+        <Card className="border-none shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Vendas Totais</CardTitle>
+            <ShoppingCart className="h-4 w-4 text-primary" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-black tracking-tighter">{kpiData.salesCount}</div>
+          </CardContent>
+        </Card>
+        <Card className="border-none shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Ticket Médio</CardTitle>
+            <TrendingUp className="h-4 w-4 text-primary" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-black tracking-tighter">{formatCurrency(kpiData.averageTicket)}</div>
+          </CardContent>
+        </Card>
+      </div>
 
-        {/* Filters and Table */}
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex flex-wrap items-center gap-4 mb-4">
-              <DateRangePicker date={dateRange} onDateChange={setDateRange} className="w-full sm:w-auto" />
-              <div className="relative flex-1 min-w-[200px]">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar por ID, produto ou cód. de barras..."
-                  className="pl-10"
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                />
-              </div>
-              <Select value={paymentFilter} onValueChange={setPaymentFilter}>
-                <SelectTrigger className="w-full sm:w-[180px]"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos Pagamentos</SelectItem>
-                  <SelectItem value="cash">Dinheiro</SelectItem>
-                  <SelectItem value="pix">Pix</SelectItem>
-                  <SelectItem value="card">Cartão</SelectItem>
-                </SelectContent>
-              </Select>
+      <Card className="border-none shadow-sm overflow-hidden">
+        <CardContent className="p-0">
+          <div className="flex flex-wrap items-center gap-4 p-6 bg-muted/10 border-b">
+            <DateRangePicker date={dateRange} onDateChange={setDateRange} className="w-full sm:w-auto" />
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por ID ou produto..."
+                className="pl-10 h-11 bg-background"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+              />
             </div>
+            <Select value={paymentFilter} onValueChange={setPaymentFilter}>
+              <SelectTrigger className="w-full sm:w-[180px] h-11"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos Pagamentos</SelectItem>
+                <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                <SelectItem value="pix">PIX</SelectItem>
+                <SelectItem value="credito">Cartão Crédito</SelectItem>
+                <SelectItem value="debito">Cartão Débito</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
+          <div className="overflow-x-auto">
             <Table>
-              <TableHeader>
+              <TableHeader className="bg-muted/10">
                 <TableRow>
-                  <TableHead>Data/Hora</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                  <TableHead>Pagamento</TableHead>
-                  <TableHead className="text-center">Itens</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
+                  <TableHead className="px-6 font-black uppercase text-[10px]">Data/Hora</TableHead>
+                  <TableHead className="text-right font-black uppercase text-[10px]">Valor Total</TableHead>
+                  <TableHead className="px-6 font-black uppercase text-[10px]">Pagamento</TableHead>
+                  <TableHead className="text-center font-black uppercase text-[10px]">Itens</TableHead>
+                  <TableHead className="text-right px-6 font-black uppercase text-[10px]">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredSales.length > 0 ? (
                   filteredSales.map(sale => (
-                    <TableRow key={sale.id}>
-                      <TableCell className="font-medium">
+                    <TableRow key={sale.id} className="hover:bg-primary/5 transition-colors">
+                      <TableCell className="px-6 py-4 font-bold text-xs uppercase">
                         {format(parseISO(sale.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
                       </TableCell>
-                      <TableCell className="text-right">{formatCurrency(sale.total_cents)}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="flex items-center gap-2">
-                           {paymentMethodIcons[sale.payment_method]} {paymentMethodLabels[sale.payment_method]}
+                      <TableCell className="text-right font-black text-primary text-base">
+                        {formatCurrency(sale.total_cents)}
+                      </TableCell>
+                      <TableCell className="px-6">
+                        <Badge variant="outline" className="flex items-center gap-2 text-[10px] font-black uppercase h-6 bg-background border-primary/10">
+                           {paymentMethodIcons[sale.payment_method as keyof typeof paymentMethodIcons]} 
+                           {paymentMethodLabels[sale.payment_method as keyof typeof paymentMethodLabels] || sale.payment_method}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-center">{sale.items.reduce((acc, item) => acc + item.quantity, 0)}</TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-center font-black text-xs text-muted-foreground">
+                        {(sale.items || []).reduce((acc, item) => acc + item.quantity, 0)}
+                      </TableCell>
+                      <TableCell className="text-right px-6">
                         <Dialog>
                           <DialogTrigger asChild>
-                            <Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button>
+                            <Button variant="ghost" size="icon" className="hover:bg-primary hover:text-white transition-colors"><MoreHorizontal className="h-4 w-4" /></Button>
                           </DialogTrigger>
-                          <DialogContent className="sm:max-w-md">
-                            <DialogHeader>
-                              <DialogTitle>Detalhes da Venda</DialogTitle>
-                              <DialogDescription>
-                                ID da Venda: {sale.id}
-                              </DialogDescription>
-                            </DialogHeader>
-                            <div className="space-y-4 py-4">
-                               <div className="text-sm">
-                                  <p><strong>Data:</strong> {format(parseISO(sale.created_at), 'dd/MM/yyyy HH:mm:ss', { locale: ptBR })}</p>
-                                  <p><strong>Total:</strong> {formatCurrency(sale.total_cents)}</p>
-                                  <p><strong>Pagamento:</strong> {paymentMethodLabels[sale.payment_method]}</p>
-                               </div>
-                               <Table>
-                                 <TableHeader>
-                                   <TableRow>
-                                     <TableHead>Produto</TableHead>
-                                     <TableHead>Qtd.</TableHead>
-                                     <TableHead>Unit.</TableHead>
-                                     <TableHead className="text-right">Subtotal</TableHead>
-                                   </TableRow>
-                                 </TableHeader>
-                                 <TableBody>
-                                   {sale.items.map((item, index) => (
-                                     <TableRow key={index}>
-                                       <TableCell>{item.product_name_snapshot}</TableCell>
-                                       <TableCell>{item.quantity}</TableCell>
-                                       <TableCell>{formatCurrency(item.unit_price_cents)}</TableCell>
-                                       <TableCell className="text-right">{formatCurrency(item.subtotal_cents)}</TableCell>
-                                     </TableRow>
-                                   ))}
-                                 </TableBody>
-                               </Table>
+                          <DialogContent className="sm:max-w-lg p-0 overflow-hidden border-none shadow-2xl rounded-[32px]">
+                            <div className="bg-primary/5 p-8 border-b">
+                              <DialogHeader>
+                                <DialogTitle className="text-2xl font-black uppercase tracking-tighter">Detalhes da Transação</DialogTitle>
+                                <DialogDescription className="font-mono text-[9px] uppercase tracking-widest mt-1">ID: {sale.id}</DialogDescription>
+                              </DialogHeader>
                             </div>
-                            <DialogFooter>
+                            
+                            <div className="p-8 space-y-6">
+                               <div className="grid grid-cols-2 gap-4">
+                                  <div className="p-4 bg-muted/20 rounded-2xl border border-primary/5">
+                                    <p className="text-[9px] font-black uppercase text-muted-foreground tracking-widest mb-1">Data da Venda</p>
+                                    <p className="text-sm font-black uppercase">{format(parseISO(sale.created_at), 'dd/MM/yyyy HH:mm:ss', { locale: ptBR })}</p>
+                                  </div>
+                                  <div className="p-4 bg-muted/20 rounded-2xl border border-primary/5 text-right">
+                                    <p className="text-[9px] font-black uppercase text-muted-foreground tracking-widest mb-1">Método</p>
+                                    <p className="text-sm font-black uppercase text-primary">{paymentMethodLabels[sale.payment_method as keyof typeof paymentMethodLabels] || sale.payment_method}</p>
+                                  </div>
+                               </div>
+
+                               <div className="rounded-2xl border overflow-hidden">
+                                 <Table>
+                                   <TableHeader className="bg-muted/30">
+                                     <TableRow>
+                                       <TableHead className="text-[9px] font-black uppercase">Produto</TableHead>
+                                       <TableHead className="text-center text-[9px] font-black uppercase">Qtd</TableHead>
+                                       <TableHead className="text-right text-[9px] font-black uppercase">Total</TableHead>
+                                     </TableRow>
+                                   </TableHeader>
+                                   <TableBody>
+                                     {(sale.items || []).map((item, index) => (
+                                       <TableRow key={index} className="text-xs font-bold">
+                                         <TableCell className="uppercase">{item.product_name_snapshot}</TableCell>
+                                         <TableCell className="text-center">x{item.quantity}</TableCell>
+                                         <TableCell className="text-right font-black">{formatCurrency(item.line_total)}</TableCell>
+                                       </TableRow>
+                                     ))}
+                                   </TableBody>
+                                 </Table>
+                               </div>
+
+                               <div className="flex justify-between items-center px-4">
+                                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-60">Valor Consolidado</span>
+                                  <span className="text-3xl font-black text-primary tracking-tighter">{formatCurrency(sale.total_cents)}</span>
+                               </div>
+                            </div>
+
+                            <DialogFooter className="bg-muted/10 p-6 flex-row gap-3">
                                 <Button 
-                                    variant="outline" 
+                                    className="flex-1 h-12 font-black uppercase text-[10px] tracking-[0.2em] shadow-lg shadow-primary/20"
                                     onClick={() => store && printReceipt(sale, store)} 
                                     disabled={!store}
                                 >
-                                    <Printer className="mr-2 h-4 w-4" />
-                                    Imprimir Cupom
+                                    <Printer className="mr-2 h-4 w-4" /> Reemitir Cupom
                                 </Button>
                             </DialogFooter>
                           </DialogContent>
@@ -220,16 +241,16 @@ export default function SalesPage() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={5} className="h-24 text-center">
-                      Sem vendas no período.
+                    <TableCell colSpan={5} className="h-48 text-center text-muted-foreground font-black uppercase text-[10px] tracking-widest opacity-40">
+                      Nenhuma transação localizada no período.
                     </TableCell>
                   </TableRow>
                 )}
               </TableBody>
             </Table>
-          </CardContent>
-        </Card>
-      </div>
-    </>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
