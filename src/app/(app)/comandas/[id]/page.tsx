@@ -2,7 +2,7 @@
 
 /**
  * @fileOverview Gestão de Comanda Individual (PDV Operacional).
- * Ajustado para consumir price_cents e delegar unit_price à RPC.
+ * Totalmente sincronizado com o contrato RPC-First.
  */
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
@@ -82,7 +82,6 @@ export default function ComandaDetailsPage() {
     setIsSubmitting(true);
     try {
       for (const item of localCart) {
-        // Envia apenas os parâmetros necessários para a RPC
         await adicionarItem(id as string, item.product.id, item.qty);
       }
       toast({ title: 'Pedido Lançado!' });
@@ -161,7 +160,7 @@ export default function ComandaDetailsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {items.map((item, idx) => (
+              {items.map((item) => (
                 <TableRow key={item.id} className="hover:bg-muted/5 transition-colors">
                   <TableCell className="px-6">
                     <div className="flex flex-col">
@@ -201,7 +200,6 @@ export default function ComandaDetailsPage() {
         </Card>
       </div>
 
-      {/* MODAL ADICIONAR ITENS */}
       <Dialog open={isAddingItems} onOpenChange={setIsAddingItems}>
         <DialogContent className="sm:max-w-4xl p-0 overflow-hidden rounded-[32px] border-none shadow-2xl">
           <div className="flex h-[75vh]">
@@ -218,7 +216,7 @@ export default function ComandaDetailsPage() {
               <ScrollArea className="flex-1 p-6">
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   {products.filter(p => p.active && p.name.toLowerCase().includes(search.toLowerCase())).map(p => (
-                    <Card key={p.id} className="cursor-pointer hover:border-primary transition-all shadow-sm group active:scale-95 border-primary/5 bg-background relative overflow-hidden h-36" onClick={() => {
+                    <Card key={p.id} className="cursor-pointer hover:border-primary transition-all shadow-sm border-primary/5 bg-background relative overflow-hidden h-36" onClick={() => {
                       const existing = localCart.find(i => i.product.id === p.id);
                       if (existing) setLocalCart(localCart.map(i => i.product.id === p.id ? {...i, qty: i.qty + 1} : i));
                       else setLocalCart([...localCart, {product: p, qty: 1}]);
@@ -238,7 +236,7 @@ export default function ComandaDetailsPage() {
             <div className="w-80 flex flex-col bg-slate-50/50">
               <div className="p-6 border-b font-black uppercase text-[10px] tracking-widest text-muted-foreground">Pedido Atual</div>
               <ScrollArea className="flex-1 p-6">
-                {localCart.map((item, idx) => (
+                {localCart.map((item) => (
                   <div key={item.product.id} className="flex justify-between items-center mb-4 bg-white p-4 rounded-2xl shadow-sm">
                     <div className="flex flex-col">
                       <span className="text-[10px] font-black uppercase truncate max-w-[120px]">{item.product.name}</span>
@@ -267,7 +265,6 @@ export default function ComandaDetailsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* MODAL PAGAMENTO */}
       <Dialog open={isClosing} onOpenChange={setIsClosing}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden rounded-[40px] border-none shadow-2xl">
           <div className="p-10 bg-slate-900 text-white text-center relative">

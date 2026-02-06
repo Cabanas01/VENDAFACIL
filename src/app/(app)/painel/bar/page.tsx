@@ -2,7 +2,7 @@
 
 /**
  * @fileOverview Painel Bar (BDS).
- * Filtra por status = 'pending' e utiliza rpc_mark_order_item_done.
+ * Filtra estritamente por status = 'pending'.
  */
 
 import { useEffect, useState, useCallback } from 'react';

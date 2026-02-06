@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * @fileOverview AuthProvider - Sincronizado com o Backend Definitivo.
- * Frontend consome apenas RPCs para escrita, garantindo integridade de colunas geradas.
+ * @fileOverview AuthProvider - Motor de Dados RPC-First.
+ * Centraliza toda a lógica de escrita via PostgreSQL Functions para garantir integridade.
  */
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -158,7 +158,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const addSale = async (cart: CartItem[], paymentMethod: string) => {
     if (!store?.id) throw new Error('Loja não identificada.');
     try {
-      // No PDV direto, abrimos uma comanda "0" (ou balcão) e fechamos imediatamente via RPCs transacionais
+      // Abre comanda "0" (balcão) e fecha imediatamente via RPCs transacionais
       const comandaId = await abrirComanda('0', 'Consumidor Final');
       for (const item of cart) {
         await adicionarItem(comandaId, item.product_id, item.qty);
