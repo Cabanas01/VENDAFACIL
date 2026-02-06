@@ -2,7 +2,7 @@
 
 /**
  * @fileOverview AuthProvider - Backend v4.0 Sync.
- * Central de orquestração RPC-First.
+ * Orquestrador central baseado no padrão RPC-First do PostgreSQL.
  */
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -122,8 +122,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { error } = await supabase.rpc('rpc_add_item_to_sale', {
       p_sale_id: saleId,
       p_product_id: productId,
-      p_quantity: Math.floor(quantity),
-      p_unit_price: null 
+      p_quantity: Math.floor(quantity)
     });
 
     if (error) throw error;
@@ -151,25 +150,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!store?.id) throw new Error('Loja não identificada.');
     
     try {
-      const { data: saleId, error: openErr } = await supabase.from('sales').insert({
-        store_id: store.id,
-        status: 'open',
-        mesa: '0',
-        cliente_nome: 'Consumidor Final'
-      }).select('id').single();
+      // No PDV de balcão, mesa é sempre "0"
+      const { data: saleId, error: openErr } = await supabase.rpc('rpc_get_open_sale', { 
+        p_mesa: '0',
+        p_cliente_nome: 'Consumidor Final'
+      });
 
       if (openErr) throw openErr;
 
       for (const item of cart) {
-        await adicionarItem(saleId.id, item.product_id, item.qty);
+        await adicionarItem(saleId, item.product_id, item.qty);
       }
 
-      await fecharVenda(saleId.id, paymentMethod);
+      await fecharVenda(saleId, paymentMethod);
       
       const { data: lastSale } = await supabase
         .from('sales')
         .select('*, items:sale_items(*)')
-        .eq('id', saleId.id)
+        .eq('id', saleId)
         .single();
         
       return lastSale as Sale;
