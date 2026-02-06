@@ -32,7 +32,7 @@ type AuthContextType = {
   refreshStatus: () => Promise<void>;
   createStore: (storeData: any) => Promise<void>;
   
-  // Mutações v5.1 (COMANDA-FIRST)
+  // Contrato v5.2 (Imutável)
   getOrCreateComanda: (tableNumber: number, customerName: string | null) => Promise<string>;
   adicionarItem: (comandaId: string, productId: string, quantity: number) => Promise<void>;
   finalizarAtendimento: (comandaId: string, paymentMethod: 'cash' | 'pix' | 'card') => Promise<void>;

@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * @fileOverview Frente de Caixa (PDV Balcão).
+ * Sincronizado com v5.2: PDV = Comanda Mesa 0.
+ */
+
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
@@ -83,15 +88,15 @@ export default function NewSalePDVPage() {
     
     setIsSubmitting(true);
     try {
-      // 1. Cria comanda Balcão (Table 0) via v5.1
+      // 1. Inicia Comanda Balcão (Mesa 0)
       const comandaId = await getOrCreateComanda(0, customerName || 'Consumidor Balcão');
       
-      // 2. Lança Itens individualmente via RPC
+      // 2. Lança Itens via RPC (Integridade de Preço no Banco)
       for (const item of cart) {
         await adicionarItem(comandaId, item.product_id, item.qty);
       }
       
-      // 3. Fecha Atendimento via RPC
+      // 3. Fecha Atendimento Atômico
       await finalizarAtendimento(comandaId, method);
       
       toast({ title: 'Venda Concluída!', description: `Total: ${formatCurrency(cartTotalDisplay)}` });
@@ -99,7 +104,7 @@ export default function NewSalePDVPage() {
       setIsFinalizing(false);
       router.push('/sales');
     } catch (error: any) {
-      toast({ variant: 'destructive', title: 'Erro no PDV', description: error.message });
+      toast({ variant: 'destructive', title: 'Falha no PDV', description: error.message });
     } finally {
       setIsSubmitting(false);
     }
@@ -109,8 +114,8 @@ export default function NewSalePDVPage() {
     <div className="flex flex-col h-[calc(100vh-8rem)] animate-in fade-in duration-500">
       <div className="mb-6 flex justify-between items-end">
         <div>
-          <h1 className="text-3xl font-headline font-black uppercase tracking-tighter">BALCÃO / PDV</h1>
-          <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Venda Direta Automática</p>
+          <h1 className="text-3xl font-headline font-black uppercase tracking-tighter">FRENTE DE CAIXA</h1>
+          <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Atendimento Balcão Ativo</p>
         </div>
       </div>
 
@@ -121,7 +126,7 @@ export default function NewSalePDVPage() {
               <div className="relative">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                 <Input 
-                  placeholder="Pesquisar produto..." 
+                  placeholder="Bipar ou digitar produto..." 
                   className="pl-12 h-14 text-lg bg-slate-50 border-none shadow-inner rounded-2xl"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -154,7 +159,7 @@ export default function NewSalePDVPage() {
         <Card className="flex flex-col h-full border-primary/10 shadow-2xl overflow-hidden rounded-[40px] bg-background">
           <CardHeader className="p-6 bg-muted/20 border-b border-muted">
             <CardTitle className="flex items-center gap-3 text-sm font-black uppercase tracking-widest">
-              <ShoppingCart className="h-5 w-5 text-primary" /> Carrinho Atual
+              <ShoppingCart className="h-5 w-5 text-primary" /> Carrinho PDV
             </CardTitle>
           </CardHeader>
 
@@ -191,7 +196,7 @@ export default function NewSalePDVPage() {
               {cart.length === 0 && (
                 <div className="py-40 text-center space-y-6 opacity-20">
                   <ShoppingCart className="h-16 w-16 mx-auto" />
-                  <p className="text-[11px] font-black uppercase tracking-[0.25em]">Carrinho Vazio</p>
+                  <p className="text-[11px] font-black uppercase tracking-[0.25em]">Aguardando Itens</p>
                 </div>
               )}
             </div>
@@ -199,7 +204,7 @@ export default function NewSalePDVPage() {
 
           <CardFooter className="flex-none flex flex-col p-10 space-y-8 bg-slate-50/50 border-t border-muted/50">
             <div className="w-full flex justify-between items-end">
-              <span className="text-muted-foreground text-[10px] font-black uppercase tracking-[0.2em] opacity-60">TOTAL ESTIMADO</span>
+              <span className="text-muted-foreground text-[10px] font-black uppercase tracking-[0.2em] opacity-60">VALOR TOTAL</span>
               <span className="text-5xl font-black text-primary tracking-tighter">{formatCurrency(cartTotalDisplay)}</span>
             </div>
             <Button 
@@ -207,7 +212,7 @@ export default function NewSalePDVPage() {
               disabled={cart.length === 0 || isSubmitting}
               onClick={() => setIsFinalizing(true)}
             >
-              CONCLUIR VENDA <ArrowRight className="ml-3 h-5 w-5" />
+              PAGAR AGORA <ArrowRight className="ml-3 h-5 w-5" />
             </Button>
           </CardFooter>
         </Card>
@@ -221,17 +226,17 @@ export default function NewSalePDVPage() {
             </button>
             
             <div className="mb-10 pt-6 text-center space-y-2">
-              <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900 font-headline">IDENTIFICAÇÃO E PAGAMENTO</h2>
-              <DialogDescription className="text-xs uppercase font-bold tracking-widest text-muted-foreground">Valor Final: {formatCurrency(cartTotalDisplay)}</DialogDescription>
+              <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900 font-headline">FECHAMENTO BALCÃO</h2>
+              <DialogDescription className="text-xs uppercase font-bold tracking-widest text-muted-foreground">Total à Receber: {formatCurrency(cartTotalDisplay)}</DialogDescription>
             </div>
 
             <div className="space-y-8">
               <div className="space-y-3">
-                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground pl-2">Nome do Cliente</label>
+                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground pl-2">Identificação do Cliente</label>
                 <div className="relative">
                   <UserCircle className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground opacity-50" />
                   <input 
-                    placeholder="Consumidor Balcão..." 
+                    placeholder="Consumidor Final..." 
                     className="w-full h-14 pl-12 rounded-2xl border-none bg-slate-100/50 font-bold text-lg"
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
@@ -261,7 +266,7 @@ export default function NewSalePDVPage() {
           {isSubmitting && (
             <div className="absolute inset-0 bg-background/80 flex flex-col items-center justify-center z-50 backdrop-blur-sm">
               <Loader2 className="h-14 w-14 animate-spin text-primary mb-6" />
-              <p className="text-[11px] font-black uppercase tracking-[0.3em] text-primary">SINCRO DE DADOS...</p>
+              <p className="text-[11px] font-black uppercase tracking-[0.3em] text-primary">SINCRO OPERACIONAL...</p>
             </div>
           )}
         </DialogContent>

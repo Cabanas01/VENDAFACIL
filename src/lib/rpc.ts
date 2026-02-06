@@ -3,9 +3,10 @@
 import { supabase } from './supabase/client';
 
 /**
- * @fileOverview Adapter Robusto COMANDA-FIRST (Backend v5.1)
+ * @fileOverview Adapter Robusto COMANDA-FIRST (Backend v5.2)
  * 
- * Implementa as 4 únicas mutações permitidas, garantindo integridade de tipos.
+ * Implementa as únicas 4 mutações permitidas, garantindo atomicidade e
+ * conformidade com o PostgreSQL.
  */
 
 /**
@@ -34,6 +35,7 @@ export async function getOrCreateOpenComandaRpc(
 /**
  * 2. Adiciona Item à Comanda.
  * p_quantity é enviado como Number (JS) para ser interpretado como numeric no Postgres.
+ * Preço e line_total são resolvidos exclusivamente no banco.
  */
 export async function addItemToComandaRpc(
   comandaId: string, 
@@ -43,7 +45,7 @@ export async function addItemToComandaRpc(
   const { error } = await supabase.rpc('rpc_add_item_to_comanda', {
     p_comanda_id: comandaId,
     p_product_id: productId,
-    p_quantity: Number(quantity) // Garante tipo numeric
+    p_quantity: Number(quantity) // Força tipo numeric no Postgres
   });
 
   if (error) {
@@ -54,6 +56,7 @@ export async function addItemToComandaRpc(
 
 /**
  * 3. Fecha Comanda e Gera Venda (Atômico).
+ * O frontend apenas informa o método. O banco resolve o faturamento total.
  */
 export async function closeComandaToSaleRpc(
   comandaId: string, 
