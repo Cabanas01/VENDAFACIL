@@ -3,7 +3,7 @@
 /**
  * @fileOverview AuthProvider - Motor de Dados Sincronizado v3.1.
  * Centraliza toda a lógica de escrita via RPCs Oficiais (v3.1).
- * O banco de dados PostgreSQL é a autoridade máxima sobre faturamento e estados.
+ * Segue a regra de ouro: Frontend não calcula totais financeiros.
  */
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -70,7 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const [storeRes, prodRes, cmdRes, custRes, accessRes, salesRes, cashRes] = await Promise.all([
           supabase.from('stores').select('*').eq('id', storeId).single(),
           supabase.from('products').select('*').eq('store_id', storeId).order('name'),
-          supabase.from('comandas').select('*').eq('store_id', storeId).eq('status', 'aberta').order('numero', { ascending: true }),
+          supabase.from('v_comandas_totais').select('*').eq('store_id', storeId).eq('status', 'aberta').order('numero', { ascending: true }),
           supabase.from('customers').select('*').eq('store_id', storeId).order('name'),
           supabase.rpc('get_store_access_status', { p_store_id: storeId }),
           supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeId).order('created_at', { ascending: false }).limit(50),
@@ -111,7 +111,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const abrirComanda = async (mesa: string, cliente: string) => {
     if (!store?.id) throw new Error('Contexto de loja ausente.');
-    // Conforme mapeamento v3.1: Chamada da RPC abrir_comanda
     const { data, error } = await supabase.rpc('abrir_comanda', {
       p_mesa: mesa.toString(),
       p_cliente_nome: cliente || 'Consumidor Final'
@@ -119,11 +118,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (error) throw error;
     await refreshStatus();
-    return data; // Retorna o ID da comanda aberta
+    return data;
   };
 
   const adicionarItem = async (comandaId: string, productId: string, quantity: number) => {
-    // Conforme mapeamento v3.1: adicionar_item_comanda resolve preço e destino
+    // Banco resolve preço unitário e line_total automaticamente v3.1
     const { error } = await supabase.rpc('adicionar_item_comanda', {
       p_comanda_id: comandaId,
       p_product_id: productId,
@@ -135,7 +134,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const fecharComanda = async (comandaId: string, paymentMethodId: string, cashRegisterId?: string) => {
-    // Conforme mapeamento v3.1: fechar_comanda é atômico
+    // Operação atômica no PostgreSQL v3.1
     const { error } = await supabase.rpc('fechar_comanda', {
       p_comanda_id: comandaId,
       p_payment_method_id: paymentMethodId,
@@ -147,7 +146,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const marcarItemConcluido = async (itemId: string) => {
-    // Conforme mapeamento v3.1: marcar_item_concluido atualiza o status para done
     const { error } = await supabase.rpc('marcar_item_concluido', { 
       p_item_id: itemId 
     });
@@ -158,7 +156,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const addSale = async (cart: CartItem[], paymentMethod: string) => {
     if (!store?.id) throw new Error('Loja não identificada.');
     try {
-      // Fluxo atômico sequencial via cliente (Mesa 0 = PDV)
+      // Fluxo atômico para PDV Direto (Mesa 0)
       const comandaId = await abrirComanda('0', 'Consumidor Final');
       for (const item of cart) {
         await adicionarItem(comandaId, item.product_id, item.qty);

@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * @fileOverview Painel Cozinha (KDS) - Sincronizado com Mapeamento RPC v3.1.
- * Filtra apenas itens com status 'pending' e destino 'cozinha' na tabela sale_items.
+ * @fileOverview Painel Cozinha (KDS) - Sincronizado com Mapeamento v3.1.
+ * Opera exclusivamente sobre a tabela física sale_items com status 'pending'.
  */
 
 import { useEffect, useState, useCallback } from 'react';
@@ -26,7 +26,7 @@ export default function CozinhaPage() {
   const fetchPedidos = useCallback(async () => {
     if (!store?.id) return;
     
-    // Busca direta na tabela física sale_items conforme v3.1
+    // Sincronizado com v3.1: sale_items é a fonte de verdade
     const { data, error } = await supabase
       .from('sale_items')
       .select('*, comandas(numero, mesa)')
@@ -43,7 +43,6 @@ export default function CozinhaPage() {
 
   useEffect(() => {
     fetchPedidos();
-    // Monitoramento Realtime para sale_items
     const channel = supabase
       .channel('kds_sync')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sale_items' }, () => fetchPedidos())

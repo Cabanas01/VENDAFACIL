@@ -68,7 +68,7 @@ export type Product = {
   prep_time_minutes: number;
 };
 
-export type SaleItemStatus = 'pending' | 'done' | 'canceled';
+export type OrderItemStatus = 'pending' | 'done' | 'canceled';
 
 export type SaleItem = {
   readonly id: string;
@@ -78,8 +78,8 @@ export type SaleItem = {
   readonly sale_id?: string | null;
   readonly quantity: number;
   readonly unit_price: number;
-  readonly subtotal_cents: number;
-  readonly status: SaleItemStatus;
+  readonly subtotal_cents: number; // Mapeado da coluna física/gerada
+  readonly status: OrderItemStatus;
   readonly created_at: string;
   readonly product_name_snapshot?: string;
   readonly destino_preparo?: string;
@@ -144,7 +144,7 @@ export type PainelProducaoView = {
   mesa: string | null;
   produto: string;
   qty: number;
-  status: SaleItemStatus;
+  status: OrderItemStatus;
   created_at: string;
   store_id: string;
 };
