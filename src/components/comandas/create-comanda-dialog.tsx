@@ -14,8 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 
 const comandaSchema = z.object({
-  mesa: z.coerce.number().int().min(1, 'Número da mesa inválido'),
-  cliente_nome: z.string().optional(),
+  mesa: z.coerce.number().int().min(1, 'Informe o número da mesa'),
 });
 
 type ComandaFormValues = z.infer<typeof comandaSchema>;
@@ -25,29 +24,25 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
 }) {
-  const { getOpenSale, refreshStatus } = useAuth();
+  const { getOpenSale } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<ComandaFormValues>({
     resolver: zodResolver(comandaSchema),
-    defaultValues: { mesa: 0, cliente_nome: '' }
+    defaultValues: { mesa: 0 }
   });
 
   const onSubmit = async (values: ComandaFormValues) => {
     setIsSubmitting(true);
-
     try {
-      /**
-       * O fluxo agora é simplificado: rpc_get_open_sale faz o find_or_create.
-       * O frontend não envia o customer_name para a RPC pois a assinatura do backend não possui este parâmetro.
-       */
+      // Chama RPC para obter ou criar atendimento ativo
       const saleId = await getOpenSale(values.mesa);
 
       toast({ 
         title: 'Atendimento Iniciado!', 
-        description: `Mesa ${values.mesa} pronta para lançamento.` 
+        description: `Mesa ${values.mesa} aberta com sucesso.` 
       });
 
       onOpenChange(false);
@@ -58,8 +53,8 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
     } catch (err: any) {
       toast({ 
         variant: 'destructive', 
-        title: 'Falha na Operação', 
-        description: err.message || 'Erro ao processar abertura de mesa.' 
+        title: 'Erro ao abrir mesa', 
+        description: err.message 
       });
     } finally {
       setIsSubmitting(false);
@@ -74,8 +69,8 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
             <ClipboardList className="h-6 w-6 text-primary" />
           </div>
           <DialogHeader>
-            <DialogTitle className="text-2xl font-black font-headline uppercase tracking-tighter text-center">Abrir Comanda</DialogTitle>
-            <DialogDescription className="text-center font-medium text-sm">Informe o número da mesa para iniciar.</DialogDescription>
+            <DialogTitle className="text-2xl font-black font-headline uppercase tracking-tighter">Abrir Comanda</DialogTitle>
+            <DialogDescription className="text-sm">Inicie um novo atendimento por mesa ou local.</DialogDescription>
           </DialogHeader>
         </div>
 
@@ -86,9 +81,15 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
               name="mesa"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Número da Mesa / Local *</FormLabel>
+                  <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Número da Mesa *</FormLabel>
                   <FormControl>
-                    <Input type="number" placeholder="Ex: 15" {...field} className="h-12 font-bold focus-visible:ring-primary/20" autoFocus />
+                    <Input 
+                      type="number" 
+                      placeholder="Ex: 12" 
+                      {...field} 
+                      className="h-12 font-bold focus-visible:ring-primary/20" 
+                      autoFocus 
+                    />
                   </FormControl>
                   <FormMessage className="font-bold" />
                 </FormItem>
@@ -98,7 +99,7 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
             <DialogFooter className="pt-4 gap-3 sm:flex-row-reverse">
               <Button type="submit" disabled={isSubmitting} className="flex-1 h-12 font-black uppercase text-[11px] tracking-widest shadow-lg shadow-primary/20">
                 {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                Acessar Mesa
+                Acessar Atendimento
               </Button>
               <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} className="flex-1 h-12 font-black uppercase text-[11px] tracking-widest">
                 Cancelar

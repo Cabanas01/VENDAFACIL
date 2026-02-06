@@ -3,15 +3,14 @@
 import { supabase } from './supabase/client';
 
 /**
- * Utilitários centrais para chamadas RPC do VendaFácil Brasil.
- * Sincronizado com o Backend v4.0 (Check Constraints e Parametrizagem p_).
+ * @fileOverview Serviços de Integração RPC (Backend v4.0)
+ * Concentra as chamadas transacionais para garantir sincronia com o PostgreSQL.
  */
 
 /**
  * Busca uma venda aberta para a mesa ou cria uma nova se não existir.
- * @param p_store_id ID da Loja
- * @param p_table_number Número da Mesa (0 para balcão)
- * @returns UUID da Venda (sale_id)
+ * @param p_store_id ID da Loja (UUID)
+ * @param p_table_number Número da Mesa (Integer)
  */
 export async function getOpenSaleRpc(storeId: string, tableNumber: number): Promise<string> {
   const { data, error } = await supabase.rpc('rpc_get_open_sale', {
@@ -21,14 +20,14 @@ export async function getOpenSaleRpc(storeId: string, tableNumber: number): Prom
 
   if (error) {
     console.error('[RPC_GET_OPEN_SALE_ERROR]', error);
-    throw new Error(error.message || 'Falha ao consultar ou iniciar atendimento.');
+    throw new Error(error.message || 'Falha ao processar abertura de mesa.');
   }
 
   return data as string;
 }
 
 /**
- * Adiciona um item à venda. O banco resolve preço e subtotal.
+ * Adiciona um item à venda. O banco resolve preço, subtotal e status.
  */
 export async function addItemToSaleRpc(saleId: string, productId: string, quantity: number): Promise<void> {
   const { error } = await supabase.rpc('rpc_add_item_to_sale', {
@@ -44,7 +43,7 @@ export async function addItemToSaleRpc(saleId: string, productId: string, quanti
 }
 
 /**
- * Fecha a venda calculando totais e atualizando status para 'closed'.
+ * Fecha a venda calculando totais, atualizando caixa e status.
  */
 export async function closeSaleRpc(saleId: string, paymentMethod: string): Promise<void> {
   const { error } = await supabase.rpc('rpc_close_sale', {

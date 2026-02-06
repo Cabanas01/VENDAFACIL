@@ -35,7 +35,7 @@ type AuthContextType = {
   refreshStatus: () => Promise<void>;
   createStore: (storeData: any) => Promise<void>;
   
-  // RPC Wrappers (Frontend delegation to Backend)
+  // RPC Wrappers - Delegação total ao Banco
   getOpenSale: (tableNumber: number) => Promise<string>;
   adicionarItem: (saleId: string, productId: string, quantity: number) => Promise<void>;
   fecharVenda: (saleId: string, paymentMethodId: string) => Promise<void>;
@@ -60,6 +60,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [storeStatus, setStoreStatus] = useState<'loading_auth' | 'loading_status' | 'ready' | 'no_store' | 'error'>('loading_auth');
 
   const fetchAppData = useCallback(async (userId: string) => {
+    setStoreStatus('loading_status');
     try {
       const { data: ownerStore } = await supabase.from('stores').select('id').eq('user_id', userId).maybeSingle();
       let storeId = ownerStore?.id;
@@ -78,7 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           supabase.rpc('get_store_access_status', { p_store_id: storeId }),
           supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeId).eq('status', 'closed').order('created_at', { ascending: false }).limit(50),
           supabase.from('cash_registers').select('*').eq('store_id', storeId).order('opened_at', { ascending: false }),
-          supabase.from('production_snapshot').select('*').eq('store_id', storeId)
+          supabase.from('production_snapshot').select('*').eq('store_id', storeId).eq('status', 'pending')
         ]);
 
         setStore(storeRes.data || null);
@@ -114,8 +115,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, [fetchAppData]);
 
-  // --- RPC Wrappers (Fixed for Backend Alignment) ---
-
   const getOpenSale = async (tableNumber: number) => {
     if (!store?.id) throw new Error('Unidade não identificada.');
     return getOpenSaleRpc(store.id, tableNumber);
@@ -123,8 +122,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const adicionarItem = async (saleId: string, productId: string, quantity: number) => {
     await addItemToSaleRpc(saleId, productId, quantity);
-    // Não damos refresh aqui para evitar overhead em pedidos grandes, 
-    // a tela individual gerencia seu estado.
   };
 
   const fecharVenda = async (saleId: string, paymentMethodId: string) => {
@@ -139,26 +136,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const addSaleBalcao = async (cart: CartItem[], paymentMethod: string) => {
     if (!store?.id) throw new Error('Unidade não identificada.');
-    
     try {
-      // 1. Inicia/Recupera Atendimento Balcão (Mesa 0)
       const saleId = await getOpenSale(0);
-
-      // 2. Lança os itens sequencialmente via RPC (Banco calcula preços)
       for (const item of cart) {
         await adicionarItem(saleId, item.product_id, item.qty);
       }
-
-      // 3. Fecha a venda via RPC (Banco calcula total final)
       await fecharVenda(saleId, paymentMethod);
-      
-      // 4. Recupera objeto final para impressão
-      const { data: finalSale } = await supabase
-        .from('sales')
-        .select('*, items:sale_items(*)')
-        .eq('id', saleId)
-        .single();
-        
+      const { data: finalSale } = await supabase.from('sales').select('*, items:sale_items(*)').eq('id', saleId).single();
       return finalSale as Sale;
     } catch (err: any) {
       console.error('[PDV_BALCAO_FATAL]', err);
