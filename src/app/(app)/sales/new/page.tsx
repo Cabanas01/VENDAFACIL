@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo } from 'react';
@@ -94,21 +93,25 @@ export default function NewSalePage() {
     
     setIsSubmitting(true);
     try {
-      // Chama o wrapper do context que orquestra a RPC
-      const result = await addSaleBalcao(cart, method, customerName.trim() || 'Consumidor');
+      // A função addSaleBalcao no context já usa o novo Adapter com Fallback
+      const result = await addSaleBalcao(cart, method, customerName.trim() || 'Consumidor Balcão');
       
       if (result) {
-        toast({ title: 'Venda Finalizada!', description: `Total: ${formatCurrency(result.total_cents)}` });
-        printReceipt(result, store);
+        toast({ title: 'Venda Finalizada!', description: `Saldo: ${formatCurrency(result.total_cents)}` });
+        if (store) printReceipt(result, store);
         setCart([]);
         setCustomerName('');
         setIsFinalizing(false);
       }
     } catch (error: any) {
+      const isSchemaError = error.message.includes('schema cache') || error.message.includes('not found');
+      
       toast({ 
         variant: 'destructive', 
-        title: 'Erro ao processar venda', 
-        description: error.message || 'Falha técnica no servidor.' 
+        title: isSchemaError ? 'Erro de Sincronização' : 'Erro ao processar venda', 
+        description: isSchemaError 
+          ? 'O sistema está atualizando as regras de preço. Tente novamente em 30 segundos.' 
+          : error.message 
       });
     } finally {
       setIsSubmitting(false);
@@ -219,7 +222,7 @@ export default function NewSalePage() {
               disabled={cart.length === 0 || isSubmitting}
               onClick={() => setIsFinalizing(true)}
             >
-              FINALIZAR VENDA <ArrowRight className="ml-3 h-5 w-5" />
+              FECHAR PEDIDO <ArrowRight className="ml-3 h-5 w-5" />
             </Button>
           </CardFooter>
         </Card>
@@ -245,9 +248,9 @@ export default function NewSalePage() {
                 <label className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground pl-2">Identificação do Cliente</label>
                 <div className="relative">
                   <UserCircle className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground opacity-50" />
-                  <Input 
+                  <input 
                     placeholder="Nome do consumidor (opcional)..." 
-                    className="h-14 pl-12 rounded-2xl border-none bg-slate-100/50 font-bold text-lg focus-visible:ring-primary/20"
+                    className="w-full h-14 pl-12 rounded-2xl border-none bg-slate-100/50 font-bold text-lg focus:ring-primary/20 outline-none"
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
                   />

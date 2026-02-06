@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState } from 'react';
@@ -16,7 +15,7 @@ import { useRouter } from 'next/navigation';
 
 const comandaSchema = z.object({
   mesa: z.coerce.number().int().min(1, 'Informe o número da mesa'),
-  cliente: z.string().min(1, 'Identifique o cliente'),
+  cliente: z.string().optional().transform(val => val && val.trim() !== '' ? val.trim() : null),
 });
 
 type ComandaFormValues = z.infer<typeof comandaSchema>;
@@ -42,12 +41,12 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
   const onSubmit = async (values: ComandaFormValues) => {
     setIsSubmitting(true);
     try {
-      // Chama a RPC sincronizada com 3 parâmetros
-      const saleId = await getOpenSale(values.mesa, values.cliente);
+      // Chama a wrapper que possui fallback para Schema Cache
+      const saleId = await getOpenSale(values.mesa, values.cliente || null);
 
       toast({ 
         title: 'Atendimento Iniciado', 
-        description: `Mesa ${values.mesa} para ${values.cliente} pronta.` 
+        description: `Mesa ${values.mesa} pronta para lançamento.` 
       });
 
       onOpenChange(false);
@@ -56,10 +55,14 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
       if (onSuccess) await onSuccess();
       router.push(`/comandas/${saleId}`);
     } catch (err: any) {
+      const isSchemaError = err.message.includes('schema cache') || err.message.includes('not found');
+      
       toast({ 
         variant: 'destructive', 
-        title: 'Erro ao abrir atendimento', 
-        description: err.message || 'Falha técnica no servidor.' 
+        title: isSchemaError ? 'Sincronização em andamento' : 'Erro ao abrir mesa', 
+        description: isSchemaError 
+          ? 'O servidor está atualizando as regras de negócio. Aguarde 30s e tente novamente.' 
+          : err.message 
       });
     } finally {
       setIsSubmitting(false);
@@ -74,8 +77,8 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
             <ClipboardList className="h-6 w-6 text-primary" />
           </div>
           <DialogHeader>
-            <DialogTitle className="text-2xl font-black font-headline uppercase tracking-tighter">Novo Atendimento</DialogTitle>
-            <DialogDescription className="text-sm font-medium">Inicie ou recupere uma mesa aberta.</DialogDescription>
+            <DialogTitle className="text-2xl font-black font-headline uppercase tracking-tighter">Iniciar Atendimento</DialogTitle>
+            <DialogDescription className="text-sm font-medium">Informe a mesa para controle de consumo.</DialogDescription>
           </DialogHeader>
         </div>
 
@@ -87,11 +90,11 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
                 name="mesa"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Número da Mesa *</FormLabel>
+                    <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Número da Mesa / Local *</FormLabel>
                     <FormControl>
                       <Input 
                         type="number" 
-                        placeholder="Ex: 15" 
+                        placeholder="Ex: 12" 
                         {...field} 
                         className="h-12 font-bold focus-visible:ring-primary/20" 
                         autoFocus 
@@ -107,13 +110,14 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
                 name="cliente"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Identificação do Cliente *</FormLabel>
+                    <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nome do Cliente (Opcional)</FormLabel>
                     <FormControl>
                       <div className="relative">
                         <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground opacity-50" />
                         <Input 
-                          placeholder="Ex: Maria Clara" 
+                          placeholder="Ex: Cliente Mesa 12" 
                           {...field} 
+                          value={field.value || ''}
                           className="h-12 pl-10 font-bold focus-visible:ring-primary/20" 
                         />
                       </div>
@@ -127,7 +131,7 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
             <DialogFooter className="pt-4 gap-3 sm:flex-row-reverse">
               <Button type="submit" disabled={isSubmitting} className="flex-1 h-12 font-black uppercase text-[11px] tracking-widest shadow-lg shadow-primary/20">
                 {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                Confirmar Atendimento
+                Confirmar Abertura
               </Button>
               <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} className="flex-1 h-12 font-black uppercase text-[11px] tracking-widest" disabled={isSubmitting}>
                 Cancelar
