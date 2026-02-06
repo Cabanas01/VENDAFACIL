@@ -1,8 +1,7 @@
 'use client';
 
 /**
- * @fileOverview Painel Bar (BDS).
- * Filtra estritamente por status = 'pending'.
+ * @fileOverview Painel Bar (BDS) - Sincronizado com Mapeamento RPC.
  */
 
 import { useEffect, useState, useCallback } from 'react';
@@ -27,11 +26,11 @@ export default function BarPage() {
   const fetchPedidos = useCallback(async () => {
     if (!store?.id) return;
     
-    const { data, error } = await supabase
-      .from('v_painel_bar')
-      .select('*')
-      .eq('store_id', store.id)
-      .eq('status', 'pending');
+    // Utilizando a RPC oficial get_kitchen_queue para o destino 'bar'
+    const { data, error } = await supabase.rpc('get_kitchen_queue', {
+      p_store_id: store.id,
+      p_destino: 'bar'
+    });
 
     if (!error) {
       setPedidos(data || []);

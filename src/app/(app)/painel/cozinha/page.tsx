@@ -1,8 +1,7 @@
 'use client';
 
 /**
- * @fileOverview Painel Cozinha (KDS).
- * Filtra estritamente por status = 'pending'.
+ * @fileOverview Painel Cozinha (KDS) - Sincronizado com Mapeamento RPC.
  */
 
 import { useEffect, useState, useCallback } from 'react';
@@ -27,12 +26,11 @@ export default function CozinhaPage() {
   const fetchPedidos = useCallback(async () => {
     if (!store?.id) return;
     
-    // REGRA DE OURO: Buscar apenas 'pending'.
-    const { data, error } = await supabase
-      .from('v_painel_cozinha')
-      .select('*')
-      .eq('store_id', store.id)
-      .eq('status', 'pending');
+    // Utilizando a RPC oficial get_kitchen_queue
+    const { data, error } = await supabase.rpc('get_kitchen_queue', {
+      p_store_id: store.id,
+      p_destino: 'cozinha'
+    });
 
     if (!error) {
       setPedidos(data || []);

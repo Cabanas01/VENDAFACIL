@@ -1,8 +1,7 @@
 'use server';
 
 /**
- * @fileOverview Server Action para Processamento de Vendas (PDV Direto).
- * Sincronizado para usar estritamente as RPCs transacionais, respeitando colunas geradas.
+ * @fileOverview Server Action para Processamento de Vendas - Sincronizado com Mapeamento Oficial.
  */
 
 import { getSupabaseAdmin } from '@/lib/supabase/admin';
@@ -16,37 +15,29 @@ export async function processSaleAction(
   const supabaseAdmin = getSupabaseAdmin();
 
   try {
-    // 1. Criar comanda temporária para a venda (Número '0' = PDV Direto)
-    const { data: comanda, error: cmdErr } = await supabaseAdmin
-      .from('comandas')
-      .insert({ 
-        store_id: storeId, 
-        numero: '0', 
-        mesa: 'PDV', 
-        cliente_nome: 'Consumidor Final',
-        status: 'aberta' 
-      })
-      .select('id')
-      .single();
+    // 1. Abrir comanda temporária via RPC oficial
+    const { data: comandaId, error: cmdErr } = await supabaseAdmin.rpc('abrir_comanda', {
+      p_store_id: storeId,
+      p_mesa: '0',
+      p_cliente_nome: 'Consumidor Final'
+    });
 
     if (cmdErr) throw cmdErr;
 
-    // 2. Lançar itens via RPC (O banco resolve unit_price e line_total)
+    // 2. Lançar itens via RPC oficial (adicionar_item_comanda)
     for (const item of cart) {
-      const { error: itemErr } = await supabaseAdmin.rpc('rpc_add_item_to_comanda', {
-        p_comanda_id: comanda.id,
+      const { error: itemErr } = await supabaseAdmin.rpc('adicionar_item_comanda', {
+        p_comanda_id: comandaId,
         p_product_id: item.product_id,
-        p_quantity: parseFloat(item.qty.toString()),
-        p_unit_price: null
+        p_quantity: Math.floor(item.qty)
       });
       if (itemErr) throw itemErr;
     }
 
-    // 3. Fechar via RPC (Garante cálculo atômico no PostgreSQL)
-    const { data: closeData, error: closeErr } = await supabaseAdmin.rpc('rpc_close_comanda_to_sale', {
-      p_comanda_id: comanda.id,
-      p_payment_method_id: paymentMethod,
-      p_cash_register_id: null
+    // 3. Fechar via RPC oficial (fechar_comanda)
+    const { data: closeData, error: closeErr } = await supabaseAdmin.rpc('fechar_comanda', {
+      p_comanda_id: comandaId,
+      p_forma_pagamento: paymentMethod
     });
 
     if (closeErr) throw closeErr;

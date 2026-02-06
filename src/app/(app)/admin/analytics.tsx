@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * @fileOverview Painel de Analytics (Admin) - Versão SaaS Supervisor
+ * @fileOverview Painel de Analytics (Admin) - Sincronizado com Mapeamento RPC.
  * 
  * Implementa monitoramento em tempo real e funil de conversão.
  */
@@ -9,17 +9,13 @@
 import { useEffect, useState, useMemo } from 'react';
 import type { DateRange } from 'react-day-picker';
 import { addDays, startOfToday, format, parseISO, startOfDay, endOfDay, subMinutes } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 import {
   Activity,
   Eye,
   Users,
-  MousePointerClick,
-  FileText,
   TrendingUp,
   Search,
   Globe,
-  Filter,
   RefreshCw
 } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
@@ -27,7 +23,6 @@ import { useSearchParams } from 'next/navigation';
 import { DateRangePicker } from '@/components/date-range-picker';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabase/client';
@@ -54,6 +49,17 @@ export default function AdminAnalytics() {
       const from = startOfDay(dateRange?.from || addDays(startOfToday(), -6)).toISOString();
       const to = endOfDay(dateRange?.to || dateRange?.from || new Date()).toISOString();
 
+      // Utilizando rpc get_analytics_summary conforme mapeamento
+      const { data, error } = await supabase.rpc('get_analytics_summary', {
+        p_store_id: storeIdFilter || null,
+        p_start: from,
+        p_end: to
+      });
+
+      if (error) throw error;
+      
+      // get_analytics_summary retorna dados agregados, mas o frontend aqui espera lista de eventos
+      // Para manter a funcionalidade de listagem e agregação, buscamos os eventos brutos
       let query = supabase
         .from('analytics_events')
         .select('*')
@@ -65,18 +71,18 @@ export default function AdminAnalytics() {
         query = query.eq('store_id', storeIdFilter);
       }
 
-      const { data, error } = await query;
-      if (error) throw error;
-      setEvents(data || []);
+      const { data: eventsData, error: eventsErr } = await query;
+      if (eventsErr) throw eventsErr;
+      setEvents(eventsData || []);
 
-      // Realtime: Ativos nos últimos 30 min
-      const thirtyMinsAgo = subMinutes(new Date(), 30).toISOString();
-      const { count } = await supabase
-        .from('analytics_events')
-        .select('session_id', { count: 'exact', head: true })
-        .gte('created_at', thirtyMinsAgo);
+      // Realtime: Ativos nos últimos 30 min via RPC oficial
+      const { data: activeCount, error: activeErr } = await supabase.rpc('get_active_users_last_minutes', {
+        p_minutes: 30
+      });
       
-      setRealtimeCount(count || 0);
+      if (!activeErr) {
+        setRealtimeCount(activeCount || 0);
+      }
 
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Erro Analytics', description: err.message });
@@ -91,7 +97,6 @@ export default function AdminAnalytics() {
     return () => clearInterval(interval);
   }, [storeIdFilter, dateRange]);
 
-  // Agregações no Frontend
   const metrics = useMemo(() => {
     const safe = Array.isArray(events) ? events : [];
     
@@ -99,19 +104,16 @@ export default function AdminAnalytics() {
       acc.total += 1;
       if (ev.event_name === 'page_view') acc.views += 1;
       
-      // Funil
       if (ev.event_name === 'login_view') acc.funnel.login_v += 1;
       if (ev.event_name === 'login_success') acc.funnel.login_s += 1;
       if (ev.event_name === 'signup_view') acc.funnel.signup_v += 1;
       if (ev.event_name === 'signup_success') acc.funnel.signup_s += 1;
 
-      // Origens
       const source = ev.metadata?.source || 'direto';
       const medium = ev.metadata?.medium || 'nenhum';
       const key = `${source} / ${medium}`;
       acc.sources[key] = (acc.sources[key] || 0) + 1;
 
-      // Por dia
       const day = format(new Date(ev.created_at), 'yyyy-MM-dd');
       acc.byDay[day] = (acc.byDay[day] || 0) + 1;
 

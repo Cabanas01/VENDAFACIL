@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * @fileOverview AuthProvider - Motor de Dados RPC-First.
- * Centraliza toda a lógica de escrita via PostgreSQL Functions para garantir integridade.
+ * @fileOverview AuthProvider - Motor de Dados Sincronizado (Versão Mapeada).
+ * Centraliza toda a lógica de escrita via PostgreSQL Functions mapeadas oficialmente.
  */
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -35,7 +35,7 @@ type AuthContextType = {
   createStore: (storeData: any) => Promise<void>;
   
   abrirComanda: (mesa: string, cliente: string) => Promise<string>;
-  adicionarItem: (comandaId: string, productId: string, quantity: number, priceOverrideCents?: number) => Promise<void>;
+  adicionarItem: (comandaId: string, productId: string, quantity: number) => Promise<void>;
   fecharComanda: (comandaId: string, paymentMethodId: string) => Promise<void>;
   marcarItemConcluido: (itemId: string) => Promise<void>;
   addSale: (cart: CartItem[], paymentMethod: string) => Promise<Sale | null>;
@@ -114,29 +114,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const identificacao = mesa?.toString().trim();
     if (!identificacao) throw new Error('Identificação da comanda é obrigatória');
 
-    const { data, error } = await supabase
-      .from('comandas')
-      .insert({ 
-        store_id: store.id, 
-        numero: identificacao, 
-        mesa: identificacao, 
-        cliente_nome: cliente || 'Consumidor', 
-        status: 'aberta' 
-      })
-      .select('id').single();
+    const { data, error } = await supabase.rpc('abrir_comanda', {
+      p_store_id: store.id,
+      p_mesa: identificacao,
+      p_cliente_nome: cliente || 'Consumidor'
+    });
 
     if (error) throw error;
     await refreshStatus();
-    return data.id;
+    return data; // O mapeamento indica que retorna uuid
   };
 
-  const adicionarItem = async (comandaId: string, productId: string, quantity: number, priceOverrideCents?: number) => {
-    // REGRA DE OURO: SEMPRE usa RPC com 4 parâmetros. Unit price pode ser null.
-    const { error } = await supabase.rpc('rpc_add_item_to_comanda', {
+  const adicionarItem = async (comandaId: string, productId: string, quantity: number) => {
+    const { error } = await supabase.rpc('adicionar_item_comanda', {
       p_comanda_id: comandaId,
       p_product_id: productId,
-      p_quantity: parseFloat(quantity.toString()),
-      p_unit_price: priceOverrideCents ? parseFloat(priceOverrideCents.toString()) : null
+      p_quantity: Math.floor(quantity)
     });
 
     if (error) throw error;
@@ -144,13 +137,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const fecharComanda = async (comandaId: string, paymentMethodId: string) => {
-    const cashRegister = cashRegisters.find(cr => !cr.closed_at);
-    
-    // REGRA DE OURO: SEMPRE usa RPC para fechar. O banco soma o line_total.
-    const { error } = await supabase.rpc('rpc_close_comanda_to_sale', {
+    const { error } = await supabase.rpc('fechar_comanda', {
       p_comanda_id: comandaId,
-      p_payment_method_id: paymentMethodId,
-      p_cash_register_id: cashRegister?.id || null
+      p_forma_pagamento: paymentMethodId
     });
 
     if (error) throw error;
@@ -160,7 +149,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const addSale = async (cart: CartItem[], paymentMethod: string) => {
     if (!store?.id) throw new Error('Loja não identificada.');
     try {
-      // REGRA DE OURO: PDV Balcão encadeia RPCs. Comanda '0' é temporária.
+      // Fluxo mapeado: Abrir Comanda '0' (PDV) -> Adicionar Itens -> Fechar
       const comandaId = await abrirComanda('0', 'Consumidor Final');
       
       for (const item of cart) {
@@ -183,8 +172,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const marcarItemConcluido = async (itemId: string) => {
-    // REGRA DE OURO: KDS/BDS usa RPC para mudar status.
-    const { error } = await supabase.rpc('rpc_mark_order_item_done', { 
+    const { error } = await supabase.rpc('finalizar_preparo_item', { 
       p_item_id: itemId 
     });
     if (error) throw error;
@@ -192,7 +180,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const createStore = async (storeData: any) => {
-    const { error } = await supabase.rpc('create_new_store', { ...storeData });
+    const { error } = await supabase.rpc('create_new_store', { 
+      p_name: storeData.name,
+      p_legal_name: storeData.legal_name,
+      p_cnpj: storeData.cnpj,
+      p_address: storeData.address,
+      p_phone: storeData.phone,
+      p_timezone: storeData.timezone
+    });
     if (error) throw error;
     window.location.href = '/dashboard';
   };
