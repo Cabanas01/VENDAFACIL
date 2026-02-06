@@ -1,3 +1,4 @@
+
 'use client';
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -49,22 +50,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fetchAppData = useCallback(async (userId: string) => {
     setStoreStatus('loading_status');
     try {
-      const [storeRes, prodRes, cmdRes, custRes, accessRes, cashRes] = await Promise.all([
-        supabase.from('stores').select('*').single(),
-        supabase.from('products').select('*').order('name'),
-        supabase.from('comandas').select('*, items:comanda_items(*)').eq('status', 'aberta').order('created_at', { ascending: true }),
-        supabase.from('customers').select('*').order('name'),
-        supabase.rpc('get_store_access_status'),
-        supabase.from('cash_registers').select('*').order('opened_at', { ascending: false })
-      ]);
+      // 1. Resolver StoreId (Owner ou Member)
+      const { data: ownerStore } = await supabase.from('stores').select('id').eq('user_id', userId).maybeSingle();
+      let storeId = ownerStore?.id;
 
-      setStore(storeRes.data || null);
-      setProducts(prodRes.data || []);
-      setComandas(cmdRes.data || []);
-      setCustomers(custRes.data || []);
-      setCashRegistersState(cashRes.data || []);
-      setAccessStatus(accessRes.data?.[0] || null);
-      setStoreStatus('ready');
+      if (!storeId) {
+        const { data: memberEntry } = await supabase.from('store_members').select('store_id').eq('user_id', userId).maybeSingle();
+        storeId = memberEntry?.store_id;
+      }
+
+      if (storeId) {
+        const [storeRes, prodRes, cmdRes, custRes, accessRes, cashRes] = await Promise.all([
+          supabase.from('stores').select('*').eq('id', storeId).single(),
+          supabase.from('products').select('*').eq('store_id', storeId).order('name'),
+          supabase.from('comandas').select('*, items:comanda_items(*)').eq('store_id', storeId).eq('status', 'aberta').order('created_at', { ascending: true }),
+          supabase.from('customers').select('*').eq('store_id', storeId).order('name'),
+          supabase.rpc('get_store_access_status', { p_store_id: storeId }),
+          supabase.from('cash_registers').select('*').eq('store_id', storeId).order('opened_at', { ascending: false })
+        ]);
+
+        setStore(storeRes.data || null);
+        setProducts(prodRes.data || []);
+        setComandas(cmdRes.data || []);
+        setCustomers(custRes.data || []);
+        setCashRegistersState(cashRes.data || []);
+        setAccessStatus(accessRes.data?.[0] || null);
+        setStoreStatus('ready');
+      } else {
+        setStoreStatus('no_store');
+      }
     } catch (err) {
       console.error('[AUTH_SYNC_FATAL]', err);
       setStoreStatus('error');
@@ -88,13 +102,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const getOrCreateComanda = async (tableNumber: number, customerName: string | null) => {
     if (!store?.id) throw new Error('Unidade não identificada.');
-    // Alinhado ao contrato: p_numero e p_store_id (conforme hint PGRST202)
     return ComandaService.getOrCreateComanda(store.id, tableNumber);
   };
 
   const adicionarItem = async (comandaId: string, productId: string, quantity: number) => {
     await ComandaService.adicionarItem(comandaId, productId, Number(quantity));
-    await refreshStatus();
   };
 
   const finalizarAtendimento = async (comandaId: string, paymentMethod: 'dinheiro' | 'pix' | 'cartao') => {
