@@ -3,9 +3,9 @@
 import { supabase } from './supabase/client';
 
 /**
- * @fileOverview Adapter Robusto COMANDA-FIRST (Backend v5.0)
+ * @fileOverview Adapter Robusto COMANDA-FIRST (Backend v5.1)
  * 
- * Centraliza as únicas 4 mutações financeiras permitidas no sistema.
+ * Implementa as 4 únicas mutações permitidas, garantindo integridade de tipos.
  */
 
 /**
@@ -33,7 +33,7 @@ export async function getOrCreateOpenComandaRpc(
 
 /**
  * 2. Adiciona Item à Comanda.
- * p_quantity é forçado para numeric (Number) para evitar erro de overload.
+ * p_quantity é enviado como Number (JS) para ser interpretado como numeric no Postgres.
  */
 export async function addItemToComandaRpc(
   comandaId: string, 
@@ -43,7 +43,7 @@ export async function addItemToComandaRpc(
   const { error } = await supabase.rpc('rpc_add_item_to_comanda', {
     p_comanda_id: comandaId,
     p_product_id: productId,
-    p_quantity: Number(quantity) // Força Numeric
+    p_quantity: Number(quantity) // Garante tipo numeric
   });
 
   if (error) {

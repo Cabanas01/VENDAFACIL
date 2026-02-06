@@ -25,8 +25,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import type { ComandaItem, Comanda, Product } from '@/lib/types';
-import { printReceipt } from '@/lib/print-receipt';
+import type { Comanda, Product } from '@/lib/types';
 
 const formatCurrency = (val: number) => 
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((val || 0) / 100);
@@ -53,7 +52,7 @@ export default function ComandaDetailsPage() {
     try {
       const { data, error } = await supabase
         .from('comandas')
-        .select('*, items:order_items(*)')
+        .select('*, items:comanda_items(*)')
         .eq('id', id)
         .single();
 
@@ -92,9 +91,6 @@ export default function ComandaDetailsPage() {
     try {
       await finalizarAtendimento(id as string, method);
       toast({ title: 'Pagamento Confirmado!' });
-      
-      // Print mockup (sale data would be fetched from backend if needed)
-      // For now, we go back to list
       router.push('/comandas');
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Erro ao fechar conta', description: err.message });
@@ -106,7 +102,7 @@ export default function ComandaDetailsPage() {
   if (loading) return (
     <div className="h-screen flex flex-col items-center justify-center gap-4 text-muted-foreground">
       <Loader2 className="animate-spin text-primary" />
-      <p className="text-[10px] font-black uppercase tracking-widest animate-pulse">Sincronizando Comanda...</p>
+      <p className="text-[10px] font-black uppercase tracking-widest animate-pulse">Sincronizando Atendimento...</p>
     </div>
   );
 
@@ -234,7 +230,7 @@ export default function ComandaDetailsPage() {
                       <span className="text-[10px] font-black uppercase truncate max-w-[120px]">{item.product.name}</span>
                       <span className="text-[9px] font-bold text-primary">x{item.qty}</span>
                     </div>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-red-400 rounded-full" onClick={() => setLocalCart(localCart.filter(i => i.product.id !== item.product.id))}>
+                    <Button variant="ghost" size="icon" className="text-red-400 rounded-full" onClick={() => setLocalCart(localCart.filter(i => i.product.id !== item.product.id))}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>

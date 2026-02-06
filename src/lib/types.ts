@@ -67,7 +67,7 @@ export type Product = {
   production_target: 'cozinha' | 'bar' | 'nenhum';
 };
 
-export type OrderItemStatus = 'pending' | 'done' | 'cancelled';
+export type OrderItemStatus = 'pending' | 'done' | 'canceled';
 
 export type ComandaItem = {
   id: string;
@@ -82,7 +82,7 @@ export type ComandaItem = {
   created_at: string;
 };
 
-export type ComandaStatus = 'aberta' | 'fechada' | 'cancelada';
+export type ComandaStatus = 'aberta' | 'fechada';
 
 export type Comanda = {
   id: string;

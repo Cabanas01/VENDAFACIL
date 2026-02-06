@@ -16,8 +16,7 @@ import type {
   StoreAccessStatus,
   CartItem,
   Customer,
-  User,
-  ProductionSnapshotView
+  User
 } from '@/lib/types';
 
 type AuthContextType = {
@@ -33,7 +32,7 @@ type AuthContextType = {
   refreshStatus: () => Promise<void>;
   createStore: (storeData: any) => Promise<void>;
   
-  // Mutações Seguras (COMANDA-FIRST)
+  // Mutações v5.1 (COMANDA-FIRST)
   getOrCreateComanda: (tableNumber: number, customerName: string | null) => Promise<string>;
   adicionarItem: (comandaId: string, productId: string, quantity: number) => Promise<void>;
   finalizarAtendimento: (comandaId: string, paymentMethod: 'cash' | 'pix' | 'card') => Promise<void>;
@@ -69,7 +68,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const [storeRes, prodRes, cmdRes, custRes, accessRes, cashRes] = await Promise.all([
           supabase.from('stores').select('*').eq('id', storeId).single(),
           supabase.from('products').select('*').eq('store_id', storeId).order('name'),
-          supabase.from('comandas').select('*, items:order_items(*)').eq('store_id', storeId).eq('status', 'aberta').order('created_at', { ascending: true }),
+          supabase.from('comandas').select('*, items:comanda_items(*)').eq('store_id', storeId).eq('status', 'aberta').order('created_at', { ascending: true }),
           supabase.from('customers').select('*').eq('store_id', storeId).order('name'),
           supabase.rpc('get_store_access_status', { p_store_id: storeId }),
           supabase.from('cash_registers').select('*').eq('store_id', storeId).order('opened_at', { ascending: false })
@@ -106,7 +105,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, [fetchAppData]);
 
-  // Implementações COMANDA-FIRST
   const getOrCreateComanda = async (tableNumber: number, customerName: string | null) => {
     if (!store?.id) throw new Error('Unidade não identificada.');
     return getOrCreateOpenComandaRpc(store.id, tableNumber, customerName);

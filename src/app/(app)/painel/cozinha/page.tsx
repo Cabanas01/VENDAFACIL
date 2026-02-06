@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * @fileOverview Painel Cozinha (KDS).
+ * Consome a View production_snapshot baseada em comanda_items.
+ */
+
 import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/components/auth-provider';
 import { supabase } from '@/lib/supabase/client';
@@ -22,7 +27,6 @@ export default function CozinhaPage() {
   const fetchPedidos = useCallback(async () => {
     if (!store?.id) return;
     try {
-      // Consome a view de produção configurada para order_items
       const { data, error } = await supabase
         .from('production_snapshot')
         .select('*')
@@ -43,7 +47,7 @@ export default function CozinhaPage() {
     fetchPedidos();
     const channel = supabase
       .channel('kds_realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => fetchPedidos())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'comanda_items' }, () => fetchPedidos())
       .subscribe();
     
     return () => { supabase.removeChannel(channel); };
