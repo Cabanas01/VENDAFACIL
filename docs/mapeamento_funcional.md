@@ -2,7 +2,7 @@
 
 Este documento define o contrato definitivo, imutável e auditável de integração entre o Frontend (Next.js) e o Backend (PostgreSQL/Supabase).
 
-O sistema segue rigorosamente o padrão **COMANDA-FIRST**.
+O sistema segue rigorosamente o padrão COMANDA-FIRST.
 O PostgreSQL é a autoridade máxima do domínio.
 
 ## 1. Arquitetura de Fluxo
@@ -29,7 +29,7 @@ O PostgreSQL é a autoridade máxima do domínio.
 
 ## 3. Regras de Integridade Financeira
 
-- **Moeda**: Todos os valores persistidos usam centavos (integer). Exibição: `value / 100`.
+- **Moeda**: Todos os valores vêm do banco em centavos. Exibição: `value / 100`.
 - **line_total**: Campo `GENERATED ALWAYS` no banco. O frontend **NUNCA** calcula.
 - **Quantidade (numeric)**: Sempre enviar `Number(quantity)`. ❌ Nunca string. ❌ Nunca integer forçado.
 
@@ -42,7 +42,7 @@ O frontend apenas informa o `payment_method`. O backend é responsável por:
 4. Criar a venda (`sales`)
 5. Atualizar o caixa
 
-📌 O frontend **NUNCA** calcula troco, altera status financeiro, cria `sale_id` ou decide se a venda foi concluída.
+📌 O frontend **NUNCA** calcula troco, altera status financeiro, cria `sale_id` ou decide se a venda foi concluída no client.
 
 ## 5. Monitoramento de Produção (KDS / BDS)
 

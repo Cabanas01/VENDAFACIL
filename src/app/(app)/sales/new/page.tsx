@@ -2,7 +2,7 @@
 
 /**
  * @fileOverview Frente de Caixa (PDV Balcão).
- * Sincronizado com v5.3: PDV = Comanda Mesa 0.
+ * Unificado com a arquitetura COMANDA-FIRST v5.3: PDV = Mesa 0.
  */
 
 import { useState, useMemo } from 'react';
@@ -14,7 +14,6 @@ import {
   Minus, 
   Trash2, 
   CreditCard, 
-  Coins, 
   Loader2, 
   ArrowRight,
   X,
@@ -88,10 +87,10 @@ export default function NewSalePDVPage() {
     
     setIsSubmitting(true);
     try {
-      // 1. Inicia Comanda Balcão (Mesa 0)
+      // 1. Ativa Comanda Balcão (Mesa 0)
       const comandaId = await getOrCreateComanda(0, customerName || 'Consumidor Balcão');
       
-      // 2. Lança Itens via RPC (Integridade de Preço no Banco)
+      // 2. Lança Itens via RPC (Tipagem Numeric Garantida)
       for (const item of cart) {
         await adicionarItem(comandaId, item.product_id, item.qty);
       }
@@ -99,7 +98,7 @@ export default function NewSalePDVPage() {
       // 3. Fecha Atendimento Atômico
       await finalizarAtendimento(comandaId, method);
       
-      toast({ title: 'Venda Concluída!', description: `Total: ${formatCurrency(cartTotalDisplay)}` });
+      toast({ title: 'Venda Finalizada!', description: `Total: ${formatCurrency(cartTotalDisplay)}` });
       setCart([]);
       setIsFinalizing(false);
       router.push('/sales');
@@ -113,9 +112,9 @@ export default function NewSalePDVPage() {
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)] animate-in fade-in duration-500">
       <div className="mb-6 flex justify-between items-end">
-        <div>
+        <div className="space-y-1">
           <h1 className="text-3xl font-headline font-black uppercase tracking-tighter">FRENTE DE CAIXA</h1>
-          <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Atendimento Balcão Ativo</p>
+          <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-[0.3em]">Operação Balcão Ativa</p>
         </div>
       </div>
 
@@ -126,7 +125,7 @@ export default function NewSalePDVPage() {
               <div className="relative">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                 <Input 
-                  placeholder="Bipar ou digitar produto..." 
+                  placeholder="Pesquisar por nome ou código de barras..." 
                   className="pl-12 h-14 text-lg bg-slate-50 border-none shadow-inner rounded-2xl"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -140,14 +139,14 @@ export default function NewSalePDVPage() {
               {filteredProducts.map(product => (
                 <Card 
                   key={product.id} 
-                  className="cursor-pointer hover:border-primary transition-all active:scale-[0.98] shadow-sm border-primary/5 bg-background h-36"
+                  className="cursor-pointer hover:border-primary transition-all active:scale-[0.98] shadow-sm border-primary/5 bg-background h-36 group"
                   onClick={() => addToCart(product)}
                 >
                   <CardContent className="p-5 flex flex-col justify-between h-full text-left">
-                    <h3 className="font-black text-[11px] leading-tight line-clamp-2 uppercase tracking-tighter">{product.name}</h3>
+                    <h3 className="font-black text-[11px] leading-tight line-clamp-2 uppercase tracking-tighter group-hover:text-primary transition-colors">{product.name}</h3>
                     <div className="flex items-end justify-between">
                       <span className="text-primary font-black text-xl tracking-tighter">{formatCurrency(product.price_cents)}</span>
-                      <span className="text-[10px] font-black text-slate-300 uppercase">{product.stock_qty} UN</span>
+                      <span className="text-[9px] font-black text-slate-300 uppercase">{product.stock_qty} UN</span>
                     </div>
                   </CardContent>
                 </Card>
@@ -157,9 +156,9 @@ export default function NewSalePDVPage() {
         </div>
 
         <Card className="flex flex-col h-full border-primary/10 shadow-2xl overflow-hidden rounded-[40px] bg-background">
-          <CardHeader className="p-6 bg-muted/20 border-b border-muted">
+          <CardHeader className="p-6 bg-muted/20 border-b border-muted/50">
             <CardTitle className="flex items-center gap-3 text-sm font-black uppercase tracking-widest">
-              <ShoppingCart className="h-5 w-5 text-primary" /> Carrinho PDV
+              <ShoppingCart className="h-5 w-5 text-primary" /> Checkout Rápido
             </CardTitle>
           </CardHeader>
 
@@ -172,12 +171,12 @@ export default function NewSalePDVPage() {
                       <p className="text-[11px] font-black uppercase leading-tight tracking-tight">{item.product_name_snapshot}</p>
                       <p className="text-[10px] text-muted-foreground font-bold uppercase mt-1">{formatCurrency(item.unit_price_cents)}</p>
                     </div>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-red-400 rounded-full" onClick={() => setCart(cart.filter(i => i.product_id !== item.product_id))}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-red-400 rounded-full hover:bg-red-50" onClick={() => setCart(cart.filter(i => i.product_id !== item.product_id))}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center bg-slate-100 rounded-xl p-1">
+                    <div className="flex items-center bg-slate-100 rounded-xl p-1 shadow-inner">
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {
                         const newQty = item.qty - 1;
                         if (newQty < 1) setCart(cart.filter(i => i.product_id !== item.product_id));
@@ -195,8 +194,8 @@ export default function NewSalePDVPage() {
               ))}
               {cart.length === 0 && (
                 <div className="py-40 text-center space-y-6 opacity-20">
-                  <ShoppingCart className="h-16 w-16 mx-auto" />
-                  <p className="text-[11px] font-black uppercase tracking-[0.25em]">Aguardando Itens</p>
+                  <ShoppingCart className="h-16 w-16 mx-auto text-primary" />
+                  <p className="text-[11px] font-black uppercase tracking-[0.25em]">Carrinho Vazio</p>
                 </div>
               )}
             </div>
@@ -204,7 +203,7 @@ export default function NewSalePDVPage() {
 
           <CardFooter className="flex-none flex flex-col p-10 space-y-8 bg-slate-50/50 border-t border-muted/50">
             <div className="w-full flex justify-between items-end">
-              <span className="text-muted-foreground text-[10px] font-black uppercase tracking-[0.2em] opacity-60">VALOR TOTAL</span>
+              <span className="text-muted-foreground text-[10px] font-black uppercase tracking-[0.2em] opacity-60">TOTAL À RECEBER</span>
               <span className="text-5xl font-black text-primary tracking-tighter">{formatCurrency(cartTotalDisplay)}</span>
             </div>
             <Button 
@@ -212,7 +211,7 @@ export default function NewSalePDVPage() {
               disabled={cart.length === 0 || isSubmitting}
               onClick={() => setIsFinalizing(true)}
             >
-              PAGAR AGORA <ArrowRight className="ml-3 h-5 w-5" />
+              CONCLUIR VENDA <ArrowRight className="ml-3 h-5 w-5" />
             </Button>
           </CardFooter>
         </Card>
@@ -221,23 +220,23 @@ export default function NewSalePDVPage() {
       <Dialog open={isFinalizing} onOpenChange={setIsFinalizing}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl rounded-[40px]">
           <div className="p-10 bg-white relative">
-            <button onClick={() => setIsFinalizing(false)} className="absolute right-8 top-8 h-12 w-12 rounded-full bg-slate-50 flex items-center justify-center text-slate-400">
+            <button onClick={() => setIsFinalizing(false)} className="absolute right-8 top-8 h-12 w-12 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors">
               <X className="h-6 w-6" />
             </button>
             
             <div className="mb-10 pt-6 text-center space-y-2">
-              <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900 font-headline">FECHAMENTO BALCÃO</h2>
-              <DialogDescription className="text-xs uppercase font-bold tracking-widest text-muted-foreground">Total à Receber: {formatCurrency(cartTotalDisplay)}</DialogDescription>
+              <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900 font-headline">PAGAMENTO BALCÃO</h2>
+              <DialogDescription className="text-xs uppercase font-bold tracking-widest text-muted-foreground">Total Consolidado: {formatCurrency(cartTotalDisplay)}</DialogDescription>
             </div>
 
             <div className="space-y-8">
               <div className="space-y-3">
-                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground pl-2">Identificação do Cliente</label>
+                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground pl-2">Nome do Cliente (Opcional)</label>
                 <div className="relative">
                   <UserCircle className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground opacity-50" />
                   <input 
-                    placeholder="Consumidor Final..." 
-                    className="w-full h-14 pl-12 rounded-2xl border-none bg-slate-100/50 font-bold text-lg"
+                    placeholder="Identificar cliente..." 
+                    className="w-full h-14 pl-12 rounded-2xl border-none bg-slate-100/50 font-bold text-lg focus:ring-2 focus:ring-primary/20 transition-all"
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
                   />
@@ -245,28 +244,28 @@ export default function NewSalePDVPage() {
               </div>
               
               <div className="grid grid-cols-1 gap-4">
-                <Button variant="outline" className="h-20 justify-start gap-6 border-none bg-slate-50 hover:bg-slate-100 rounded-[24px] px-8" onClick={() => handleFinalize('cash')} disabled={isSubmitting}>
-                  <div className="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center"><CircleDollarSign className="text-green-600 h-6 w-6" /></div>
-                  <span className="font-black uppercase text-[11px] tracking-[0.2em]">DINHEIRO</span>
+                <Button variant="outline" className="h-20 justify-start gap-6 border-none bg-slate-50 hover:bg-slate-100 rounded-[24px] px-8 transition-all" onClick={() => handleFinalize('cash')} disabled={isSubmitting}>
+                  <div className="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center shadow-inner"><CircleDollarSign className="text-green-600 h-6 w-6" /></div>
+                  <span className="font-black uppercase text-[11px] tracking-[0.2em]">Dinheiro</span>
                 </Button>
 
-                <Button className="h-20 justify-start gap-6 border-none bg-cyan-400 text-white hover:bg-cyan-500 rounded-[24px] px-8 shadow-xl" onClick={() => handleFinalize('pix')} disabled={isSubmitting}>
-                  <div className="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center"><QrCode className="h-6 w-6 text-white" /></div>
-                  <span className="font-black uppercase text-[11px] tracking-[0.2em]">PIX</span>
+                <Button className="h-20 justify-start gap-6 border-none bg-cyan-400 text-white hover:bg-cyan-500 rounded-[24px] px-8 shadow-xl transition-all" onClick={() => handleFinalize('pix')} disabled={isSubmitting}>
+                  <div className="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center shadow-inner"><QrCode className="h-6 w-6 text-white" /></div>
+                  <span className="font-black uppercase text-[11px] tracking-[0.2em]">PIX QR Code</span>
                 </Button>
 
-                <Button variant="outline" className="h-20 justify-start gap-6 border-none bg-slate-50 hover:bg-slate-100 rounded-[24px] px-8" onClick={() => handleFinalize('card')} disabled={isSubmitting}>
-                  <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center"><CreditCard className="h-6 w-6 text-blue-600" /></div>
-                  <span className="font-black uppercase text-[11px] tracking-[0.2em]">CARTÃO</span>
+                <Button variant="outline" className="h-20 justify-start gap-6 border-none bg-slate-50 hover:bg-slate-100 rounded-[24px] px-8 transition-all" onClick={() => handleFinalize('card')} disabled={isSubmitting}>
+                  <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center shadow-inner"><CreditCard className="h-6 w-6 text-blue-600" /></div>
+                  <span className="font-black uppercase text-[11px] tracking-[0.2em]">Cartão</span>
                 </Button>
               </div>
             </div>
           </div>
 
           {isSubmitting && (
-            <div className="absolute inset-0 bg-background/80 flex flex-col items-center justify-center z-50 backdrop-blur-sm">
+            <div className="absolute inset-0 bg-background/80 flex flex-col items-center justify-center z-50 backdrop-blur-sm animate-in fade-in duration-300">
               <Loader2 className="h-14 w-14 animate-spin text-primary mb-6" />
-              <p className="text-[11px] font-black uppercase tracking-[0.3em] text-primary">SINCRO OPERACIONAL...</p>
+              <p className="text-[11px] font-black uppercase tracking-[0.3em] text-primary">Sincronizando Banco...</p>
             </div>
           )}
         </DialogContent>

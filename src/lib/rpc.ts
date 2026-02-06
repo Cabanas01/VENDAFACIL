@@ -5,84 +5,73 @@ import { supabase } from './supabase/client';
 /**
  * @fileOverview Adapter Robusto COMANDA-FIRST (Backend v5.3)
  * 
- * Implementa as únicas 4 mutações permitidas, garantindo atomicidade e
- * conformidade com o PostgreSQL.
+ * Centraliza as 4 únicas mutações permitidas, garantindo atomicidade e 
+ * conformidade rigorosa com os tipos do PostgreSQL.
  */
 
-/**
- * 1. Abre ou Obtém Comanda Ativa.
- * Mesa 0 = PDV Balcão.
- */
-export async function getOrCreateOpenComandaRpc(
-  storeId: string, 
-  tableNumber: number, 
-  customerName: string | null = null
-): Promise<string> {
-  const { data, error } = await supabase.rpc('rpc_get_or_create_open_comanda', {
-    p_store_id: storeId,
-    p_table_number: Math.floor(tableNumber),
-    p_customer_name: customerName || null
-  });
+export const ComandaService = {
+  /**
+   * 1. Busca comanda aberta ou cria nova (Mesa 0 = PDV).
+   */
+  async getOrCreateComanda(storeId: string, tableNumber: number, customerName?: string | null) {
+    const { data, error } = await supabase.rpc('rpc_get_or_create_open_comanda', {
+      p_store_id: storeId,
+      p_table_number: Math.floor(tableNumber),
+      p_customer_name: customerName ?? null,
+    });
 
-  if (error) {
-    console.error('[RPC_ERROR] rpc_get_or_create_open_comanda:', error);
-    throw new Error(error.message);
+    if (error) {
+      console.error('[RPC_ERROR] rpc_get_or_create_open_comanda:', error);
+      throw new Error(error.message);
+    }
+
+    return data as string; // Retorna comanda_id (UUID)
+  },
+
+  /**
+   * 2. Adiciona item à comanda.
+   * p_quantity é enviado como Number para ser interpretado como numeric no Postgres.
+   * O frontend NUNCA envia preços ou totais.
+   */
+  async adicionarItem(comandaId: string, productId: string, quantity: number) {
+    const { error } = await supabase.rpc('rpc_add_item_to_comanda', {
+      p_comanda_id: comandaId,
+      p_product_id: productId,
+      p_quantity: Number(quantity),
+    });
+
+    if (error) {
+      console.error('[RPC_ERROR] rpc_add_item_to_comanda:', error);
+      throw new Error(error.message);
+    }
+  },
+
+  /**
+   * 3. Fecha comanda, gera venda e registra pagamento (Atômico).
+   */
+  async finalizarAtendimento(comandaId: string, paymentMethod: 'cash' | 'pix' | 'card') {
+    const { error } = await supabase.rpc('rpc_close_comanda_to_sale', {
+      p_comanda_id: comandaId,
+      p_payment_method: paymentMethod,
+    });
+
+    if (error) {
+      console.error('[RPC_ERROR] rpc_close_comanda_to_sale:', error);
+      throw new Error(error.message);
+    }
+  },
+
+  /**
+   * 4. Conclui item na produção (KDS/BDS).
+   */
+  async concluirPreparo(orderItemId: string) {
+    const { error } = await supabase.rpc('rpc_mark_order_item_done', {
+      p_order_item_id: orderItemId,
+    });
+
+    if (error) {
+      console.error('[RPC_ERROR] rpc_mark_order_item_done:', error);
+      throw new Error(error.message);
+    }
   }
-
-  return data as string;
-}
-
-/**
- * 2. Adiciona Item à Comanda.
- * p_quantity é enviado como Number (JS) para ser interpretado como numeric no Postgres.
- * Preço e line_total são resolvidos exclusivamente no banco.
- */
-export async function addItemToComandaRpc(
-  comandaId: string, 
-  productId: string, 
-  quantity: number
-): Promise<void> {
-  const { error } = await supabase.rpc('rpc_add_item_to_comanda', {
-    p_comanda_id: comandaId,
-    p_product_id: productId,
-    p_quantity: Number(quantity) // Força tipo numeric no Postgres
-  });
-
-  if (error) {
-    console.error('[RPC_ERROR] rpc_add_item_to_comanda:', error);
-    throw new Error(error.message);
-  }
-}
-
-/**
- * 3. Fecha Comanda e Gera Venda (Atômico).
- * O frontend apenas informa o método. O banco resolve o faturamento total.
- */
-export async function closeComandaToSaleRpc(
-  comandaId: string, 
-  paymentMethod: 'cash' | 'pix' | 'card'
-): Promise<void> {
-  const { error } = await supabase.rpc('rpc_close_comanda_to_sale', {
-    p_comanda_id: comandaId,
-    p_payment_method: paymentMethod
-  });
-
-  if (error) {
-    console.error('[RPC_ERROR] rpc_close_comanda_to_sale:', error);
-    throw new Error(error.message);
-  }
-}
-
-/**
- * 4. Conclui Item de Produção (KDS/BDS).
- */
-export async function markOrderItemDoneRpc(orderItemId: string): Promise<void> {
-  const { error } = await supabase.rpc('rpc_mark_order_item_done', {
-    p_order_item_id: orderItemId
-  });
-
-  if (error) {
-    console.error('[RPC_ERROR] rpc_mark_order_item_done:', error);
-    throw new Error(error.message);
-  }
-}
+};

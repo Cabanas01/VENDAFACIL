@@ -2,19 +2,13 @@
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/client';
-import { 
-  getOrCreateOpenComandaRpc,
-  addItemToComandaRpc,
-  closeComandaToSaleRpc,
-  markOrderItemDoneRpc
-} from '@/lib/rpc';
+import { ComandaService } from '@/lib/rpc';
 import type { 
   Store, 
   Product, 
   Comanda,
   CashRegister, 
   StoreAccessStatus,
-  CartItem,
   Customer,
   User
 } from '@/lib/types';
@@ -32,7 +26,7 @@ type AuthContextType = {
   refreshStatus: () => Promise<void>;
   createStore: (storeData: any) => Promise<void>;
   
-  // Contrato v5.3 (Imutável)
+  // Interface Canônica v5.3
   getOrCreateComanda: (tableNumber: number, customerName: string | null) => Promise<string>;
   adicionarItem: (comandaId: string, productId: string, quantity: number) => Promise<void>;
   finalizarAtendimento: (comandaId: string, paymentMethod: 'cash' | 'pix' | 'card') => Promise<void>;
@@ -106,22 +100,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [fetchAppData]);
 
   const getOrCreateComanda = async (tableNumber: number, customerName: string | null) => {
-    if (!store?.id) throw new Error('Unidade não identificada.');
-    return getOrCreateOpenComandaRpc(store.id, tableNumber, customerName);
+    if (!store?.id) throw new Error('Sessão de loja não identificada.');
+    return ComandaService.getOrCreateComanda(store.id, tableNumber, customerName);
   };
 
   const adicionarItem = async (comandaId: string, productId: string, quantity: number) => {
-    await addItemToComandaRpc(comandaId, productId, quantity);
+    await ComandaService.adicionarItem(comandaId, productId, quantity);
     await refreshStatus();
   };
 
   const finalizarAtendimento = async (comandaId: string, paymentMethod: 'cash' | 'pix' | 'card') => {
-    await closeComandaToSaleRpc(comandaId, paymentMethod);
+    await ComandaService.finalizarAtendimento(comandaId, paymentMethod);
     await refreshStatus();
   };
 
   const concluirPreparo = async (itemId: string) => {
-    await markOrderItemDoneRpc(itemId);
+    await ComandaService.concluirPreparo(itemId);
     await refreshStatus();
   };
 

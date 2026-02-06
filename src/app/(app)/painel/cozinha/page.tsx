@@ -2,7 +2,7 @@
 
 /**
  * @fileOverview Painel Cozinha (KDS).
- * Consome a View production_snapshot baseada em comanda_items.
+ * Consome a View production_snapshot baseada no novo mapeamento funcional.
  */
 
 import { useEffect, useState, useCallback } from 'react';
