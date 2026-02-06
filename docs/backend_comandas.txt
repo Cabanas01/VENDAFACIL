@@ -1,14 +1,14 @@
 -- ======================================================
 -- 🛠️ BACKEND DEFINITIVO: VENDAFÁCIL BRASIL
--- FOCO: ELIMINAR AMBIGUIDADE DE FUNÇÕES E COLUNAS GERADAS
+-- PADRÃO RPC-FIRST: TODA LÓGICA NO POSTGRESQL
 -- ======================================================
 
 -- 1️⃣ LIMPEZA: Removendo versões antigas para evitar conflito de assinaturas
-DROP FUNCTION IF EXISTS public.rpc_add_item_to_comanda(uuid, uuid, integer, integer);
 DROP FUNCTION IF EXISTS public.rpc_add_item_to_comanda(uuid, uuid, numeric, numeric);
 DROP FUNCTION IF EXISTS public.rpc_add_item_to_comanda(uuid, uuid, numeric);
+DROP FUNCTION IF EXISTS public.rpc_close_comanda_to_sale(uuid, text, uuid);
 
--- 2️⃣ FUNÇÃO: ADICIONAR ITEM À COMANDA (Versão Única e Segura)
+-- 2️⃣ FUNÇÃO: ADICIONAR ITEM À COMANDA (Versão Estável)
 -- ✅ NÃO insere na coluna line_total (Postgres calcula automaticamente)
 CREATE OR REPLACE FUNCTION public.rpc_add_item_to_comanda(
     p_comanda_id UUID,
@@ -70,9 +70,18 @@ DECLARE
     v_total_cents NUMERIC;
     v_sale_id UUID;
     v_store_id UUID;
+    v_register_id UUID;
 BEGIN
     SELECT store_id INTO v_store_id FROM public.comandas WHERE id = p_comanda_id;
     
+    -- Tenta encontrar caixa aberto se não enviado
+    IF p_cash_register_id IS NULL THEN
+        SELECT id INTO v_register_id FROM public.cash_registers 
+        WHERE store_id = v_store_id AND closed_at IS NULL LIMIT 1;
+    ELSE
+        v_register_id := p_cash_register_id;
+    END IF;
+
     -- Calcula total baseado na coluna gerada pelo banco
     SELECT COALESCE(SUM(line_total), 0) INTO v_total_cents 
     FROM public.order_items WHERE comanda_id = p_comanda_id AND status != 'canceled';
@@ -81,7 +90,7 @@ BEGIN
     INSERT INTO public.sales (
         store_id, comanda_id, total_cents, payment_method, cash_register_id
     ) VALUES (
-        v_store_id, p_comanda_id, v_total_cents, p_payment_method_id, p_cash_register_id
+        v_store_id, p_comanda_id, v_total_cents, p_payment_method_id, v_register_id
     ) RETURNING id INTO v_sale_id;
 
     -- Vincula itens à venda e atualiza status

@@ -2,7 +2,7 @@
 
 /**
  * @fileOverview Gestão de Comanda Individual (PDV Operacional).
- * Cálculo de total baseado estritamente nos line_total retornados pelo banco.
+ * Sincronizado com o Contrato RPC: p_unit_price é enviado como null.
  */
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
@@ -72,7 +72,6 @@ export default function ComandaDetailsPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Cálculo visual para o carrinho temporário baseado no preço atual do produto
   const cartTotalDisplay = useMemo(() => 
     localCart.reduce((acc, i) => acc + (i.product.price_cents * i.qty), 0), 
   [localCart]);
@@ -81,8 +80,8 @@ export default function ComandaDetailsPage() {
     if (localCart.length === 0 || isSubmitting) return;
     setIsSubmitting(true);
     try {
-      // ✅ Chama adicionarItem que agora está blindado contra ".price"
       for (const item of localCart) {
+        // ✅ Contrato RPC: enviar unit_price como null para o banco buscar o atual
         await adicionarItem(id as string, item.product.id, item.qty);
       }
       toast({ title: 'Pedido Lançado!' });
@@ -152,7 +151,6 @@ export default function ComandaDetailsPage() {
                   <TableCell className="px-6 font-bold text-xs uppercase tracking-tight">{item.product_name_snapshot || 'Produto'}</TableCell>
                   <TableCell className="text-center font-black text-xs">x{item.quantity}</TableCell>
                   <TableCell className="text-right px-6 font-black text-primary">
-                    {/* ✅ Exibe line_total que agora é a fonte da verdade vinda do banco */}
                     {formatCurrency(item.line_total)}
                   </TableCell>
                 </TableRow>

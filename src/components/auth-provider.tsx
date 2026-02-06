@@ -2,7 +2,7 @@
 
 /**
  * @fileOverview AuthProvider - Sincronizado com a Regra de Ouro.
- * Cálculo de faturamento (line_total) é delegado exclusivamente ao banco.
+ * Autoridade máxima financeira delegada ao PostgreSQL via RPCs.
  */
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -115,7 +115,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const { data, error } = await supabase
       .from('comandas')
-      .insert({ store_id: store.id, numero: identificacao, mesa: identificacao, cliente_nome: cliente, status: 'aberta' })
+      .insert({ 
+        store_id: store.id, 
+        numero: identificacao, 
+        mesa: identificacao, 
+        cliente_nome: cliente || 'Consumidor', 
+        status: 'aberta' 
+      })
       .select('id').single();
 
     if (error) throw error;
@@ -124,12 +130,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const adicionarItem = async (comandaId: string, productId: string, quantity: number) => {
-    // ✅ Regra de Ouro: Nunca enviar unit_price ou line_total. O banco resolve.
-    // ✅ Usamos parseFloat para garantir que o Supabase envie como numeric e evite ambiguidade.
+    // ✅ Regra de Ouro: Passar os 4 parâmetros para rpc_add_item_to_comanda
+    // O banco resolve store_id, unit_price (se null) e destino_preparo.
     const { error } = await supabase.rpc('rpc_add_item_to_comanda', {
       p_comanda_id: comandaId,
       p_product_id: productId,
-      p_quantity: parseFloat(quantity.toString())
+      p_quantity: parseFloat(quantity.toString()),
+      p_unit_price: null // Permite que o banco use o preço do cadastro
     });
 
     if (error) {
@@ -142,7 +149,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fecharComanda = async (comandaId: string, paymentMethodId: string) => {
     const cashRegister = cashRegisters.find(cr => !cr.closed_at);
     
-    // REGRA DE OURO: Delega fechamento total para a RPC do banco
+    // ✅ Regra de Ouro: Delega fechamento total para a RPC rpc_close_comanda_to_sale
     const { error } = await supabase.rpc('rpc_close_comanda_to_sale', {
       p_comanda_id: comandaId,
       p_payment_method_id: paymentMethodId,
@@ -156,7 +163,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const addSale = async (cart: CartItem[], paymentMethod: string) => {
     if (!store?.id) throw new Error('Loja não identificada.');
     try {
-      // Fluxo atômico via RPCs
+      // Fluxo PDV: Comanda 0 -> Lança Itens -> Fecha Venda
       const comandaId = await abrirComanda('0', 'Consumidor Final');
       for (const item of cart) {
         await adicionarItem(comandaId, item.product_id, item.qty);
@@ -177,7 +184,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const marcarItemConcluido = async (itemId: string) => {
-    const { error } = await supabase.rpc('rpc_mark_order_item_done', { p_item_id: itemId });
+    // ✅ Regra de Ouro: Passar p_item_id conforme assinatura da RPC
+    const { error } = await supabase.rpc('rpc_mark_order_item_done', { 
+      p_item_id: itemId 
+    });
     if (error) throw error;
     await refreshStatus();
   };
