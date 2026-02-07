@@ -1,3 +1,4 @@
+
 'use client';
 
 /**
@@ -34,10 +35,12 @@ import { PLANS_CONFIG, CHECKOUT_LINKS } from '@/lib/billing/checkoutLinks';
 import type { PlanID } from '@/lib/billing/checkoutLinks';
 import { format, parseISO, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { useRouter } from 'next/navigation';
 
 export default function BillingPage() {
   const { user, store, accessStatus, refreshStatus, storeStatus } = useAuth();
   const { toast } = useToast();
+  const router = useRouter();
   const [isStartingTrial, setIsStartingTrial] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
 
@@ -58,8 +61,8 @@ export default function BillingPage() {
         description: 'Você agora tem 7 dias de acesso completo ao sistema.' 
       });
       
-      // 🔥 ESSENCIAL: Atualiza o estado global para que o accessStatus apareça na tela
       await refreshStatus();
+      router.refresh(); 
     } catch (error: any) {
       toast({ 
         variant: 'destructive', 
@@ -97,7 +100,7 @@ export default function BillingPage() {
 
   if (!isMounted || storeStatus === 'loading_auth' || storeStatus === 'loading_status') {
     return (
-      <div className="max-w-6xl mx-auto space-y-12 py-8 animate-pulse">
+      <div className="max-w-6xl mx-auto space-y-12 py-8">
         <Skeleton className="h-12 w-64 mx-auto" />
         <Skeleton className="h-40 w-full" />
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -110,7 +113,7 @@ export default function BillingPage() {
   const planOrder: PlanID[] = ['trial', 'semanal', 'mensal', 'anual'];
 
   return (
-    <div className="max-w-6xl mx-auto space-y-12 py-8">
+    <div className="max-w-6xl mx-auto space-y-12 py-8 animate-in fade-in duration-500">
       <div className="text-center space-y-4">
         <h1 className="text-4xl font-black tracking-tight font-headline text-primary uppercase">Plano e Assinatura</h1>
         <p className="text-lg text-muted-foreground max-w-2xl mx-auto font-medium">
@@ -118,7 +121,6 @@ export default function BillingPage() {
         </p>
       </div>
 
-      {/* SEÇÃO: SITUAÇÃO DO ACESSO (Onde o plano e data aparecem) */}
       <Card className="border-primary/10 bg-muted/30 shadow-sm overflow-hidden">
         <CardHeader className="bg-primary/5 border-b">
           <CardTitle className="flex items-center gap-2 text-sm uppercase font-black tracking-widest">
@@ -131,10 +133,10 @@ export default function BillingPage() {
               <div className="space-y-2 text-center md:text-left">
                 <div className="flex items-center justify-center md:justify-start gap-3">
                   <span className="text-3xl font-black uppercase tracking-tighter">
-                    {accessStatus.plano_nome}
+                    {accessStatus.status === 'trial' ? 'Avaliação Gratuita' : accessStatus.plano_nome}
                   </span>
                   <Badge variant={accessStatus.acesso_liberado ? 'default' : 'destructive'} className="font-black text-[10px] uppercase h-5">
-                    {accessStatus.status === 'ativo' ? 'Plano Ativo' : accessStatus.status}
+                    {accessStatus.acesso_liberado ? 'Acesso Liberado' : 'Acesso Bloqueado'}
                   </Badge>
                 </div>
                 <p className="text-sm text-muted-foreground font-bold italic opacity-80">{accessStatus.mensagem}</p>
@@ -156,22 +158,14 @@ export default function BillingPage() {
             <div className="p-10 text-center border-dashed border-2 rounded-xl bg-background/50">
               <Info className="h-8 w-8 mx-auto text-muted-foreground opacity-50 mb-4" />
               <p className="text-sm text-muted-foreground font-black uppercase tracking-widest">
-                Nenhuma assinatura ativa ou teste iniciado.
+                Informações de acesso não localizadas.
               </p>
-              <p className="text-xs text-muted-foreground mt-1">Escolha um dos planos abaixo para liberar o acesso ao sistema.</p>
-            </div>
-          )}
-          
-          {accessStatus && !accessStatus.acesso_liberado && (
-            <div className="mt-4 flex items-center gap-2 text-[10px] text-orange-600 bg-orange-50 p-3 rounded-lg border border-orange-100 font-black uppercase tracking-widest">
-              <AlertTriangle className="h-3 w-3" />
-              Aguardando confirmação bancária ou renovação. O acesso será liberado automaticamente.
+              <p className="text-xs text-muted-foreground mt-1">Inicie um teste ou assine um plano para começar a vender.</p>
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* SEÇÃO: CARDS DE PLANOS */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {planOrder.map(planId => {
           const plan = PLANS_CONFIG[planId];
@@ -204,7 +198,7 @@ export default function BillingPage() {
                   <span className="text-muted-foreground text-[10px] font-black uppercase ml-1 opacity-60">/{plan.periodicity}</span>
                 </div>
                 <ul className="space-y-4">
-                  {plan.benefits.map((benefit, i) => (
+                  {(plan.benefits || []).map((benefit, i) => (
                     <li key={i} className="flex items-start gap-3 text-xs text-muted-foreground font-bold">
                       <CheckCircle2 className="h-4 w-4 text-primary shrink-0 mt-0.5" /> 
                       <span className="leading-tight">{benefit}</span>
@@ -225,7 +219,7 @@ export default function BillingPage() {
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
                       store?.trial_used ? 'Avaliação Utilizada' : 
-                      accessStatus ? 'Plano Ativo' : 'Testar 7 Dias Grátis'
+                      accessStatus ? 'Já Ativado' : 'Testar 7 Dias Grátis'
                     )}
                   </Button>
                 ) : (

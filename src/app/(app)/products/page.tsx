@@ -1,10 +1,10 @@
+
 'use client';
 
 /**
  * @fileOverview Gestão de Produtos (CRUD Direto via Supabase)
  * 
- * Seguindo a Regra de Ouro: Catálogo usa REST (RLS), Atendimento usa RPC.
- * Corrigido erro "is not a function" e mapeamento de campos.
+ * Implementa blindagem contra erros de execução e reatividade total.
  */
 
 import { useState, useMemo, useRef } from 'react';
@@ -71,6 +71,7 @@ import type { Product } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/components/auth-provider';
 import { supabase } from '@/lib/supabase/client';
+import { useRouter } from 'next/navigation';
 
 const productSchema = z.object({
   name: z.string().min(1, 'Nome é obrigatório'),
@@ -102,6 +103,7 @@ const parseCurrency = (value: string) => {
 export default function ProductsPage() {
   const { products, store, refreshStatus } = useAuth();
   const { toast } = useToast();
+  const router = useRouter();
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
@@ -113,8 +115,7 @@ export default function ProductsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   
-  const barcodeInputRef = useRef<HTMLInputElement>(null);
-  const productsSafe = Array.isArray(products) ? products : [];
+  const productsSafe = useMemo(() => Array.isArray(products) ? products : [], [products]);
 
   const categories = useMemo(() => ['all', ...Array.from(new Set(productsSafe.map(p => p.category).filter(Boolean)))], [productsSafe]);
 
@@ -168,7 +169,7 @@ export default function ProductsPage() {
     setIsModalOpen(true);
   };
 
-  const onSubmit = async (values: ProductFormValues) => {
+  const handleSaveProduct = async (values: ProductFormValues) => {
     if (!store?.id) {
       toast({ variant: 'destructive', title: 'Unidade não identificada' });
       return;
@@ -188,13 +189,14 @@ export default function ProductsPage() {
           .from('products')
           .insert({ ...values, store_id: store.id });
         if (error) throw error;
-        toast({ title: "Produto cadastrado!" });
+        toast({ title: "Produto cadastrado com sucesso!" });
       }
       
       setIsModalOpen(false);
       await refreshStatus();
+      router.refresh();
     } catch (error: any) {
-        toast({ variant: 'destructive', title: "Erro ao salvar", description: error.message });
+        toast({ variant: 'destructive', title: "Erro ao salvar produto", description: error.message });
     } finally {
       setIsSubmitting(false);
     }
@@ -205,10 +207,11 @@ export default function ProductsPage() {
     try {
         const { error } = await supabase.from('products').delete().eq('id', productToDelete.id);
         if (error) throw error;
-        toast({ title: "Produto excluído." });
+        toast({ title: "Produto excluído com sucesso." });
         await refreshStatus();
+        router.refresh();
     } catch (error: any) {
-        toast({ variant: 'destructive', title: "Erro ao excluir", description: error.message });
+        toast({ variant: 'destructive', title: "Erro ao excluir produto", description: error.message });
     } finally {
         setIsDeleteConfirmOpen(false);
         setProductToDelete(null);
@@ -223,7 +226,7 @@ export default function ProductsPage() {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
-      <PageHeader title="Produtos e Catálogo" subtitle="Gestão centralizada de inventário e precificação.">
+      <PageHeader title="Catálogo de Produtos" subtitle="Gestão centralizada de inventário.">
         <Button onClick={() => handleOpenModal()} className="font-black uppercase text-[10px] tracking-widest shadow-lg shadow-primary/20">
           <PlusCircle className="mr-2 h-4 w-4" /> Novo Produto
         </Button>
@@ -264,7 +267,7 @@ export default function ProductsPage() {
           <div className="p-6 bg-muted/10 border-b flex flex-wrap items-center gap-4">
             <div className="relative flex-1 min-w-[300px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Buscar por nome ou categoria..." className="pl-10 h-11 bg-background" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+              <Input placeholder="Buscar produto..." className="pl-10 h-11 bg-background" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
             </div>
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
               <SelectTrigger className="w-full md:w-[200px] h-11 font-bold"><SelectValue /></SelectTrigger>
@@ -339,7 +342,6 @@ export default function ProductsPage() {
         </CardContent>
       </Card>
 
-      {/* MODAL: NOVO / EDITAR */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogContent className="sm:max-w-2xl p-0 overflow-hidden border-none shadow-2xl rounded-[32px]">
           <div className="bg-primary/5 pt-10 pb-6 px-8 text-center border-b border-primary/10">
@@ -348,18 +350,18 @@ export default function ProductsPage() {
             </div>
             <DialogHeader>
               <DialogTitle className="text-2xl font-black font-headline uppercase tracking-tighter text-center">{editingProduct ? 'Atualizar' : 'Cadastrar'} Produto</DialogTitle>
-              <DialogDescription className="text-center font-medium text-sm">Defina os parâmetros estratégicos do item.</DialogDescription>
+              <DialogDescription className="text-center font-medium text-sm">Defina os parâmetros do item no catálogo.</DialogDescription>
             </DialogHeader>
           </div>
 
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 p-8 bg-background">
+            <form onSubmit={form.handleSubmit(handleSaveProduct)} className="space-y-6 p-8 bg-background">
               <div className="grid grid-cols-2 gap-6">
                 <FormField name="name" control={form.control} render={({ field }) => (
-                  <FormItem><FormLabel className="text-[10px] font-black uppercase tracking-widest">Nome Comercial *</FormLabel><FormControl><Input placeholder="Ex: Cerveja Heineken 600ml" className="h-12 font-bold" {...field} /></FormControl><FormMessage /></FormItem>
+                  <FormItem><FormLabel className="text-[10px] font-black uppercase tracking-widest">Nome Comercial *</FormLabel><FormControl><Input placeholder="Ex: Produto X" className="h-12 font-bold" {...field} /></FormControl><FormMessage /></FormItem>
                 )} />
                 <FormField name="category" control={form.control} render={({ field }) => (
-                  <FormItem><FormLabel className="text-[10px] font-black uppercase tracking-widest">Categoria</FormLabel><FormControl><Input placeholder="Ex: Bebidas" className="h-12 font-bold" {...field} /></FormControl><FormMessage /></FormItem>
+                  <FormItem><FormLabel className="text-[10px] font-black uppercase tracking-widest">Categoria</FormLabel><FormControl><Input placeholder="Ex: Geral" className="h-12 font-bold" {...field} /></FormControl><FormMessage /></FormItem>
                 )} />
               </div>
               
@@ -403,7 +405,7 @@ export default function ProductsPage() {
                     )} />
                 </div>
                 <div className="mt-4 flex justify-between items-center px-2">
-                  <span className="text-[9px] font-black uppercase text-muted-foreground tracking-widest">Margem Bruta Estimada</span>
+                  <span className="text-[9px] font-black uppercase text-muted-foreground tracking-widest">Margem Estimada</span>
                   <span className={`text-sm font-black ${profitMargin > 30 ? 'text-green-600' : 'text-orange-600'}`}>{profitMargin.toFixed(1)}%</span>
                 </div>
                </Card>
@@ -442,15 +444,15 @@ export default function ProductsPage() {
             </div>
             <AlertDialogTitle className="text-2xl font-black uppercase tracking-tighter text-center">Excluir Produto?</AlertDialogTitle>
             <AlertDialogDescription className="text-center font-medium text-slate-600">
-              Esta ação removerá "{productToDelete?.name}" permanentemente do catálogo e histórico de estoque. Não poderá ser desfeita.
+              Esta ação removerá permanentemente o produto do catálogo. Não poderá ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="mt-8 gap-3 sm:flex-row-reverse">
-            <AlertDialogAction onClick={handleDeleteProduct} className="flex-1 h-14 bg-red-500 hover:bg-red-600 text-white font-black uppercase text-[11px] tracking-widest shadow-lg shadow-red-200">
+            <AlertDialogAction onClick={handleDeleteProduct} className="flex-1 h-14 bg-red-500 hover:bg-red-600 text-white font-black uppercase text-[11px] tracking-widest shadow-lg">
               Sim, Excluir
             </AlertDialogAction>
             <AlertDialogCancel className="flex-1 h-14 font-black uppercase text-[11px] tracking-widest">
-              Manter Produto
+              Cancelar
             </AlertDialogCancel>
           </AlertDialogFooter>
         </AlertDialogContent>

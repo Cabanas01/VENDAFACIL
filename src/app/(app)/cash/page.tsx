@@ -1,21 +1,33 @@
+
 'use client';
 
 /**
- * @fileOverview Gestão de Caixa Blindada.
+ * @fileOverview Gestão de Caixa Blindada e Sincronizada.
  */
 
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { format, formatDistanceToNow, parseISO, startOfDay, endOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Coins, CreditCard, PiggyBank, Briefcase, History, CheckCircle, XCircle, PlusCircle, ArrowUpRight, Wallet, AlertTriangle, Loader2 } from 'lucide-react';
+import { 
+  Coins, 
+  CreditCard, 
+  PiggyBank, 
+  Briefcase, 
+  History, 
+  CheckCircle, 
+  PlusCircle, 
+  Wallet, 
+  AlertTriangle, 
+  Loader2,
+  CircleDollarSign
+} from 'lucide-react';
 
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/components/auth-provider';
 import { supabase } from '@/lib/supabase/client';
@@ -28,12 +40,12 @@ const formatCurrency = (value: number) => new Intl.NumberFormat('pt-BR', { style
 export default function CashPage() {
   const { cashSessions, sales, refreshStatus } = useAuth();
   const { toast } = useToast();
+  const router = useRouter();
   const [dateRange, setDateRange] = useState<DateRange | undefined>({ from: new Date(), to: new Date() });
   const [isOpening, setIsOpening] = useState(false);
-  const router = useRouter();
   
-  const cashSessionsSafe = cashSessions ?? [];
-  const salesSafe = sales ?? [];
+  const cashSessionsSafe = useMemo(() => Array.isArray(cashSessions) ? cashSessions : [], [cashSessions]);
+  const salesSafe = useMemo(() => Array.isArray(sales) ? sales : [], [sales]);
 
   const openSession = useMemo(() => cashSessionsSafe.find(s => s.status === 'open'), [cashSessionsSafe]);
   const hasOpenCash = !!openSession;
@@ -58,20 +70,18 @@ export default function CashPage() {
     const fromDate = parseISO(fromStr);
     const toDate = toStr ? parseISO(toStr) : new Date();
 
-    const totals = salesSafe.filter(sale => {
+    return salesSafe.filter(sale => {
       if (!sale?.created_at) return false;
       const saleDate = parseISO(sale.created_at);
-      return saleDate.getTime() >= fromDate.getTime() && saleDate.getTime() <= toDate.getTime();
+      return saleDate >= fromDate && saleDate <= toDate;
     }).reduce((acc, sale) => {
       acc.totalCents += (sale.total_cents || 0);
       acc.count += 1;
-      if (sale.payment_method === 'cash') acc.cash += (sale.total_cents || 0);
+      if (sale.payment_method === 'cash' || sale.payment_method === 'dinheiro') acc.cash += (sale.total_cents || 0);
       if (sale.payment_method === 'pix') acc.pix += (sale.total_cents || 0);
-      if (sale.payment_method === 'card') acc.card += (sale.total_cents || 0);
+      if (sale.payment_method === 'card' || sale.payment_method === 'cartao' || sale.payment_method === 'credito' || sale.payment_method === 'debito') acc.card += (sale.total_cents || 0);
       return acc;
     }, { totalCents: 0, count: 0, cash: 0, pix: 0, card: 0 });
-
-    return totals;
   };
 
   const salesInOpenSession = useMemo(() => 
@@ -86,21 +96,21 @@ export default function CashPage() {
   }, [dateRange, salesSafe]);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 animate-in fade-in duration-500">
       <PageHeader title="Fluxo de Caixa" subtitle="Gestão financeira e fechamento de turno." />
       
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
             {!hasOpenCash ? (
-              <Card className="border-dashed border-2 bg-muted/5">
-                <CardContent className="py-12 flex flex-col items-center text-center space-y-6">
+              <Card className="border-dashed border-2 bg-muted/5 py-12">
+                <CardContent className="flex flex-col items-center text-center space-y-6">
                   <div className="p-5 bg-background rounded-full border shadow-sm ring-8 ring-primary/5">
                     <Wallet className="h-10 w-10 text-primary/40" />
                   </div>
                   <div className="space-y-2">
                     <h3 className="text-xl font-black uppercase tracking-tight">Nenhum turno aberto</h3>
                     <p className="text-sm text-muted-foreground max-w-xs font-medium">
-                      Para registrar vendas em dinheiro e ter controle de caixa, você precisa iniciar um novo turno.
+                      Para registrar vendas e ter controle de saldo, você precisa iniciar um novo turno de caixa.
                     </p>
                   </div>
                   <Button size="lg" className="font-black uppercase text-[11px] tracking-widest h-14 px-10" onClick={handleOpenCash} disabled={isOpening}>
@@ -122,7 +132,7 @@ export default function CashPage() {
                       </Badge>
                     </div>
                     <CardDescription className="font-bold">
-                         Aberto em {format(parseISO(openSession!.opened_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })} ({formatDistanceToNow(parseISO(openSession!.opened_at), { locale: ptBR, addSuffix: true })})
+                         Aberto em {format(parseISO(openSession!.opened_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
@@ -136,7 +146,7 @@ export default function CashPage() {
                             <p className="text-xl font-black text-primary">{formatCurrency(salesInOpenSession?.totalCents || 0)}</p>
                         </div>
                         <div className="p-4 bg-primary text-primary-foreground rounded-xl shadow-lg">
-                            <p className="text-[10px] uppercase font-bold opacity-80">Dinheiro em Caixa</p>
+                            <p className="text-[10px] uppercase font-bold opacity-80">Saldo Atual (Cash)</p>
                             <p className="text-xl font-black">{formatCurrency(openSession!.opening_amount_cents + (salesInOpenSession?.cash || 0))}</p>
                         </div>
                     </div>
@@ -163,19 +173,13 @@ export default function CashPage() {
                 <CardHeader>
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                       <div>
-                        <CardTitle className="flex items-center gap-2 text-lg"><Briefcase className="h-5 w-5 text-primary" /> Histórico do Período</CardTitle>
-                        <CardDescription>Consulte o faturamento consolidado por data.</CardDescription>
+                        <CardTitle className="flex items-center gap-2 text-lg"><Briefcase className="h-5 w-5 text-primary" /> Histórico Consolidado</CardTitle>
+                        <CardDescription>Resumo de faturamento por período.</CardDescription>
                       </div>
                       <DateRangePicker date={dateRange} onDateChange={setDateRange} className="w-full sm:w-auto" />
                     </div>
                 </CardHeader>
                 <CardContent>
-                    {!hasOpenCash && (
-                      <div className="bg-orange-50 border border-orange-100 p-4 rounded-xl flex items-start gap-3 mb-6">
-                        <AlertTriangle className="h-5 w-5 text-orange-600 mt-0.5" />
-                        <p className="text-xs text-orange-800 font-medium">Os dados abaixo refletem vendas passadas. Abra o caixa para registrar novas movimentações.</p>
-                      </div>
-                    )}
                     {reportData ? (
                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                            <div className="p-4 border rounded-lg bg-muted/10">
@@ -183,11 +187,11 @@ export default function CashPage() {
                                 <p className="text-lg font-black">{formatCurrency(reportData.totalCents)}</p>
                            </div>
                            <div className="p-4 border rounded-lg bg-muted/10">
-                                <p className="text-[10px] uppercase font-bold text-muted-foreground">Em Dinheiro</p>
+                                <p className="text-[10px] uppercase font-bold text-muted-foreground">Dinheiro</p>
                                 <p className="text-lg font-black">{formatCurrency(reportData.cash)}</p>
                            </div>
                            <div className="p-4 border rounded-lg bg-muted/10">
-                                <p className="text-[10px] uppercase font-bold text-muted-foreground">PIX / Cartão</p>
+                                <p className="text-[10px] uppercase font-bold text-muted-foreground">PIX/Cartão</p>
                                 <p className="text-lg font-black">{formatCurrency(reportData.pix + reportData.card)}</p>
                            </div>
                            <div className="p-4 border rounded-lg bg-muted/10">
@@ -204,13 +208,13 @@ export default function CashPage() {
         
         <div className="space-y-6">
             <Card className="shadow-sm border-primary/10">
-                 <CardHeader><CardTitle className="text-sm font-black uppercase tracking-widest">Ações Operacionais</CardTitle></CardHeader>
+                 <CardHeader><CardTitle className="text-sm font-black uppercase tracking-widest">Ações Rápidas</CardTitle></CardHeader>
                  <CardContent className="flex flex-col gap-3">
                      <Button variant="outline" className="w-full h-12 font-bold" onClick={() => router.push('/sales/new')}>
-                        <PlusCircle className="mr-2 h-4 w-4"/> Ir para Venda (PDV)
+                        <PlusCircle className="mr-2 h-4 w-4"/> Novo PDV
                      </Button>
                      <Button variant="ghost" className="w-full text-xs font-bold opacity-60" onClick={() => router.push('/reports')}>
-                        Ver Relatórios Completos
+                        Relatórios Completos
                      </Button>
                  </CardContent>
             </Card>
@@ -219,27 +223,27 @@ export default function CashPage() {
         <div className="lg:col-span-3">
             <Card className="border-none shadow-sm overflow-hidden">
                 <CardHeader className="bg-muted/20 border-b">
-                    <CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-widest"><History className="h-4 w-4" /> Sessões Recentes</CardTitle>
+                    <CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-widest"><History className="h-4 w-4" /> Log de Sessões</CardTitle>
                 </CardHeader>
                 <div className="overflow-x-auto">
                   <Table>
                       <TableHeader className="bg-muted/10">
                           <TableRow>
-                              <TableHead className="px-6">Período</TableHead>
-                              <TableHead className="text-right">Fundo Inicial</TableHead>
-                              <TableHead className="text-right">Vendas Dinheiro</TableHead>
-                              <TableHead className="text-right">Saldo Final</TableHead>
+                              <TableHead className="px-6">Abertura / Fechamento</TableHead>
+                              <TableHead className="text-right">Fundo</TableHead>
+                              <TableHead className="text-right">Entradas (Cash)</TableHead>
+                              <TableHead className="text-right">Total Final</TableHead>
                               <TableHead className="text-center">Status</TableHead>
                           </TableRow>
                       </TableHeader>
                       <TableBody>
                           {cashSessionsSafe.length > 0 ? cashSessionsSafe.map(cr => {
                               const sessionSales = calculateSalesForPeriod(cr.opened_at, cr.closed_at);
-                              const totalExpected = cr.opening_amount_cents + sessionSales.cash;
+                              const totalExpected = (cr.opening_amount_cents || 0) + sessionSales.cash;
                               return (
                               <TableRow key={cr.id} className="hover:bg-muted/5 transition-colors">
                                   <TableCell className="px-6">
-                                      <div className="flex flex-col text-xs">
+                                      <div className="flex flex-col text-[10px]">
                                         <span className="font-black uppercase">{format(parseISO(cr.opened_at), 'dd/MM/yy HH:mm')}</span>
                                         <span className="text-muted-foreground font-medium">{cr.closed_at ? format(parseISO(cr.closed_at), 'dd/MM/yy HH:mm') : 'Em andamento...'}</span>
                                       </div>
@@ -257,7 +261,7 @@ export default function CashPage() {
                               </TableRow>
                           )}) : (
                             <TableRow>
-                              <TableCell colSpan={5} className="text-center py-24 text-muted-foreground font-black uppercase text-[10px] tracking-widest opacity-40">Nenhuma sessão registrada</TableCell>
+                              <TableCell colSpan={5} className="text-center py-24 text-muted-foreground font-black uppercase text-[10px] tracking-widest opacity-40">Sem registros</TableCell>
                             </TableRow>
                           )}
                       </TableBody>

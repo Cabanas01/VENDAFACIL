@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -38,10 +39,9 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
     }
   });
 
-  const onSubmit = async (values: ComandaFormValues) => {
+  const handleOpenComanda = async (values: ComandaFormValues) => {
     setIsSubmitting(true);
     try {
-      // Chama o serviço centralizado via AuthContext
       const comandaId = await getOrCreateComanda(Number(values.mesa), values.cliente || null);
 
       toast({ 
@@ -52,11 +52,11 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
       onOpenChange(false);
       form.reset();
       
-      // Sincroniza UI antes de navegar
       await refreshStatus();
       if (onSuccess) await onSuccess();
       
       router.push(`/comandas/${comandaId}`);
+      router.refresh();
     } catch (err: any) {
       toast({ 
         variant: 'destructive', 
@@ -82,7 +82,7 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
         </div>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 p-8 bg-background">
+          <form onSubmit={form.handleSubmit(handleOpenComanda)} className="space-y-6 p-8 bg-background">
             <div className="grid grid-cols-1 gap-6">
               <FormField
                 control={form.control}
@@ -114,7 +114,7 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
                       <div className="relative">
                         <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground opacity-50" />
                         <Input 
-                          placeholder="Ex: Cliente Mesa 12" 
+                          placeholder="Ex: Cliente" 
                           {...field} 
                           value={field.value || ''}
                           className="h-12 pl-10 font-bold" 

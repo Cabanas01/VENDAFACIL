@@ -1,3 +1,4 @@
+
 'use client';
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -60,7 +61,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (storeId) {
-        // Leitura Passiva: O banco cuida do isolamento via RLS
         const [storeRes, prodRes, activeSalesRes, custRes, accessRes, historyRes, cashRes] = await Promise.all([
           supabase.from('stores').select('*').single(),
           supabase.from('products').select('*').order('name'),
@@ -72,11 +72,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         ]);
 
         setStore(storeRes.data || null);
-        setProducts(prodRes.data || []);
-        setActiveSales(activeSalesRes.data || []);
-        setCustomers(custRes.data || []);
-        setSalesHistory(historyRes.data || []);
-        setCashSessions(cashRes.data || []);
+        setProducts(Array.isArray(prodRes.data) ? prodRes.data : []);
+        setActiveSales(Array.isArray(activeSalesRes.data) ? activeSalesRes.data : []);
+        setCustomers(Array.isArray(custRes.data) ? custRes.data : []);
+        setSalesHistory(Array.isArray(historyRes.data) ? historyRes.data : []);
+        setCashSessions(Array.isArray(cashRes.data) ? cashRes.data : []);
         setAccessStatus(accessRes.data?.[0] || null);
         setStoreStatus('ready');
       } else {
@@ -104,7 +104,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, [fetchAppData]);
 
-  // Mutações delegadas ao ComandaService (v5.3)
   const getOrCreateComanda = async (table: number, customerName?: string | null) => {
     return ComandaService.getOrCreateComanda(table, customerName);
   };
