@@ -3,7 +3,7 @@
 /**
  * @fileOverview Fluxo de Chat de IA utilizando Genkit v1.x e Gemini 2.0 Flash.
  * 
- * - askAi: Função principal que processa conversas contextuais.
+ * - askAi: Função principal que processa conversas contextuais com tratamento de erros de segurança.
  */
 
 import {ai} from '@/ai/genkit';
@@ -49,6 +49,11 @@ export async function askAi(input: {
     console.error('[AI_CHAT_FLOW_ERROR]', error);
     
     const msg = (error.message || '').toLowerCase();
+    
+    if (msg.includes('leaked') || msg.includes('403')) {
+      return { text: '', error: 'API_KEY_LEAKED' };
+    }
+    
     if (msg.includes('quota') || msg.includes('429')) {
       return { text: '', error: 'QUOTA_EXCEEDED' };
     }

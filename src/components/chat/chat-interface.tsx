@@ -6,7 +6,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Bot, User, Send, Loader2, Sparkles, Settings, AlertTriangle, Clock } from 'lucide-react';
+import { Bot, User, Send, Loader2, Sparkles, Settings, AlertTriangle, Clock, ShieldAlert } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { askAi } from '@/ai/flows/ai-chat-flow';
 
@@ -28,7 +28,7 @@ export function ChatInterface({ title, subtitle, contextData, scope, suggestions
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [infraError, setInfraError] = useState<'CONFIG' | 'QUOTA' | null>(null);
+  const [infraError, setInfraError] = useState<'CONFIG' | 'QUOTA' | 'LEAKED' | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -60,6 +60,8 @@ export function ChatInterface({ title, subtitle, contextData, scope, suggestions
           setInfraError('CONFIG');
         } else if (result.error === 'QUOTA_EXCEEDED') {
           setInfraError('QUOTA');
+        } else if (result.error === 'API_KEY_LEAKED') {
+          setInfraError('LEAKED');
         } else {
           setMessages([...newMessages, { 
             role: 'model', 
@@ -90,10 +92,37 @@ export function ChatInterface({ title, subtitle, contextData, scope, suggestions
         <div className="space-y-4 max-w-sm px-6">
           <h3 className="text-xl font-black text-yellow-900 uppercase tracking-tighter">Configuração Pendente</h3>
           <p className="text-sm text-yellow-800 font-medium leading-relaxed opacity-80">
-            A chave <strong className="font-bold">GOOGLE_GENAI_API_KEY</strong> não foi detectada. Adicione-a nas variáveis de ambiente da Vercel.
+            A chave <strong className="font-bold">GOOGLE_GENAI_API_KEY</strong> não foi detectada. Adicione-a nas variáveis de ambiente.
           </p>
           <Button variant="outline" className="border-yellow-400 text-yellow-800 hover:bg-yellow-100 font-bold" onClick={() => window.location.reload()}>
             Revalidar Acesso
+          </Button>
+        </div>
+      </Card>
+    );
+  }
+
+  if (infraError === 'LEAKED') {
+    return (
+      <Card className="border-red-200 bg-red-50/30 py-16 flex flex-col items-center justify-center text-center">
+        <div className="p-5 bg-white rounded-full border border-red-200 shadow-sm mb-6">
+          <ShieldAlert className="h-10 w-10 text-red-500" />
+        </div>
+        <div className="space-y-4 max-w-sm px-6">
+          <h3 className="text-xl font-black text-red-900 uppercase tracking-tighter">Chave de API Revogada</h3>
+          <p className="text-sm text-red-800 font-medium leading-relaxed opacity-80">
+            Sua chave de API do Gemini foi marcada como <strong className="font-bold">vazada</strong> e desativada pelo Google por segurança.
+          </p>
+          <div className="p-4 bg-white rounded-lg border border-red-100 text-left space-y-2">
+            <p className="text-[10px] font-black uppercase text-muted-foreground">Como resolver:</p>
+            <ol className="text-xs space-y-1 list-decimal pl-4 font-bold text-red-900">
+              <li>Acesse o Google AI Studio</li>
+              <li>Gere uma NOVA chave de API</li>
+              <li>Atualize seu arquivo .env com a nova chave</li>
+            </ol>
+          </div>
+          <Button variant="destructive" className="w-full font-black uppercase text-xs tracking-widest h-12" onClick={() => window.location.reload()}>
+            Verificar Nova Chave
           </Button>
         </div>
       </Card>
@@ -134,7 +163,7 @@ export function ChatInterface({ title, subtitle, contextData, scope, suggestions
         </div>
         <Badge variant="outline" className="gap-1 bg-background border-primary/20 text-primary font-black uppercase text-[9px]">
           <Sparkles className="h-3 w-3" />
-          Gemini 1.5 Flash
+          Gemini 2.0 Flash
         </Badge>
       </CardHeader>
 
