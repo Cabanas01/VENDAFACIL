@@ -2,8 +2,6 @@
 
 /**
  * @fileOverview Página de Planos (Sincronizada e Segura)
- * 
- * Implementa proteção de hidratação e formatação defensiva de datas.
  */
 
 import { useState, useEffect, useMemo } from 'react';
@@ -74,17 +72,16 @@ export default function BillingPage() {
     window.open(finalUrl, '_blank');
   };
 
-  // Formatação segura de data para evitar exceções de cliente
   const formattedExpiryDate = useMemo(() => {
-    if (!accessStatus?.data_fim_acesso) return null;
+    if (!accessStatus?.expires_at) return null;
     try {
-      const date = parseISO(accessStatus.data_fim_acesso);
+      const date = parseISO(accessStatus.expires_at);
       if (!isValid(date)) return null;
       return format(date, "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
     } catch {
       return null;
     }
-  }, [accessStatus?.data_fim_acesso]);
+  }, [accessStatus?.expires_at]);
 
   if (!isMounted || storeStatus === 'loading_auth' || storeStatus === 'loading_status') {
     return (
@@ -122,7 +119,7 @@ export default function BillingPage() {
                 <div className="flex items-center justify-center md:justify-start gap-3">
                   <span className="text-3xl font-black uppercase tracking-tighter">{accessStatus?.plano_nome || 'Sem Plano'}</span>
                   <Badge variant={accessStatus?.acesso_liberado ? 'default' : 'destructive'} className="font-black text-[10px] uppercase h-5">
-                    {accessStatus?.acesso_liberado ? 'Ativo' : 'Bloqueado'}
+                    {accessStatus?.status || 'Bloqueado'}
                   </Badge>
                 </div>
                 <p className="text-sm text-muted-foreground font-bold italic opacity-80">{accessStatus?.mensagem}</p>
@@ -143,14 +140,14 @@ export default function BillingPage() {
           ) : (
             <div className="p-10 text-center border-dashed border-2 rounded-xl">
               <Info className="h-8 w-8 mx-auto text-muted-foreground opacity-50 mb-2" />
-              <p className="text-sm text-muted-foreground font-medium">Informações de acesso não localizadas.</p>
+              <p className="text-sm text-muted-foreground font-medium uppercase font-black tracking-widest">Nenhuma assinatura ativa.</p>
             </div>
           )}
           
           {accessStatus && !accessStatus?.acesso_liberado && (
             <div className="mt-4 flex items-center gap-2 text-[10px] text-orange-600 bg-orange-50 p-3 rounded-lg border border-orange-100 font-black uppercase tracking-widest">
               <AlertTriangle className="h-3 w-3" />
-              Aguardando confirmação bancária. A tela atualizará automaticamente em segundos.
+              Aguardando confirmação bancária ou renovação. A tela atualizará automaticamente em instantes.
             </div>
           )}
         </CardContent>

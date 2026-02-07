@@ -1,4 +1,3 @@
-
 'use client';
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -8,7 +7,7 @@ import type {
   Store, 
   Product, 
   Sale, 
-  CashRegister, 
+  CashSession, 
   StoreAccessStatus,
   Customer,
   User
@@ -22,7 +21,7 @@ type AuthContextType = {
   comandas: Sale[];
   sales: Sale[];
   customers: Customer[];
-  cashRegisters: CashRegister[];
+  cashSessions: CashSession[];
   storeStatus: 'loading_auth' | 'loading_status' | 'ready' | 'no_store' | 'error';
   
   refreshStatus: () => Promise<void>;
@@ -46,7 +45,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [salesHistory, setSalesHistory] = useState<Sale[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [cashRegisters, setCashRegistersState] = useState<CashRegister[]>([]);
+  const [cashSessions, setCashSessions] = useState<CashSession[]>([]);
   const [storeStatus, setStoreStatus] = useState<'loading_auth' | 'loading_status' | 'ready' | 'no_store' | 'error'>('loading_auth');
 
   const fetchAppData = useCallback(async (userId: string) => {
@@ -68,7 +67,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           supabase.from('customers').select('*').eq('store_id', storeId).order('name'),
           supabase.rpc('get_store_access_status', { p_store_id: storeId }),
           supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeId).eq('status', 'paid').order('created_at', { ascending: false }).limit(50),
-          supabase.from('cash_registers').select('*').eq('store_id', storeId).order('opened_at', { ascending: false })
+          supabase.from('cash_sessions').select('*').eq('store_id', storeId).order('opened_at', { ascending: false })
         ]);
 
         setStore(storeRes.data || null);
@@ -76,7 +75,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setActiveSales(activeSalesRes.data || []);
         setCustomers(custRes.data || []);
         setSalesHistory(historyRes.data || []);
-        setCashRegistersState(cashRes.data || []);
+        setCashSessions(cashRes.data || []);
         setAccessStatus(accessRes.data?.[0] || null);
         setStoreStatus('ready');
       } else {
@@ -143,7 +142,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider value={{ 
-      user, store, accessStatus, products, comandas: activeSales, activeSales, customers, sales: salesHistory, cashRegisters, storeStatus,
+      user, store, accessStatus, products, comandas: activeSales, activeSales, customers, sales: salesHistory, cashSessions, storeStatus,
       refreshStatus, createStore, getOrCreateSale, adicionarItem, fecharVenda, marcarItemConcluido, logout 
     }}>
       {children}

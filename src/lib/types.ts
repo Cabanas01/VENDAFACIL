@@ -1,4 +1,3 @@
-
 export type User = {
   id: string;
   email: string;
@@ -116,13 +115,14 @@ export type CartItem = {
   stock_qty?: number;
 };
 
-export type CashRegister = {
+export type CashSession = {
   id: string;
   store_id: string;
   opened_at: string;
   closed_at: string | null;
   opening_amount_cents: number;
   closing_amount_cents: number | null;
+  status: 'open' | 'closed';
 };
 
 export type Customer = {
@@ -150,7 +150,8 @@ export type ProductionSnapshotView = {
 
 export type StoreAccessStatus = {
     acesso_liberado: boolean;
-    data_fim_acesso: string | null;
+    expires_at: string | null;
+    status: string;
     plano_nome: string;
     mensagem: string;
 }

@@ -90,9 +90,10 @@ export default function ProductsPage() {
   const [stockFilter, setStockFilter] = useState('all');
   const { toast } = useToast();
   
+  const productsSafe = products ?? [];
   const barcodeInputRef = useRef<HTMLInputElement>(null);
 
-  const categories = useMemo(() => ['all', ...Array.from(new Set(products.map(p => p.category).filter(Boolean)))], [products]);
+  const categories = useMemo(() => ['all', ...Array.from(new Set(productsSafe.map(p => p.category).filter(Boolean)))], [productsSafe]);
 
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema),
@@ -114,7 +115,7 @@ export default function ProductsPage() {
   }, [cost, price]);
 
   const filteredProducts = useMemo(() => {
-    return products
+    return productsSafe
       .filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.category?.toLowerCase().includes(searchQuery.toLowerCase()))
       .filter(p => categoryFilter === 'all' || p.category === categoryFilter)
       .filter(p => statusFilter === 'all' || (statusFilter === 'active' && p.active) || (statusFilter === 'inactive' && !p.active))
@@ -124,7 +125,7 @@ export default function ProductsPage() {
           if (stockFilter === 'low' && p.min_stock_qty) return p.stock_qty > 0 && p.stock_qty <= p.min_stock_qty;
           return false;
       });
-  }, [products, searchQuery, categoryFilter, statusFilter, stockFilter]);
+  }, [productsSafe, searchQuery, categoryFilter, statusFilter, stockFilter]);
 
   const handleOpenModal = (product: Product | null = null) => {
     setEditingProduct(product);
@@ -209,10 +210,10 @@ export default function ProductsPage() {
   }
 
   const kpiData = useMemo(() => ({
-      noStock: products.filter(p => p.stock_qty === 0).length,
-      lowStock: products.filter(p => p.min_stock_qty && p.stock_qty > 0 && p.stock_qty <= p.min_stock_qty).length,
-      inactive: products.filter(p => !p.active).length,
-  }), [products]);
+      noStock: productsSafe.filter(p => p.stock_qty === 0).length,
+      lowStock: productsSafe.filter(p => p.min_stock_qty && p.stock_qty > 0 && p.stock_qty <= p.min_stock_qty).length,
+      inactive: productsSafe.filter(p => !p.active).length,
+  }), [productsSafe]);
 
   return (
     <>
