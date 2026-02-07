@@ -5,14 +5,14 @@ import { supabase } from './supabase/client';
 /**
  * @fileOverview SERVIÇO CANÔNICO v6.0 (DEFINITIVO)
  * 
- * Central de mutações transacionais. 
- * O store_id NÃO é enviado pelo client, sendo resolvido no banco via auth.uid().
+ * Central de mutações transacionais baseadas no padrão COMANDA-FIRST.
+ * O PostgreSQL é a autoridade máxima. O frontend apenas invoca as RPCs.
  */
 
 export const ComandaService = {
   /**
    * 1. Abre ou Recupera Comanda Aberta (PDV = Mesa 0)
-   * Assinatura: p_table_number (int), p_customer_name (text)
+   * Assinatura v5.3: p_table_number (int), p_customer_name (text)
    */
   async getOrCreateComanda(tableNumber: number, customerName: string | null = null) {
     const { data, error } = await supabase.rpc('rpc_get_or_create_open_comanda', {
@@ -25,12 +25,13 @@ export const ComandaService = {
       throw new Error(error.message);
     }
 
-    return data as string; // Retorna comanda_id
+    return data as string; // Retorna UUID da comanda
   },
 
   /**
    * 2. Adiciona Item à Comanda
-   * Assinatura: p_comanda_id (uuid), p_product_id (uuid), p_quantity (numeric)
+   * Assinatura v5.3: p_comanda_id (uuid), p_product_id (uuid), p_quantity (numeric)
+   * Nota: O banco resolve preço e subtotais automaticamente.
    */
   async adicionarItem(comandaId: string, productId: string, quantity: number) {
     const { error } = await supabase.rpc('rpc_add_item_to_comanda', {
@@ -47,7 +48,8 @@ export const ComandaService = {
 
   /**
    * 3. Fecha Comanda e Gera Venda (Atômico)
-   * Assinatura: p_comanda_id (uuid), p_payment_method (text)
+   * Assinatura v5.3: p_comanda_id (uuid), p_payment_method (text)
+   * Responsável por: criar registro em sales, vincular itens e liberar estoque.
    */
   async finalizarAtendimento(comandaId: string, paymentMethod: 'cash' | 'pix' | 'card') {
     const { error } = await supabase.rpc('rpc_close_comanda_to_sale', {
@@ -63,7 +65,8 @@ export const ComandaService = {
 
   /**
    * 4. Conclui Item na Produção (KDS/BDS)
-   * Assinatura: p_order_item_id (uuid)
+   * Assinatura v5.3: p_order_item_id (uuid)
+   * Move o status de 'pending' para 'done'.
    */
   async concluirPreparo(orderItemId: string) {
     const { error } = await supabase.rpc('rpc_mark_order_item_done', {

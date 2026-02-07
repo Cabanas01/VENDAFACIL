@@ -1,9 +1,9 @@
-
 'use client';
 
 /**
- * @fileOverview Gestão de Comandas.
- * Ajustado para consumir estritamente o status 'open' do backend real e blindado contra TypeError.
+ * @fileOverview Gestão de Atendimento (Comandas) v6.0
+ * 
+ * Fila de comandas abertas com suporte a mesas e balcão.
  */
 
 import { useEffect, useState, useMemo } from 'react';
@@ -19,12 +19,15 @@ import {
   ClipboardList,
   MapPin,
   User,
-  RefreshCw
+  RefreshCw,
+  Clock
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useRouter } from 'next/navigation';
 import { CreateComandaDialog } from '@/components/comandas/create-comanda-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
+import { formatDistanceToNow, parseISO } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 const formatCurrency = (val: number) => 
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((val || 0) / 100);
@@ -33,7 +36,6 @@ export default function ComandasPage() {
   const { store, refreshStatus, comandas, storeStatus } = useAuth();
   const router = useRouter();
   
-  const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [isNewComandaOpen, setIsNewComandaOpen] = useState(false);
 
@@ -41,13 +43,12 @@ export default function ComandasPage() {
     refreshStatus();
   }, [refreshStatus]);
 
-  // Filtro alinhado ao schema (status 'open') com blindagem contra undefined
   const filteredComandas = useMemo(() => {
     const safeComandas = Array.isArray(comandas) ? comandas : [];
     return safeComandas.filter(c => 
       c.status === 'open' && (
-        c.table_number?.toString().includes(search) || 
-        (c.customer_name || '').toLowerCase().includes(search.toLowerCase())
+        c.numero?.toString().includes(search) || 
+        (c.cliente_nome || '').toLowerCase().includes(search.toLowerCase())
       )
     );
   }, [comandas, search]);
@@ -97,7 +98,7 @@ export default function ComandasPage() {
             <CardHeader className="bg-muted/20 border-b py-4">
               <div className="flex justify-between items-start">
                 <CardTitle className="text-3xl font-black tracking-tighter">
-                  {comanda.table_number === 0 ? 'Balcão' : `Mesa ${comanda.table_number}`}
+                  {comanda.numero === 0 ? 'Balcão' : `Mesa ${comanda.numero}`}
                 </CardTitle>
                 <Badge variant="outline" className="text-[8px] font-black uppercase bg-background border-primary/20 text-primary">
                   {comanda.status}
@@ -105,16 +106,24 @@ export default function ComandasPage() {
               </div>
               <div className="flex flex-col gap-1 mt-2">
                 <div className="flex items-center gap-1.5 text-[10px] font-black uppercase text-primary">
-                  <MapPin className="h-3 w-3" /> {comanda.table_number === 0 ? 'Balcão / Direto' : `Mesa ${comanda.table_number}`}
+                  <MapPin className="h-3 w-3" /> {comanda.numero === 0 ? 'Balcão / Direto' : `Mesa ${comanda.numero}`}
                 </div>
                 <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground">
-                  <User className="h-3 w-3" /> {comanda.customer_name || 'Consumidor'}
+                  <User className="h-3 w-3" /> {comanda.cliente_nome || 'Consumidor'}
                 </div>
               </div>
             </CardHeader>
             <CardContent className="pt-6 pb-4">
-              <p className="text-[9px] uppercase font-black text-muted-foreground tracking-widest mb-1">Saldo Parcial</p>
-              <p className="text-2xl font-black text-foreground tracking-tighter">{formatCurrency(comanda.total_cents)}</p>
+              <div className="flex justify-between items-end">
+                <div>
+                  <p className="text-[9px] uppercase font-black text-muted-foreground tracking-widest mb-1">Saldo Parcial</p>
+                  <p className="text-2xl font-black text-foreground tracking-tighter">{formatCurrency(comanda.total_cents)}</p>
+                </div>
+                <div className="flex items-center gap-1 text-[9px] font-bold text-muted-foreground">
+                  <Clock className="h-3 w-3 opacity-40" />
+                  {formatDistanceToNow(parseISO(comanda.created_at), { locale: ptBR, addSuffix: false })}
+                </div>
+              </div>
             </CardContent>
             <CardFooter className="pt-0 pb-4 flex justify-end">
               <span className="text-[10px] font-black uppercase text-primary flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">

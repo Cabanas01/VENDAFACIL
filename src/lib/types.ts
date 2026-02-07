@@ -106,6 +106,9 @@ export type Sale = {
   created_at: string;
   items?: any[];
   customer_id?: string;
+  table_number?: number;
+  customer_name?: string | null;
+  status: 'open' | 'paid' | 'cancelled';
 };
 
 export type CartItem = {
@@ -147,6 +150,7 @@ export type ProductionSnapshotView = {
   created_at: string;
   store_id: string;
   sale_number?: string;
+  sale_id: string;
 };
 
 export type StoreAccessStatus = {

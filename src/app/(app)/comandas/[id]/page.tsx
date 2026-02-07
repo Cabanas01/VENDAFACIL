@@ -1,6 +1,12 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+/**
+ * @fileOverview Detalhes do Atendimento v6.0
+ * 
+ * Gestão de itens por comanda e fluxo de fechamento profissional.
+ */
+
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/components/auth-provider';
 import { supabase } from '@/lib/supabase/client';
@@ -19,12 +25,15 @@ import {
   Trash2, 
   ShoppingCart,
   Search,
-  UserCircle
+  UserCircle,
+  Clock,
+  Package
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import type { Sale, Product } from '@/lib/types';
+import { Badge } from '@/components/ui/badge';
+import type { Comanda, Product, ComandaItem } from '@/lib/types';
 
 const formatCurrency = (val: number) => 
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((val || 0) / 100);
@@ -35,7 +44,7 @@ export default function ComandaDetailsPage() {
   const { toast } = useToast();
   const router = useRouter();
 
-  const [sale, setSale] = useState<Sale | null>(null);
+  const [comanda, setComanda] = useState<Comanda | null>(null);
   const [loading, setLoading] = useState(true);
   
   const [isClosing, setIsClosing] = useState(false);
@@ -50,13 +59,13 @@ export default function ComandaDetailsPage() {
     setLoading(true);
     try {
       const { data, error } = await supabase
-        .from('sales')
-        .select('*, items:sale_items(*)')
+        .from('comandas')
+        .select('*, items:order_items(*)')
         .eq('id', id)
         .single();
 
       if (error) throw error;
-      setSale(data as Sale);
+      setComanda(data as Comanda);
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Erro ao carregar atendimento', description: err.message });
     } finally {
@@ -116,17 +125,17 @@ export default function ComandaDetailsPage() {
           </Button>
           <div className="space-y-1">
             <h1 className="text-4xl font-black font-headline uppercase tracking-tighter leading-none">
-              {sale?.table_number === 0 ? 'Balcão / PDV' : `Mesa ${sale?.table_number}`}
+              {comanda?.numero === 0 ? 'Balcão / PDV' : `Mesa ${comanda?.numero}`}
             </h1>
             <div className="flex items-center gap-2 text-muted-foreground">
               <UserCircle className="h-3 w-3" />
-              <span className="text-[10px] font-black uppercase tracking-widest">{sale?.customer_name || 'Consumidor'}</span>
+              <span className="text-[10px] font-black uppercase tracking-widest">{comanda?.cliente_nome || 'Consumidor'}</span>
             </div>
           </div>
         </div>
         <div className="text-right">
           <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Saldo Parcial</p>
-          <p className="text-4xl font-black text-primary tracking-tighter">{formatCurrency(sale?.total_cents || 0)}</p>
+          <p className="text-4xl font-black text-primary tracking-tighter">{formatCurrency(comanda?.total_cents || 0)}</p>
         </div>
       </div>
 
@@ -136,51 +145,59 @@ export default function ComandaDetailsPage() {
             <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Itens Consumidos</CardTitle>
             <Button size="sm" className="font-black uppercase text-[10px] h-9" onClick={() => setIsAddingItems(true)}>+ Lançar Pedido</Button>
           </CardHeader>
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/5">
-                <TableHead className="px-6 font-black uppercase text-[10px]">Descrição</TableHead>
-                <TableHead className="text-center font-black uppercase text-[10px]">Qtd</TableHead>
-                <TableHead className="text-right px-6 font-black uppercase text-[10px]">Subtotal</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {(sale?.items || []).map((item) => (
-                <TableRow key={item.id} className="hover:bg-muted/5 transition-colors">
-                  <TableCell className="px-6 py-4">
-                    <div className="flex flex-col">
-                      <span className="font-bold text-xs uppercase">{item.product_name_snapshot}</span>
-                      <span className="text-[9px] text-muted-foreground font-black uppercase tracking-widest">
-                        Status: {item.status}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-center font-black text-xs">x{item.quantity}</TableCell>
-                  <TableCell className="text-right px-6 font-black text-primary">
-                    {formatCurrency(item.subtotal_cents)}
-                  </TableCell>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/5">
+                  <TableHead className="px-6 font-black uppercase text-[10px]">Descrição</TableHead>
+                  <TableHead className="text-center font-black uppercase text-[10px]">Qtd</TableHead>
+                  <TableHead className="text-right px-6 font-black uppercase text-[10px]">Subtotal</TableHead>
                 </TableRow>
-              ))}
-              {(!sale?.items || sale.items.length === 0) && (
-                <TableRow>
-                  <TableCell colSpan={3} className="text-center py-12 text-muted-foreground font-black uppercase text-[10px] tracking-widest opacity-40">Nenhum item lançado</TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {(comanda?.items || []).map((item) => (
+                  <TableRow key={item.id} className="hover:bg-muted/5 transition-colors">
+                    <TableCell className="px-6 py-4">
+                      <div className="flex flex-col">
+                        <span className="font-bold text-xs uppercase">{item.product_name_snapshot}</span>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Badge variant="outline" className={cn(
+                            "text-[8px] font-black uppercase h-4 px-1.5",
+                            item.status === 'done' ? "bg-green-50 text-green-600 border-green-100" : "bg-orange-50 text-orange-600 border-orange-100"
+                          )}>
+                            {item.status === 'done' ? 'Pronto' : 'Pendente'}
+                          </Badge>
+                          <span className="text-[8px] text-muted-foreground font-bold uppercase">{item.destino_preparo}</span>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-center font-black text-xs">x{item.quantity}</TableCell>
+                    <TableCell className="text-right px-6 font-black text-primary">
+                      {formatCurrency(item.line_total)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {(!comanda?.items || comanda.items.length === 0) && (
+                  <TableRow>
+                    <TableCell colSpan={3} className="text-center py-12 text-muted-foreground font-black uppercase text-[10px] tracking-widest opacity-40">Nenhum item lançado</TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </Card>
 
         <div className="space-y-6">
           <Card className="border-primary/20 bg-primary/5 shadow-2xl h-fit rounded-[32px] overflow-hidden">
             <CardHeader className="text-center py-10 bg-primary/10">
               <CardTitle className="text-[10px] font-black uppercase tracking-[0.3em] text-primary">Total à Receber</CardTitle>
-              <p className="text-5xl font-black tracking-tighter mt-3 text-slate-900">{formatCurrency(sale?.total_cents || 0)}</p>
+              <p className="text-5xl font-black tracking-tighter mt-3 text-slate-900">{formatCurrency(comanda?.total_cents || 0)}</p>
             </CardHeader>
             <CardContent className="p-8">
               <Button 
                 className="w-full h-20 text-sm font-black uppercase tracking-[0.2em] shadow-2xl shadow-primary/20 rounded-[24px]" 
                 onClick={() => setIsClosing(true)} 
-                disabled={(sale?.total_cents || 0) <= 0}
+                disabled={(comanda?.total_cents || 0) <= 0}
               >
                 <CheckCircle2 className="mr-3 h-6 w-6" /> Fechar e Pagar
               </Button>
@@ -191,7 +208,7 @@ export default function ComandaDetailsPage() {
 
       <Dialog open={isAddingItems} onOpenChange={setIsAddingItems}>
         <DialogContent className="sm:max-w-4xl p-0 overflow-hidden rounded-[32px] border-none shadow-2xl">
-          <div className="flex h-[75vh]">
+          <div className="flex flex-col md:flex-row h-[85vh] md:h-[75vh]">
             <div className="flex-1 flex flex-col bg-white border-r">
               <div className="p-6 border-b bg-muted/5 flex items-center gap-4">
                 <Search className="text-muted-foreground h-5 w-5" />
@@ -204,8 +221,8 @@ export default function ComandaDetailsPage() {
               </div>
               <ScrollArea className="flex-1 p-6">
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  {products.filter(p => p.active && p.name.toLowerCase().includes(search.toLowerCase())).map(p => (
-                    <Card key={p.id} className="cursor-pointer hover:border-primary transition-all shadow-sm border-primary/5 bg-background h-36" onClick={() => {
+                  {products.filter(p => p.is_active && p.name.toLowerCase().includes(search.toLowerCase())).map(p => (
+                    <Card key={p.id} className="cursor-pointer hover:border-primary transition-all shadow-sm border-primary/5 bg-background h-36 group" onClick={() => {
                       const existing = localCart.find(i => i.product.id === p.id);
                       if (existing) setLocalCart(localCart.map(i => i.product.id === p.id ? {...i, qty: i.qty + 1} : i));
                       else setLocalCart([...localCart, {product: p, qty: 1}]);
@@ -214,7 +231,9 @@ export default function ComandaDetailsPage() {
                         <h3 className="font-black text-[11px] uppercase tracking-tighter text-slate-900 line-clamp-2">{p.name}</h3>
                         <div className="flex items-end justify-between">
                           <span className="text-primary font-black text-xl tracking-tighter">{formatCurrency(p.price_cents)}</span>
-                          <span className="text-[10px] font-black text-slate-300 uppercase">{p.stock_qty} UN</span>
+                          <div className="flex items-center gap-1 text-[9px] font-black text-slate-300 uppercase">
+                            <Package className="h-3 w-3" /> {p.stock_quantity}
+                          </div>
                         </div>
                       </CardContent>
                     </Card>
@@ -222,26 +241,35 @@ export default function ComandaDetailsPage() {
                 </div>
               </ScrollArea>
             </div>
-            <div className="w-80 flex flex-col bg-slate-50/50">
-              <div className="p-6 border-b font-black uppercase text-[10px] tracking-widest text-muted-foreground">Nova Seleção</div>
+            <div className="w-full md:w-80 flex flex-col bg-slate-50/50">
+              <div className="p-6 border-b font-black uppercase text-[10px] tracking-widest text-muted-foreground flex justify-between items-center">
+                <span>Nova Seleção</span>
+                {localCart.length > 0 && <Button variant="ghost" size="sm" className="h-6 text-[8px] uppercase" onClick={() => setLocalCart([])}>Limpar</Button>}
+              </div>
               <ScrollArea className="flex-1 p-6">
                 {localCart.map((item) => (
-                  <div key={item.product.id} className="flex justify-between items-center mb-4 bg-white p-4 rounded-2xl shadow-sm">
+                  <div key={item.product.id} className="flex justify-between items-center mb-4 bg-white p-4 rounded-2xl shadow-sm border border-primary/5">
                     <div className="flex flex-col">
                       <span className="text-[10px] font-black uppercase truncate max-w-[120px]">{item.product.name}</span>
-                      <span className="text-[9px] font-bold text-primary">x{item.qty}</span>
+                      <span className="text-[9px] font-bold text-primary">x{item.qty} · {formatCurrency(item.product.price_cents * item.qty)}</span>
                     </div>
-                    <Button variant="ghost" size="icon" className="text-red-400 rounded-full" onClick={() => setLocalCart(localCart.filter(i => i.product.id !== item.product.id))}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-red-400 rounded-full hover:bg-red-50" onClick={() => {
+                      if (item.qty > 1) setLocalCart(localCart.map(i => i.product.id === item.product.id ? {...i, qty: i.qty - 1} : i));
+                      else setLocalCart(localCart.filter(i => i.product.id !== item.product.id));
+                    }}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
                 ))}
                 {localCart.length === 0 && (
-                  <div className="py-20 text-center opacity-20"><ShoppingCart className="mx-auto h-10 w-10" /></div>
+                  <div className="py-20 text-center opacity-20 flex flex-col items-center gap-4">
+                    <ShoppingCart className="h-10 w-10" />
+                    <p className="text-[9px] font-black uppercase tracking-widest">Aguardando Itens</p>
+                  </div>
                 )}
               </ScrollArea>
               <div className="p-6 border-t bg-white space-y-4">
-                <Button className="w-full h-16 font-black uppercase text-xs tracking-widest rounded-2xl shadow-lg" disabled={localCart.length === 0 || isSubmitting} onClick={handleAddItemsFinal}>
+                <Button className="w-full h-16 font-black uppercase text-xs tracking-widest rounded-2xl shadow-xl shadow-primary/20" disabled={localCart.length === 0 || isSubmitting} onClick={handleAddItemsFinal}>
                   {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar Lançamento'}
                 </Button>
               </div>
@@ -256,20 +284,20 @@ export default function ComandaDetailsPage() {
             <button onClick={() => setIsClosing(false)} className="absolute right-6 top-6 h-10 w-10 rounded-full bg-white/10 flex items-center justify-center"><X className="h-5 w-5" /></button>
             <DialogTitle className="text-2xl font-black uppercase tracking-tighter">PAGAMENTO</DialogTitle>
             <DialogDescription className="text-white/40 uppercase font-bold text-[10px] mt-2 tracking-widest">
-              VALOR TOTAL: {formatCurrency(sale?.total_cents || 0)}
+              VALOR TOTAL: {formatCurrency(comanda?.total_cents || 0)}
             </DialogDescription>
           </div>
           <div className="p-10 space-y-4 bg-white">
-            <Button variant="outline" className="w-full h-24 justify-start gap-8 border-none bg-slate-50 hover:bg-slate-100 rounded-[32px] px-10 transition-all" onClick={() => handleFinalize('cash')}>
-              <div className="h-14 w-14 rounded-full bg-green-100 flex items-center justify-center shadow-inner"><CircleDollarSign className="text-green-600 h-7 w-7" /></div>
+            <Button variant="outline" className="w-full h-24 justify-start gap-8 border-none bg-slate-50 hover:bg-slate-100 rounded-[32px] px-10 transition-all group" onClick={() => handleFinalize('cash')}>
+              <div className="h-14 w-14 rounded-full bg-green-100 flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform"><CircleDollarSign className="text-green-600 h-7 w-7" /></div>
               <span className="font-black uppercase text-xs tracking-[0.2em]">Dinheiro</span>
             </Button>
-            <Button className="w-full h-24 justify-start gap-8 border-none bg-cyan-400 text-white hover:bg-cyan-500 rounded-[32px] px-10 shadow-2xl transition-all" onClick={() => handleFinalize('pix')}>
-              <div className="h-14 w-14 rounded-full bg-white/20 flex items-center justify-center shadow-inner"><QrCode className="text-white h-7 w-7" /></div>
-              <span className="font-black uppercase text-xs tracking-[0.2em]">PIX</span>
+            <Button className="w-full h-24 justify-start gap-8 border-none bg-cyan-400 text-white hover:bg-cyan-500 rounded-[32px] px-10 shadow-2xl transition-all group" onClick={() => handleFinalize('pix')}>
+              <div className="h-14 w-14 rounded-full bg-white/20 flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform"><QrCode className="text-white h-7 w-7" /></div>
+              <span className="font-black uppercase text-xs tracking-[0.2em]">PIX QR CODE</span>
             </Button>
-            <Button variant="outline" className="w-full h-24 justify-start gap-8 border-none bg-slate-50 hover:bg-slate-100 rounded-[32px] px-10 transition-all" onClick={() => handleFinalize('card')}>
-              <div className="h-14 w-14 rounded-full bg-blue-100 flex items-center justify-center shadow-inner"><CreditCard className="h-7 w-7 text-blue-600" /></div>
+            <Button variant="outline" className="w-full h-24 justify-start gap-8 border-none bg-slate-50 hover:bg-slate-100 rounded-[32px] px-10 transition-all group" onClick={() => handleFinalize('card')}>
+              <div className="h-14 w-14 rounded-full bg-blue-100 flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform"><CreditCard className="h-7 w-7 text-blue-600" /></div>
               <span className="font-black uppercase text-xs tracking-[0.2em]">Cartão</span>
             </Button>
           </div>
@@ -277,4 +305,8 @@ export default function ComandaDetailsPage() {
       </Dialog>
     </div>
   );
+}
+
+function cn(...classes: any[]) {
+  return classes.filter(Boolean).join(' ');
 }

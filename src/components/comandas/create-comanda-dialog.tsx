@@ -1,11 +1,14 @@
-
 'use client';
+
+/**
+ * @fileOverview Modal de Abertura de Atendimento v6.0
+ */
 
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Loader2, ClipboardList, User } from 'lucide-react';
+import { Loader2, ClipboardList, User, MapPin } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -15,7 +18,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 
 const comandaSchema = z.object({
-  mesa: z.coerce.number().int().min(1, 'Informe o número da mesa'),
+  mesa: z.coerce.number().int().min(0, 'Informe o número da mesa (0 para balcão)'),
   cliente: z.string().optional().nullable(),
 });
 
@@ -46,7 +49,7 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
 
       toast({ 
         title: 'Atendimento Iniciado', 
-        description: `Mesa ${values.mesa} aberta com sucesso.` 
+        description: values.mesa === 0 ? 'Balcão aberto com sucesso.' : `Mesa ${values.mesa} aberta com sucesso.` 
       });
 
       onOpenChange(false);
@@ -56,7 +59,6 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
       if (onSuccess) await onSuccess();
       
       router.push(`/comandas/${comandaId}`);
-      router.refresh();
     } catch (err: any) {
       toast({ 
         variant: 'destructive', 
@@ -76,8 +78,8 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
             <ClipboardList className="h-6 w-6 text-primary" />
           </div>
           <DialogHeader>
-            <DialogTitle className="text-2xl font-black font-headline uppercase tracking-tighter">Novo Atendimento</DialogTitle>
-            <DialogDescription className="text-sm font-medium">Informe a mesa para controle de consumo.</DialogDescription>
+            <DialogTitle className="text-2xl font-black font-headline uppercase tracking-tighter text-center">Novo Atendimento</DialogTitle>
+            <DialogDescription className="text-center font-medium text-sm">Informe a mesa para controle de consumo. Use "0" para pedidos diretos no balcão.</DialogDescription>
           </DialogHeader>
         </div>
 
@@ -89,17 +91,19 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
                 name="mesa"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Número da Mesa / Local *</FormLabel>
+                    <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                      <MapPin className="h-3 w-3" /> Número da Mesa / Local *
+                    </FormLabel>
                     <FormControl>
                       <Input 
                         type="number" 
                         placeholder="Ex: 12" 
                         {...field} 
-                        className="h-12 font-bold" 
+                        className="h-14 font-black text-xl border-primary/10 focus-visible:ring-primary/20 rounded-xl" 
                         autoFocus 
                       />
                     </FormControl>
-                    <FormMessage className="font-bold text-xs" />
+                    <FormMessage className="font-bold text-[10px] uppercase text-destructive" />
                   </FormItem>
                 )}
               />
@@ -109,30 +113,29 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
                 name="cliente"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nome do Cliente (Opcional)</FormLabel>
+                    <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                      <User className="h-3 w-3" /> Nome do Cliente (Opcional)
+                    </FormLabel>
                     <FormControl>
-                      <div className="relative">
-                        <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground opacity-50" />
-                        <Input 
-                          placeholder="Ex: Cliente" 
-                          {...field} 
-                          value={field.value || ''}
-                          className="h-12 pl-10 font-bold" 
-                        />
-                      </div>
+                      <Input 
+                        placeholder="Ex: João Silva" 
+                        {...field} 
+                        value={field.value || ''}
+                        className="h-14 font-bold rounded-xl border-primary/10 focus-visible:ring-primary/20" 
+                      />
                     </FormControl>
-                    <FormMessage className="font-bold text-xs" />
+                    <FormMessage className="font-bold text-[10px] uppercase text-destructive" />
                   </FormItem>
                 )}
               />
             </div>
 
             <DialogFooter className="pt-4 gap-3 sm:flex-row-reverse">
-              <Button type="submit" disabled={isSubmitting} className="flex-1 h-12 font-black uppercase text-[11px] tracking-widest shadow-lg">
+              <Button type="submit" disabled={isSubmitting} className="flex-1 h-14 font-black uppercase text-[11px] tracking-widest shadow-xl shadow-primary/20 rounded-xl">
                 {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                Confirmar Abertura
+                Abrir Atendimento
               </Button>
-              <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} className="flex-1 h-12 font-black uppercase text-[11px] tracking-widest" disabled={isSubmitting}>
+              <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} className="flex-1 h-14 font-black uppercase text-[11px] tracking-widest rounded-xl" disabled={isSubmitting}>
                 Cancelar
               </Button>
             </DialogFooter>

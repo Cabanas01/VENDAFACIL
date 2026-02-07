@@ -10,7 +10,8 @@ import type {
   CashSession, 
   StoreAccessStatus,
   Customer,
-  User
+  User,
+  Comanda
 } from '@/lib/types';
 
 type AuthContextType = {
@@ -18,7 +19,7 @@ type AuthContextType = {
   store: Store | null;
   accessStatus: StoreAccessStatus | null;
   products: Product[];
-  comandas: Sale[];
+  comandas: Comanda[];
   sales: Sale[];
   customers: Customer[];
   cashSessions: CashSession[];
@@ -42,7 +43,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [store, setStore] = useState<Store | null>(null);
   const [accessStatus, setAccessStatus] = useState<StoreAccessStatus | null>(null);
-  const [activeComandas, setActiveComandas] = useState<Sale[]>([]);
+  const [activeComandas, setActiveComandas] = useState<Comanda[]>([]);
   const [salesHistory, setSalesHistory] = useState<Sale[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -73,20 +74,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         ] = await Promise.all([
           supabase.from('stores').select('*').eq('id', storeId).single(),
           supabase.from('products').select('*').eq('store_id', storeId).order('name'),
-          supabase.from('comandas').select('*, items:order_items(*)').eq('store_id', storeId).eq('status', 'open').order('created_at', { ascending: true }),
+          supabase.from('comandas').select('*').eq('store_id', storeId).eq('status', 'open').order('created_at', { ascending: true }),
           supabase.from('customers').select('*').eq('store_id', storeId).order('name'),
-          supabase.from('sales').select('*, items:order_items(*)').eq('store_id', storeId).order('created_at', { ascending: false }).limit(50),
+          supabase.from('sales').select('*').eq('store_id', storeId).order('created_at', { ascending: false }).limit(50),
           supabase.from('cash_registers').select('*').eq('store_id', storeId).order('opened_at', { ascending: false }),
           supabase.rpc('get_store_access_status', { p_store_id: storeId }).catch(() => ({ data: null }))
         ]);
 
         setStore(storeRes.data || null);
         setProducts(Array.isArray(prodRes.data) ? prodRes.data : []);
-        setActiveComandas(Array.isArray(comandasRes.data) ? comandasRes.data : []);
+        setActiveComandas(Array.isArray(comandasRes.data) ? (comandasRes.data as Comanda[]) : []);
         setCustomers(Array.isArray(custRes.data) ? custRes.data : []);
-        setSalesHistory(Array.isArray(historyRes.data) ? historyRes.data : []);
+        setSalesHistory(Array.isArray(historyRes.data) ? (historyRes.data as Sale[]) : []);
         
-        // Mapear cash_registers para o formato esperado pela UI (cashSessions)
         const mappedSessions: CashSession[] = (cashRes.data || []).map(r => ({
           id: r.id,
           store_id: r.store_id,
