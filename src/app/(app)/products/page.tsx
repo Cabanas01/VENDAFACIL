@@ -1,20 +1,15 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { 
   Plus, 
   Search, 
   Edit, 
   Package, 
   Trash2, 
-  ArrowUpRight, 
-  ArrowDownRight, 
-  AlertCircle,
   Coins,
-  History,
   Loader2,
-  ChevronRight,
-  Database
+  ChevronRight
 } from 'lucide-react';
 
 import { PageHeader } from '@/components/page-header';
@@ -54,24 +49,21 @@ export default function ProductsPage() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
   
-  // Modais
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isStockOpen, setIsStockOpen] = useState(false);
   const [isCostOpen, setIsCostOpen] = useState(false);
   
-  // Seleção
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   
-  // Form States
   const [formData, setFormData] = useState({
     name: '',
     category: '',
     price_cents: '0',
     cost_cents: '0',
-    stock_qty: '0',
-    min_stock_qty: '0',
-    active: true
+    stock_quantity: '0',
+    min_stock: '0',
+    is_active: true
   });
 
   const [stockDelta, setStockDelta] = useState('0');
@@ -93,9 +85,9 @@ export default function ProductsPage() {
         category: formData.category || 'Geral',
         price_cents: reaisToCents(formData.price_cents),
         cost_cents: reaisToCents(formData.cost_cents),
-        stock_qty: parseInt(formData.stock_qty, 10),
-        min_stock_qty: parseInt(formData.min_stock_qty, 10),
-        active: formData.active
+        stock_quantity: parseInt(formData.stock_quantity, 10),
+        min_stock: parseInt(formData.min_stock, 10),
+        is_active: formData.is_active
       }]);
       if (error) throw error;
       toast({ title: 'Produto criado!' });
@@ -117,8 +109,8 @@ export default function ProductsPage() {
         name: formData.name,
         category: formData.category,
         price_cents: reaisToCents(formData.price_cents),
-        min_stock_qty: parseInt(formData.min_stock_qty, 10),
-        active: formData.active
+        min_stock: parseInt(formData.min_stock, 10),
+        is_active: formData.is_active
       }).eq('id', selectedProduct.id);
       if (error) throw error;
       toast({ title: 'Produto atualizado!' });
@@ -136,8 +128,8 @@ export default function ProductsPage() {
     if (!selectedProduct) return;
     setLoading(true);
     try {
-      const newQty = (selectedProduct.stock_qty || 0) + parseInt(stockDelta, 10);
-      const { error } = await supabase.from('products').update({ stock_qty: newQty }).eq('id', selectedProduct.id);
+      const newQty = (selectedProduct.stock_quantity || 0) + parseInt(stockDelta, 10);
+      const { error } = await supabase.from('products').update({ stock_quantity: newQty }).eq('id', selectedProduct.id);
       if (error) throw error;
       toast({ title: 'Estoque ajustado!' });
       setIsStockOpen(false);
@@ -172,7 +164,7 @@ export default function ProductsPage() {
   const handleSoftDelete = async (product: Product) => {
     if (!confirm(`Deseja realmente desativar o produto "${product.name}"? Ele deixará de aparecer no PDV.`)) return;
     try {
-      const { error } = await supabase.from('products').update({ active: false }).eq('id', product.id);
+      const { error } = await supabase.from('products').update({ is_active: false }).eq('id', product.id);
       if (error) throw error;
       toast({ title: 'Produto desativado.' });
       await refreshStatus();
@@ -188,9 +180,9 @@ export default function ProductsPage() {
       category: p.category || '',
       price_cents: p.price_cents.toString(),
       cost_cents: (p.cost_cents || 0).toString(),
-      stock_qty: p.stock_qty.toString(),
-      min_stock_qty: (p.min_stock_qty || 0).toString(),
-      active: p.active
+      stock_quantity: p.stock_quantity.toString(),
+      min_stock: (p.min_stock || 0).toString(),
+      is_active: p.is_active
     });
     setIsEditOpen(true);
   };
@@ -199,7 +191,7 @@ export default function ProductsPage() {
     <div className="space-y-8 animate-in fade-in duration-500">
       <PageHeader title="Meus Produtos" subtitle="Gestão de catálogo, custos e estoque em tempo real.">
         <Button onClick={() => {
-          setFormData({ name: '', category: '', price_cents: '0', cost_cents: '0', stock_qty: '0', min_stock_qty: '0', active: true });
+          setFormData({ name: '', category: '', price_cents: '0', cost_cents: '0', stock_quantity: '0', min_stock: '0', is_active: true });
           setIsCreateOpen(true);
         }} className="font-black uppercase text-[10px] tracking-widest shadow-lg shadow-primary/20 h-11 px-6">
           <Plus className="h-4 w-4 mr-2" /> Novo Produto
@@ -231,9 +223,9 @@ export default function ProductsPage() {
             </TableHeader>
             <TableBody>
               {filteredProducts.map(p => {
-                const isLowStock = (p.stock_qty || 0) <= (p.min_stock_qty || 0);
+                const isLowStock = (p.stock_quantity || 0) <= (p.min_stock || 0);
                 return (
-                  <TableRow key={p.id} className={cn("hover:bg-primary/5 transition-colors group", !p.active && "opacity-50 grayscale bg-muted/5")}>
+                  <TableRow key={p.id} className={cn("hover:bg-primary/5 transition-colors group", !p.is_active && "opacity-50 grayscale bg-muted/5")}>
                     <TableCell className="px-6 py-4">
                       <div className="flex flex-col">
                         <span className="font-black text-sm uppercase tracking-tight">{p.name}</span>
@@ -251,12 +243,12 @@ export default function ProductsPage() {
                         variant={isLowStock ? 'destructive' : 'outline'} 
                         className={cn("font-black h-6 min-w-[40px] justify-center", isLowStock ? "animate-pulse" : "bg-green-50 text-green-600 border-green-100")}
                       >
-                        {p.stock_qty}
+                        {p.stock_quantity}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-center">
-                      <Badge variant={p.active ? 'default' : 'secondary'} className="text-[8px] font-black uppercase tracking-tighter">
-                        {p.active ? 'Ativo' : 'Inativo'}
+                      <Badge variant={p.is_active ? 'default' : 'secondary'} className="text-[8px] font-black uppercase tracking-tighter">
+                        {p.is_active ? 'Ativo' : 'Inativo'}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right px-6">
@@ -290,7 +282,6 @@ export default function ProductsPage() {
         </div>
       </Card>
 
-      {/* MODAL: CRIAR PRODUTO */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden rounded-[32px] border-none shadow-2xl">
           <div className="bg-primary/5 py-10 text-center border-b">
@@ -316,11 +307,11 @@ export default function ProductsPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Estoque Inicial</Label>
-                  <Input type="number" value={formData.stock_qty} onChange={e => setFormData({...formData, stock_qty: e.target.value})} className="h-12 font-bold" />
+                  <Input type="number" value={formData.stock_quantity} onChange={e => setFormData({...formData, stock_quantity: e.target.value})} className="h-12 font-bold" />
                 </div>
                 <div className="space-y-2">
                   <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Estoque Mínimo</Label>
-                  <Input type="number" value={formData.min_stock_qty} onChange={e => setFormData({...formData, min_stock_qty: e.target.value})} className="h-12 font-bold border-red-100" />
+                  <Input type="number" value={formData.min_stock} onChange={e => setFormData({...formData, min_stock: e.target.value})} className="h-12 font-bold border-red-100" />
                 </div>
               </div>
             </div>
@@ -331,7 +322,6 @@ export default function ProductsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* MODAL: EDITAR GERAL */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden rounded-[32px] border-none shadow-2xl">
           <div className="bg-primary/5 py-10 text-center border-b">
@@ -352,7 +342,7 @@ export default function ProductsPage() {
                   <Label className="text-[10px] font-black uppercase tracking-widest">Produto Ativo</Label>
                   <p className="text-[9px] text-muted-foreground font-bold">Disponível para venda no PDV</p>
                 </div>
-                <Switch checked={formData.active} onCheckedChange={val => setFormData({...formData, active: val})} />
+                <Switch checked={formData.is_active} onCheckedChange={val => setFormData({...formData, is_active: val})} />
               </div>
             </div>
             <Button type="submit" disabled={loading} className="w-full h-14 font-black uppercase text-[11px] tracking-widest shadow-lg">
@@ -362,7 +352,6 @@ export default function ProductsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* MODAL: AJUSTAR ESTOQUE */}
       <Dialog open={isStockOpen} onOpenChange={setIsStockOpen}>
         <DialogContent className="sm:max-w-xs p-0 overflow-hidden rounded-[32px] border-none shadow-2xl">
           <div className="bg-orange-50 py-10 text-center border-b border-orange-100">
@@ -383,7 +372,7 @@ export default function ProductsPage() {
                 autoFocus 
               />
               <p className="text-[10px] font-bold text-muted-foreground mt-2 italic">
-                Saldo atual: <span className="text-foreground">{selectedProduct?.stock_qty}</span>
+                Saldo atual: <span className="text-foreground">{selectedProduct?.stock_quantity}</span>
               </p>
             </div>
             <Button type="submit" disabled={loading} className="w-full h-14 font-black uppercase text-[11px] tracking-widest bg-orange-500 hover:bg-orange-600 shadow-xl shadow-orange-500/20">
@@ -393,7 +382,6 @@ export default function ProductsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* MODAL: AJUSTAR CUSTO */}
       <Dialog open={isCostOpen} onOpenChange={setIsCostOpen}>
         <DialogContent className="sm:max-w-xs p-0 overflow-hidden rounded-[32px] border-none shadow-2xl">
           <div className="bg-green-50 py-10 text-center border-b border-green-100">

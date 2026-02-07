@@ -2,9 +2,6 @@
 
 /**
  * @fileOverview Página de Dashboard de Produtos
- * 
- * Visão gerencial do estoque e catálogo.
- * Implementação defensiva para evitar exceções client-side.
  */
 
 import { useMemo, useState } from 'react';
@@ -14,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Search, Package, Plus } from 'lucide-react';
+import { Search, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
 
@@ -33,16 +30,15 @@ export default function ProductsDashboardPage() {
     return safeProducts.filter(p => {
       const productName = (p?.name || '').toLowerCase();
       const productCat = (p?.category || '').toLowerCase();
-      const productBarcode = (p?.barcode || '').toLowerCase();
-      return productName.includes(term) || productCat.includes(term) || productBarcode.includes(term);
+      return productName.includes(term) || productCat.includes(term);
     });
   }, [safeProducts, search]);
 
   const stats = useMemo(() => {
     const totalItems = safeProducts.length;
-    const lowStock = safeProducts.filter(p => (p.stock_qty || 0) <= (p.min_stock_qty || 0)).length;
-    const totalInventoryValue = safeProducts.reduce((acc, p) => acc + ((p.price_cents || 0) * (p.stock_qty || 0)), 0);
-    const totalCostValue = safeProducts.reduce((acc, p) => acc + ((p.cost_cents || 0) * (p.stock_qty || 0)), 0);
+    const lowStock = safeProducts.filter(p => (p.stock_quantity || 0) <= (p.min_stock || 0)).length;
+    const totalInventoryValue = safeProducts.reduce((acc, p) => acc + ((p.price_cents || 0) * (p.stock_quantity || 0)), 0);
+    const totalCostValue = safeProducts.reduce((acc, p) => acc + ((p.cost_cents || 0) * (p.stock_quantity || 0)), 0);
 
     return { totalItems, lowStock, totalInventoryValue, totalCostValue };
   }, [safeProducts]);
@@ -123,7 +119,7 @@ export default function ProductsDashboardPage() {
                   const price = p.price_cents || 0;
                   const cost = p.cost_cents || 0;
                   const margin = price > 0 ? ((price - cost) / price) * 100 : 0;
-                  const isLow = (p.stock_qty || 0) <= (p.min_stock_qty || 0);
+                  const isLow = (p.stock_quantity || 0) <= (p.min_stock || 0);
                   return (
                     <TableRow key={p.id} className="hover:bg-muted/5">
                       <TableCell className="font-bold">
@@ -140,7 +136,7 @@ export default function ProductsDashboardPage() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-center">
-                        <span className={`font-black ${isLow ? 'text-destructive' : 'text-primary'}`}>{p.stock_qty || 0}</span>
+                        <span className={`font-black ${isLow ? 'text-destructive' : 'text-primary'}`}>{p.stock_quantity || 0}</span>
                       </TableCell>
                     </TableRow>
                   );

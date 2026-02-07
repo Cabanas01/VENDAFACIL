@@ -59,9 +59,9 @@ export type Product = {
   category?: string;
   price_cents: number;
   cost_cents?: number;
-  stock_qty: number;
-  min_stock_qty?: number;
-  active: boolean;
+  stock_quantity: number;
+  min_stock?: number;
+  is_active: boolean;
   barcode?: string;
   created_at: string;
   production_target: 'cozinha' | 'bar' | 'nenhum';
@@ -113,7 +113,7 @@ export type CartItem = {
   product_name_snapshot: string;
   qty: number;
   unit_price_cents: number;
-  stock_qty?: number;
+  stock_quantity?: number;
 };
 
 export type CashSession = {

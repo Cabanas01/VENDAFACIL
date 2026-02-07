@@ -1,8 +1,7 @@
 'use client';
 
 /**
- * @fileOverview Frente de Caixa (PDV) v5.3
- * Sincronizado com ComandaService (Mesa 0).
+ * @fileOverview Frente de Caixa (PDV)
  */
 
 import { useState, useMemo } from 'react';
@@ -54,7 +53,7 @@ export default function NewSalePDVPage() {
   const filteredProducts = useMemo(() => {
     const term = (search || '').toLowerCase();
     const safeProducts = Array.isArray(products) ? products : [];
-    return safeProducts.filter(p => (
+    return safeProducts.filter(p => p.is_active && (
       p.name.toLowerCase().includes(term) || (p.barcode && p.barcode.includes(term))
     ));
   }, [products, search]);
@@ -76,7 +75,7 @@ export default function NewSalePDVPage() {
         product_name_snapshot: product.name,
         qty: 1,
         unit_price_cents: product.price_cents,
-        stock_qty: product.stock_qty
+        stock_quantity: product.stock_quantity
       }]);
     }
   };
@@ -86,15 +85,12 @@ export default function NewSalePDVPage() {
     
     setIsSubmitting(true);
     try {
-      // 1. Inicia Comanda no Balcão (Mesa 0)
       const comandaId = await getOrCreateComanda(0, customerName || 'Consumidor PDV');
       
-      // 2. Lança Itens via RPC
       for (const item of cart) {
         await adicionarItem(comandaId, item.product_id, item.qty);
       }
       
-      // 3. Fecha Atendimento (Faturamento Atômico)
       await finalizarAtendimento(comandaId, method);
       
       toast({ title: 'Venda Concluída!', description: `Valor: ${formatCurrency(cartTotalDisplay)}` });
@@ -145,7 +141,7 @@ export default function NewSalePDVPage() {
                     <h3 className="font-black text-[11px] leading-tight line-clamp-2 uppercase tracking-tighter group-hover:text-primary transition-colors">{product.name}</h3>
                     <div className="flex items-end justify-between">
                       <span className="text-primary font-black text-xl tracking-tighter">{formatCurrency(product.price_cents)}</span>
-                      <span className="text-[10px] font-black text-slate-300 uppercase">{product.stock_qty} UN</span>
+                      <span className="text-[10px] font-black text-slate-300 uppercase">{product.stock_quantity} UN</span>
                     </div>
                   </CardContent>
                 </Card>
