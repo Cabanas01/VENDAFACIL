@@ -58,9 +58,9 @@ export type Product = {
   name: string;
   category?: string;
   price_cents: number;
-  cost_cents?: number;
+  cost_cents: number;
   stock_quantity: number;
-  min_stock?: number;
+  min_stock: number;
   is_active: boolean;
   barcode?: string;
   created_at: string;
