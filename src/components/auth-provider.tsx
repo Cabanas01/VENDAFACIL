@@ -1,4 +1,3 @@
-
 'use client';
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -27,6 +26,7 @@ type AuthContextType = {
   
   refreshStatus: () => Promise<void>;
   createStore: (storeData: any) => Promise<void>;
+  addCustomer: (customerData: Partial<Customer>) => Promise<void>;
   
   getOrCreateComanda: (table: number, customerName?: string | null) => Promise<string>;
   adicionarItem: (comandaId: string, productId: string, quantity: number) => Promise<void>;
@@ -62,7 +62,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (storeId) {
-        // Consultas segregadas: Comandas (abertas) vs Vendas (finalizadas)
         const [
           storeRes, 
           prodRes, 
@@ -77,7 +76,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           supabase.from('comandas').select('*, items:order_items(*)').eq('store_id', storeId).eq('status', 'open').order('created_at', { ascending: true }),
           supabase.from('customers').select('*').eq('store_id', storeId).order('name'),
           supabase.from('sales').select('*, items:order_items(*)').eq('store_id', storeId).order('created_at', { ascending: false }).limit(50),
-          supabase.from('cash_sessions').select('*').eq('store_id', storeId).order('opened_at', { ascending: false }),
+          supabase.from('cash_registers').select('*').eq('store_id', storeId).order('opened_at', { ascending: false }),
           supabase.rpc('get_store_access_status', { p_store_id: storeId }).catch(() => ({ data: null }))
         ]);
 
@@ -86,7 +85,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setActiveComandas(Array.isArray(comandasRes.data) ? comandasRes.data : []);
         setCustomers(Array.isArray(custRes.data) ? custRes.data : []);
         setSalesHistory(Array.isArray(historyRes.data) ? historyRes.data : []);
-        setCashSessions(Array.isArray(cashRes.data) ? cashRes.data : []);
+        
+        // Mapear cash_registers para o formato esperado pela UI (cashSessions)
+        const mappedSessions: CashSession[] = (cashRes.data || []).map(r => ({
+          id: r.id,
+          store_id: r.store_id,
+          opened_at: r.opened_at,
+          closed_at: r.closed_at,
+          opening_amount_cents: r.opening_amount_cents || r.opening_amount || 0,
+          closing_amount_cents: r.closing_amount_cents || r.closing_amount || null,
+          status: r.status as 'open' | 'closed'
+        }));
+        
+        setCashSessions(mappedSessions);
         setAccessStatus(accessRes?.data?.[0] || null);
         setStoreStatus('ready');
       } else {
@@ -102,6 +113,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { user: sessionUser } } = await supabase.auth.getUser();
     if (sessionUser) await fetchAppData(sessionUser.id);
   }, [fetchAppData]);
+
+  const addCustomer = async (data: Partial<Customer>) => {
+    if (!store?.id) return;
+    const { error } = await supabase.from('customers').insert([{
+      ...data,
+      store_id: store.id
+    }]);
+    if (error) throw error;
+    await refreshStatus();
+  };
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user: sessionUser } }) => {
@@ -151,8 +172,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider value={{ 
-      user, store, accessStatus, products, comandas: activeComandas, activeSales: activeComandas, customers, sales: salesHistory, cashSessions, storeStatus,
-      refreshStatus, createStore, getOrCreateComanda, adicionarItem, finalizarAtendimento, concluirPreparo, logout 
+      user, store, accessStatus, products, comandas: activeComandas, customers, sales: salesHistory, cashSessions, storeStatus,
+      refreshStatus, createStore, addCustomer, getOrCreateComanda, adicionarItem, finalizarAtendimento, concluirPreparo, logout 
     }}>
       {children}
     </AuthContext.Provider>

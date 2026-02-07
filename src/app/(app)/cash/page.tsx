@@ -1,9 +1,8 @@
-
 'use client';
 
 /**
- * @fileOverview Gestão de Caixa v6.0.
- * Sincronizado com o contexto global e UI profissional.
+ * @fileOverview Gestão de Caixa v6.1.
+ * Corrigido nome da tabela para cash_registers e sincronização global.
  */
 
 import { useEffect, useState, useMemo } from 'react';
@@ -57,7 +56,7 @@ export default function CaixaPage() {
     try {
       const amountCents = Math.round(Number(openingAmount.replace(',', '.')) * 100);
       
-      const { error } = await supabase.from('cash_sessions').insert({
+      const { error } = await supabase.from('cash_registers').insert({
         store_id: store.id,
         opening_amount_cents: amountCents,
         status: 'open',
@@ -86,7 +85,7 @@ export default function CaixaPage() {
       const finalCents = Math.round(Number(closingAmount.replace(',', '.')) * 100);
 
       const { error } = await supabase
-        .from('cash_sessions')
+        .from('cash_registers')
         .update({
           closing_amount_cents: finalCents,
           status: 'closed',
@@ -121,7 +120,6 @@ export default function CaixaPage() {
       <PageHeader title="Fluxo de Caixa" subtitle="Gestão financeira e controle de turno." />
 
       <div className="grid gap-8 md:grid-cols-2">
-        {/* LADO ESQUERDO: FORMULÁRIO DE OPERAÇÃO */}
         {!openSession ? (
           <Card className="border-none shadow-xl rounded-[32px] overflow-hidden">
             <div className="bg-primary/5 p-10 text-center border-b">
@@ -149,7 +147,7 @@ export default function CaixaPage() {
                     />
                   </div>
                 </div>
-                <Button className="w-full h-16 font-black uppercase text-xs tracking-widest shadow-lg shadow-primary/20 rounded-2xl" disabled={loading}>
+                <Button type="submit" className="w-full h-16 font-black uppercase text-xs tracking-widest shadow-lg shadow-primary/20 rounded-2xl" disabled={loading}>
                   {loading ? <Loader2 className="animate-spin h-5 w-5" /> : <CircleDollarSign className="mr-2 h-5 w-5" />}
                   Abrir Caixa Agora
                 </Button>
@@ -165,7 +163,7 @@ export default function CaixaPage() {
               <CardTitle className="text-3xl font-black font-headline uppercase tracking-tighter text-green-900">Operação Ativa</CardTitle>
               <div className="flex items-center justify-center gap-2 mt-3">
                 <Badge variant="outline" className="bg-green-500/10 text-green-700 border-green-500/20 uppercase font-black text-[9px]">Aberto</Badge>
-                <span className="text-xs font-bold text-green-700/60">desde {format(parseISO(openSession.opened_at), "HH:mm 'de' dd/MM")}</span>
+                <span className="text-xs font-bold text-green-700/60">desde {openSession.opened_at ? format(parseISO(openSession.opened_at), "HH:mm 'de' dd/MM") : '--:--'}</span>
               </div>
             </div>
             <CardContent className="p-10 space-y-8">
@@ -175,8 +173,8 @@ export default function CaixaPage() {
                   <p className="text-xl font-black">{formatCurrency(openSession.opening_amount_cents)}</p>
                 </div>
                 <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10">
-                  <p className="text-[9px] font-black uppercase text-primary mb-1">Entrou hoje</p>
-                  <p className="text-xl font-black text-primary">---</p>
+                  <p className="text-[9px] font-black uppercase text-primary mb-1">Status</p>
+                  <p className="text-xl font-black text-primary uppercase">Ativo</p>
                 </div>
               </div>
 
@@ -193,7 +191,7 @@ export default function CaixaPage() {
                     required
                   />
                 </div>
-                <Button variant="destructive" className="w-full h-16 font-black uppercase text-xs tracking-widest shadow-lg shadow-red-500/20 rounded-2xl" disabled={loading}>
+                <Button type="submit" variant="destructive" className="w-full h-16 font-black uppercase text-xs tracking-widest shadow-lg shadow-red-500/20 rounded-2xl" disabled={loading}>
                   {loading ? <Loader2 className="animate-spin h-5 w-5" /> : <Lock className="mr-2 h-5 w-5" />}
                   Encerrar Turno e Fechar
                 </Button>
@@ -224,7 +222,7 @@ export default function CaixaPage() {
                     <TableRow key={s.id} className="hover:bg-muted/5">
                       <TableCell className="px-6">
                         <div className="flex flex-col">
-                          <span className="font-bold text-[10px]">{format(parseISO(s.opened_at), 'dd/MM/yy HH:mm')}</span>
+                          <span className="font-bold text-[10px]">{s.opened_at ? format(parseISO(s.opened_at), 'dd/MM/yy HH:mm') : '--/--'}</span>
                           <span className="text-[9px] text-muted-foreground">{s.closed_at ? format(parseISO(s.closed_at), 'HH:mm') : '—'}</span>
                         </div>
                       </TableCell>

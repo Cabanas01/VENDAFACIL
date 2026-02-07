@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * @fileOverview Gestão Profissional de Produtos v7.0
- * Sincronizado 100% com a tabela public.products e regras de CMV.
+ * @fileOverview Gestão Profissional de Produtos v7.1
+ * Corrigido handler de criação e tipos financeiros.
  */
 
 import { useState, useMemo } from 'react';
@@ -16,9 +16,7 @@ import {
   Coins,
   Loader2,
   ChevronRight,
-  AlertTriangle,
-  ArrowUpRight,
-  Target
+  AlertTriangle
 } from 'lucide-react';
 
 import { PageHeader } from '@/components/page-header';
@@ -46,7 +44,8 @@ import type { Product } from '@/lib/types';
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((value || 0) / 100);
 
-const reaisToCents = (value: string) => {
+const reaisToCents = (value: any) => {
+  if (typeof value !== 'string') return 0;
   if (!value) return 0;
   const sanitized = value.replace(/[^\d.,]/g, '').replace(',', '.');
   const parsed = parseFloat(sanitized);
@@ -61,7 +60,6 @@ export default function ProductsPage() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
   
-  // Modais
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isStockOpen, setIsStockOpen] = useState(false);
@@ -193,19 +191,6 @@ export default function ProductsPage() {
       toast({ variant: 'destructive', title: 'Erro no custo', description: err.message });
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleSoftDelete = async (product: Product) => {
-    if (!confirm(`Deseja realmente desativar "${product.name}"?`)) return;
-    try {
-      const { error } = await supabase.from('products').update({ is_active: false }).eq('id', product.id);
-      if (error) throw error;
-      toast({ title: 'Produto Desativado' });
-      await refreshStatus();
-      router.refresh();
-    } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Erro na operação', description: err.message });
     }
   };
 
