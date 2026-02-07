@@ -7,7 +7,7 @@ import { ComandaService } from '@/lib/rpc';
 import type { 
   Store, 
   Product, 
-  Comanda,
+  Sale, 
   CashRegister, 
   StoreAccessStatus,
   Customer,
@@ -19,7 +19,8 @@ type AuthContextType = {
   store: Store | null;
   accessStatus: StoreAccessStatus | null;
   products: Product[];
-  comandas: Comanda[];
+  activeSales: Sale[];
+  salesHistory: Sale[];
   customers: Customer[];
   cashRegisters: CashRegister[];
   storeStatus: 'loading_auth' | 'loading_status' | 'ready' | 'no_store' | 'error';
@@ -27,10 +28,11 @@ type AuthContextType = {
   refreshStatus: () => Promise<void>;
   createStore: (storeData: any) => Promise<void>;
   
-  getOrCreateComanda: (tableNumber: number, customerName: string | null) => Promise<string>;
-  adicionarItem: (comandaId: string, productId: string, quantity: number) => Promise<void>;
-  finalizarAtendimento: (comandaId: string, paymentMethod: 'dinheiro' | 'pix' | 'cartao') => Promise<void>;
-  concluirPreparo: (itemId: string) => Promise<void>;
+  // Operações de Atendimento (RPC-Only)
+  getOrCreateSale: (table: string) => Promise<string>;
+  adicionarItem: (payload: any) => Promise<void>;
+  fecharVenda: (saleId: string, method: 'cash' | 'pix' | 'card') => Promise<void>;
+  marcarItemConcluido: (itemId: string) => Promise<void>;
   
   logout: () => Promise<void>;
 };
@@ -41,7 +43,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [store, setStore] = useState<Store | null>(null);
   const [accessStatus, setAccessStatus] = useState<StoreAccessStatus | null>(null);
-  const [comandas, setComandas] = useState<Comanda[]>([]);
+  const [activeSales, setActiveSales] = useState<Sale[]>([]);
+  const [salesHistory, setSalesHistory] = useState<Sale[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [cashRegisters, setCashRegistersState] = useState<CashRegister[]>([]);
@@ -50,7 +53,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fetchAppData = useCallback(async (userId: string) => {
     setStoreStatus('loading_status');
     try {
-      // 1. Resolver StoreId (Owner ou Member)
       const { data: ownerStore } = await supabase.from('stores').select('id').eq('user_id', userId).maybeSingle();
       let storeId = ownerStore?.id;
 
@@ -60,19 +62,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (storeId) {
-        const [storeRes, prodRes, cmdRes, custRes, accessRes, cashRes] = await Promise.all([
+        // Busca paralela de dados (True Sync)
+        const [storeRes, prodRes, activeSalesRes, custRes, accessRes, historyRes, cashRes] = await Promise.all([
           supabase.from('stores').select('*').eq('id', storeId).single(),
           supabase.from('products').select('*').eq('store_id', storeId).order('name'),
-          supabase.from('comandas').select('*, items:comanda_items(*)').eq('store_id', storeId).eq('status', 'aberta').order('created_at', { ascending: true }),
+          supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeId).eq('status', 'open').order('created_at', { ascending: true }),
           supabase.from('customers').select('*').eq('store_id', storeId).order('name'),
           supabase.rpc('get_store_access_status', { p_store_id: storeId }),
+          supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeId).eq('status', 'paid').order('created_at', { ascending: false }).limit(50),
           supabase.from('cash_registers').select('*').eq('store_id', storeId).order('opened_at', { ascending: false })
         ]);
 
         setStore(storeRes.data || null);
         setProducts(prodRes.data || []);
-        setComandas(cmdRes.data || []);
+        setActiveSales(activeSalesRes.data || []);
         setCustomers(custRes.data || []);
+        setSalesHistory(historyRes.data || []);
         setCashRegistersState(cashRes.data || []);
         setAccessStatus(accessRes.data?.[0] || null);
         setStoreStatus('ready');
@@ -100,22 +105,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, [fetchAppData]);
 
-  const getOrCreateComanda = async (tableNumber: number, customerName: string | null) => {
+  const getOrCreateSale = async (table: string) => {
     if (!store?.id) throw new Error('Unidade não identificada.');
-    return ComandaService.getOrCreateComanda(store.id, tableNumber);
+    return ComandaService.getOrCreateSale(store.id, table);
   };
 
-  const adicionarItem = async (comandaId: string, productId: string, quantity: number) => {
-    await ComandaService.adicionarItem(comandaId, productId, Number(quantity));
-  };
-
-  const finalizarAtendimento = async (comandaId: string, paymentMethod: 'dinheiro' | 'pix' | 'cartao') => {
-    await ComandaService.finalizarAtendimento(comandaId, paymentMethod);
+  const adicionarItem = async (payload: any) => {
+    await ComandaService.adicionarItem(payload);
     await refreshStatus();
   };
 
-  const concluirPreparo = async (itemId: string) => {
-    await ComandaService.concluirPreparo(itemId);
+  const fecharVenda = async (saleId: string, method: 'cash' | 'pix' | 'card') => {
+    await ComandaService.finalizarVenda(saleId, method);
+    await refreshStatus();
+  };
+
+  const marcarItemConcluido = async (itemId: string) => {
+    await ComandaService.concluirItem(itemId);
     await refreshStatus();
   };
 
@@ -139,8 +145,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider value={{ 
-      user, store, accessStatus, products, comandas, customers, cashRegisters, storeStatus,
-      refreshStatus, createStore, getOrCreateComanda, adicionarItem, finalizarAtendimento, concluirPreparo, logout 
+      user, store, accessStatus, products, activeSales, customers, salesHistory, cashRegisters, storeStatus,
+      refreshStatus, createStore, getOrCreateSale, adicionarItem, fecharVenda, marcarItemConcluido, logout 
     }}>
       {children}
     </AuthContext.Provider>

@@ -37,7 +37,7 @@ const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((value || 0) / 100);
 
 export default function NewSalePDVPage() {
-  const { products, getOrCreateComanda, adicionarItem, finalizarAtendimento } = useAuth();
+  const { products, getOrCreateSale, adicionarItem, fecharVenda } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
   
@@ -49,12 +49,9 @@ export default function NewSalePDVPage() {
 
   const filteredProducts = useMemo(() => {
     const term = (search || '').toLowerCase();
-    return (products || []).filter(p => 
-      p && p.active && (
-        (p.name || '').toLowerCase().includes(term) || 
-        (p.barcode || '').includes(term)
-      )
-    );
+    return products.filter(p => p.active && (
+      p.name.toLowerCase().includes(term) || (p.barcode && p.barcode.includes(term))
+    ));
   }, [products, search]);
 
   const cartTotalDisplay = useMemo(() => 
@@ -84,22 +81,30 @@ export default function NewSalePDVPage() {
     
     setIsSubmitting(true);
     try {
-      // PDV = Mesa 0. O customerName agora é passado apenas se o backend suportar, 
-      // ou atualizado via meta-dados se necessário. Para este fluxo, usamos table_number 0.
-      const comandaId = await getOrCreateComanda(0, customerName || 'Consumidor Balcão');
+      // 1. Inicia Venda no Balcão (Mesa 0)
+      const saleId = await getOrCreateSale('0');
       
+      // 2. Lança Itens via RPC
       for (const item of cart) {
-        await adicionarItem(comandaId, item.product_id, Number(item.qty));
+        await adicionarItem({
+          saleId,
+          productId: item.product_id,
+          productName: item.product_name_snapshot,
+          quantity: item.qty,
+          price: item.unit_price_cents,
+          destino: 'nenhum' // PDV Balcão assume entrega imediata
+        });
       }
       
-      await finalizarAtendimento(comandaId, method);
+      // 3. Fecha Venda (Faturamento Atômico)
+      await fecharVenda(saleId, method);
       
-      toast({ title: 'Venda Finalizada!', description: `Total: ${formatCurrency(cartTotalDisplay)}` });
+      toast({ title: 'Venda Concluída!', description: `Valor: ${formatCurrency(cartTotalDisplay)}` });
       setCart([]);
       setIsFinalizing(false);
       router.push('/sales');
     } catch (error: any) {
-      toast({ variant: 'destructive', title: 'Falha no PDV', description: error.message });
+      toast({ variant: 'destructive', title: 'Falha no Faturamento', description: error.message });
     } finally {
       setIsSubmitting(false);
     }
@@ -109,8 +114,8 @@ export default function NewSalePDVPage() {
     <div className="flex flex-col h-[calc(100vh-8rem)] animate-in fade-in duration-500">
       <div className="mb-6 flex justify-between items-end">
         <div className="space-y-1">
-          <h1 className="text-3xl font-headline font-black uppercase tracking-tighter">FRENTE DE CAIXA</h1>
-          <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-[0.3em]">Operação Balcão Ativa</p>
+          <h1 className="text-3xl font-headline font-black uppercase tracking-tighter">Terminal de Vendas</h1>
+          <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-[0.3em]">Operação Direta de Balcão</p>
         </div>
       </div>
 
@@ -121,7 +126,7 @@ export default function NewSalePDVPage() {
               <div className="relative">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                 <Input 
-                  placeholder="Pesquisar por nome ou código de barras..." 
+                  placeholder="Bipar código de barras ou buscar nome..." 
                   className="pl-12 h-14 text-lg bg-slate-50 border-none shadow-inner rounded-2xl"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -138,7 +143,7 @@ export default function NewSalePDVPage() {
                   className="cursor-pointer hover:border-primary transition-all active:scale-[0.98] shadow-sm border-primary/5 bg-background h-36 group"
                   onClick={() => addToCart(product)}
                 >
-                  <CardContent className="p-5 flex flex-col justify-between h-full text-left">
+                  <CardContent className="p-5 flex flex-col justify-between h-full">
                     <h3 className="font-black text-[11px] leading-tight line-clamp-2 uppercase tracking-tighter group-hover:text-primary transition-colors">{product.name}</h3>
                     <div className="flex items-end justify-between">
                       <span className="text-primary font-black text-xl tracking-tighter">{formatCurrency(product.price_cents)}</span>
@@ -154,7 +159,7 @@ export default function NewSalePDVPage() {
         <Card className="flex flex-col h-full border-primary/10 shadow-2xl overflow-hidden rounded-[40px] bg-background">
           <CardHeader className="p-6 bg-muted/20 border-b border-muted/50">
             <CardTitle className="flex items-center gap-3 text-sm font-black uppercase tracking-widest">
-              <ShoppingCart className="h-5 w-5 text-primary" /> Checkout Rápido
+              <ShoppingCart className="h-5 w-5 text-primary" /> Carrinho Ativo
             </CardTitle>
           </CardHeader>
 
@@ -221,17 +226,17 @@ export default function NewSalePDVPage() {
             </button>
             
             <div className="mb-10 pt-6 text-center space-y-2">
-              <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900 font-headline">PAGAMENTO BALCÃO</h2>
-              <DialogDescription className="text-xs uppercase font-bold tracking-widest text-muted-foreground">Total: {formatCurrency(cartTotalDisplay)}</DialogDescription>
+              <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900 font-headline">ESCOLHA O PAGAMENTO</h2>
+              <DialogDescription className="text-xs uppercase font-bold tracking-widest text-muted-foreground">Valor: {formatCurrency(cartTotalDisplay)}</DialogDescription>
             </div>
 
             <div className="space-y-8">
               <div className="space-y-3">
-                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground pl-2">CLIENTE (OPCIONAL)</label>
+                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground pl-2">IDENTIFICAÇÃO (OPCIONAL)</label>
                 <div className="relative">
                   <UserCircle className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground opacity-50" />
                   <input 
-                    placeholder="Identificar consumidor..." 
+                    placeholder="Nome do consumidor..." 
                     className="w-full h-14 pl-12 rounded-2xl border border-slate-200 bg-white font-bold text-lg focus:ring-2 focus:ring-primary/20 outline-none"
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
@@ -261,7 +266,7 @@ export default function NewSalePDVPage() {
           {isSubmitting && (
             <div className="absolute inset-0 bg-background/80 flex flex-col items-center justify-center z-50 backdrop-blur-sm">
               <Loader2 className="h-14 w-14 animate-spin text-primary mb-6" />
-              <p className="text-[11px] font-black uppercase tracking-[0.3em]">Sincronizando...</p>
+              <p className="text-[11px] font-black uppercase tracking-[0.3em]">Processando Transação...</p>
             </div>
           )}
         </DialogContent>
