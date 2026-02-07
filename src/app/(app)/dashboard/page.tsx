@@ -1,3 +1,4 @@
+
 'use client';
 
 /**
@@ -5,7 +6,7 @@
  * Sincronizado com o estado global de caixa e vendas.
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import type { DateRange } from 'react-day-picker';
 import { startOfDay, addDays, startOfToday, endOfDay, parseISO, format } from 'date-fns';
 import { 
@@ -31,6 +32,7 @@ import {
   SalesByProductChart 
 } from '@/components/charts';
 import { useAuth } from '@/components/auth-provider';
+import { cn } from '@/lib/utils';
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((value || 0) / 100);
@@ -93,7 +95,7 @@ export default function DashboardOverviewPage() {
 
       <div className="grid gap-4 md:grid-cols-2">
         {!openSession ? (
-          <Card className="border-red-500/50 bg-red-50/5 shadow-sm">
+          <Card className={cn("border-red-500/50 bg-red-50/5 shadow-sm")}>
             <CardContent className="flex items-center gap-4 py-4">
               <Wallet className="h-5 w-5 text-red-600" />
               <div className="flex-1">
@@ -104,12 +106,12 @@ export default function DashboardOverviewPage() {
             </CardContent>
           </Card>
         ) : (
-          <Card className="border-green-500/50 bg-green-50/5 shadow-sm">
+          <Card className={cn("border-green-500/50 bg-green-50/5 shadow-sm")}>
             <CardContent className="flex items-center gap-4 py-4">
               <CheckCircle className="h-5 w-5 text-green-600" />
               <div className="flex-1">
                 <p className="text-sm font-bold text-green-900">Operação em Andamento</p>
-                <p className="text-xs text-green-700">Caixa aberto hoje às {format(parseISO(openSession.opened_at), 'HH:mm')}.</p>
+                <p className="text-xs text-green-700">Caixa aberto hoje às {openSession.opened_at ? format(parseISO(openSession.opened_at), 'HH:mm') : '--:--'}.</p>
               </div>
               <Button variant="outline" size="sm" onClick={() => router.push('/cash')} className="h-8 font-black uppercase text-[10px]">Ver Caixa</Button>
             </CardContent>

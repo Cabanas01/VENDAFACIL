@@ -1,3 +1,4 @@
+
 'use client';
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -41,7 +42,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [store, setStore] = useState<Store | null>(null);
   const [accessStatus, setAccessStatus] = useState<StoreAccessStatus | null>(null);
-  const [activeSales, setActiveSales] = useState<Sale[]>([]);
+  const [activeComandas, setActiveComandas] = useState<Sale[]>([]);
   const [salesHistory, setSalesHistory] = useState<Sale[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -61,23 +62,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (storeId) {
-        const [storeRes, prodRes, activeSalesRes, custRes, accessRes, historyRes, cashRes] = await Promise.all([
+        // Consultas segregadas: Comandas (abertas) vs Vendas (finalizadas)
+        const [
+          storeRes, 
+          prodRes, 
+          comandasRes, 
+          custRes, 
+          historyRes, 
+          cashRes,
+          accessRes
+        ] = await Promise.all([
           supabase.from('stores').select('*').eq('id', storeId).single(),
           supabase.from('products').select('*').eq('store_id', storeId).order('name'),
-          supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeId).eq('status', 'open').order('created_at', { ascending: true }),
+          supabase.from('comandas').select('*, items:order_items(*)').eq('store_id', storeId).eq('status', 'open').order('created_at', { ascending: true }),
           supabase.from('customers').select('*').eq('store_id', storeId).order('name'),
-          supabase.rpc('get_store_access_status', { p_store_id: storeId }),
-          supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeId).eq('status', 'paid').order('created_at', { ascending: false }).limit(50),
-          supabase.from('cash_sessions').select('*').eq('store_id', storeId).order('opened_at', { ascending: false })
+          supabase.from('sales').select('*, items:order_items(*)').eq('store_id', storeId).order('created_at', { ascending: false }).limit(50),
+          supabase.from('cash_sessions').select('*').eq('store_id', storeId).order('opened_at', { ascending: false }),
+          supabase.rpc('get_store_access_status', { p_store_id: storeId }).catch(() => ({ data: null }))
         ]);
 
         setStore(storeRes.data || null);
         setProducts(Array.isArray(prodRes.data) ? prodRes.data : []);
-        setActiveSales(Array.isArray(activeSalesRes.data) ? activeSalesRes.data : []);
+        setActiveComandas(Array.isArray(comandasRes.data) ? comandasRes.data : []);
         setCustomers(Array.isArray(custRes.data) ? custRes.data : []);
         setSalesHistory(Array.isArray(historyRes.data) ? historyRes.data : []);
         setCashSessions(Array.isArray(cashRes.data) ? cashRes.data : []);
-        setAccessStatus(accessRes.data?.[0] || null);
+        setAccessStatus(accessRes?.data?.[0] || null);
         setStoreStatus('ready');
       } else {
         setStoreStatus('no_store');
@@ -141,7 +151,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider value={{ 
-      user, store, accessStatus, products, comandas: activeSales, activeSales, customers, sales: salesHistory, cashSessions, storeStatus,
+      user, store, accessStatus, products, comandas: activeComandas, activeSales: activeComandas, customers, sales: salesHistory, cashSessions, storeStatus,
       refreshStatus, createStore, getOrCreateComanda, adicionarItem, finalizarAtendimento, concluirPreparo, logout 
     }}>
       {children}
