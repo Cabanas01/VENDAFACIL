@@ -19,8 +19,8 @@ type AuthContextType = {
   store: Store | null;
   accessStatus: StoreAccessStatus | null;
   products: Product[];
-  activeSales: Sale[];
-  sales: Sale[]; // Alias para histórico exigido por componentes
+  comandas: Sale[];
+  sales: Sale[];
   customers: Customer[];
   cashRegisters: CashRegister[];
   storeStatus: 'loading_auth' | 'loading_status' | 'ready' | 'no_store' | 'error';
@@ -143,7 +143,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider value={{ 
-      user, store, accessStatus, products, activeSales, customers, sales: salesHistory, cashRegisters, storeStatus,
+      user, store, accessStatus, products, comandas: activeSales, activeSales, customers, sales: salesHistory, cashRegisters, storeStatus,
       refreshStatus, createStore, getOrCreateSale, adicionarItem, fecharVenda, marcarItemConcluido, logout 
     }}>
       {children}
