@@ -1,4 +1,10 @@
+
 'use client';
+
+/**
+ * @fileOverview Gestão de Produtos v6.1
+ * Corrigido: Botão de cadastro, conversão de moeda e nomes de colunas do schema.
+ */
 
 import { useState, useMemo } from 'react';
 import { 
@@ -15,9 +21,9 @@ import {
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@components/ui/table';
+import { Badge } from '@components/ui/badge';
 import {
   Dialog,
   DialogContent,
@@ -25,9 +31,9 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-} from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
+} from '@components/ui/dialog';
+import { Label } from '@components/ui/label';
+import { Switch } from '@components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/components/auth-provider';
 import { supabase } from '@/lib/supabase/client';
@@ -37,9 +43,15 @@ import type { Product } from '@/lib/types';
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((value || 0) / 100);
 
+/**
+ * Converte string de Real para Centavos de forma segura.
+ */
 const reaisToCents = (value: string) => {
-  const cleanValue = value.replace(/\D/g, '');
-  return parseInt(cleanValue || '0', 10);
+  if (!value) return 0;
+  // Remove tudo que não é número ou ponto/vírgula
+  const sanitized = value.replace(/[^\d.,]/g, '').replace(',', '.');
+  const parsed = parseFloat(sanitized);
+  return isNaN(parsed) ? 0 : Math.round(parsed * 100);
 };
 
 export default function ProductsPage() {
@@ -59,8 +71,8 @@ export default function ProductsPage() {
   const [formData, setFormData] = useState({
     name: '',
     category: '',
-    price_cents: '0',
-    cost_cents: '0',
+    price_cents: '',
+    cost_cents: '',
     stock_quantity: '0',
     min_stock: '0',
     is_active: true
@@ -71,30 +83,46 @@ export default function ProductsPage() {
   const filteredProducts = useMemo(() => {
     const term = (search || '').toLowerCase();
     const list = Array.isArray(products) ? products : [];
-    return list.filter(p => (p.name || '').toLowerCase().includes(term));
+    return list.filter(p => 
+      (p.name || '').toLowerCase().includes(term) || 
+      (p.category || '').toLowerCase().includes(term)
+    );
   }, [products, search]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!store?.id) return;
+    if (!store?.id) {
+      toast({ variant: 'destructive', title: 'Erro de sessão', description: 'Loja não identificada.' });
+      return;
+    }
+
     setLoading(true);
     try {
-      const { error } = await supabase.from('products').insert([{
+      const payload = {
         store_id: store.id,
         name: formData.name,
         category: formData.category || 'Geral',
         price_cents: reaisToCents(formData.price_cents),
         cost_cents: reaisToCents(formData.cost_cents),
-        stock_quantity: parseInt(formData.stock_quantity, 10),
-        min_stock: parseInt(formData.min_stock, 10),
+        stock_quantity: parseInt(formData.stock_quantity || '0', 10),
+        min_stock: parseInt(formData.min_stock || '0', 10),
         is_active: formData.is_active
-      }]);
+      };
+
+      const { error } = await supabase.from('products').insert([payload]);
+      
       if (error) throw error;
-      toast({ title: 'Produto criado!' });
+
+      toast({ title: 'Sucesso!', description: 'Produto cadastrado com sucesso.' });
       setIsCreateOpen(false);
       await refreshStatus();
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Erro ao criar', description: err.message });
+      console.error('[CREATE_PRODUCT_ERROR]', err);
+      toast({ 
+        variant: 'destructive', 
+        title: 'Erro ao cadastrar', 
+        description: err.message || 'Verifique os dados e tente novamente.' 
+      });
     } finally {
       setLoading(false);
     }
@@ -109,10 +137,12 @@ export default function ProductsPage() {
         name: formData.name,
         category: formData.category,
         price_cents: reaisToCents(formData.price_cents),
-        min_stock: parseInt(formData.min_stock, 10),
+        min_stock: parseInt(formData.min_stock || '0', 10),
         is_active: formData.is_active
       }).eq('id', selectedProduct.id);
+
       if (error) throw error;
+
       toast({ title: 'Produto atualizado!' });
       setIsEditOpen(false);
       await refreshStatus();
@@ -128,9 +158,11 @@ export default function ProductsPage() {
     if (!selectedProduct) return;
     setLoading(true);
     try {
-      const newQty = (selectedProduct.stock_quantity || 0) + parseInt(stockDelta, 10);
+      const newQty = (selectedProduct.stock_quantity || 0) + parseInt(stockDelta || '0', 10);
       const { error } = await supabase.from('products').update({ stock_quantity: newQty }).eq('id', selectedProduct.id);
+      
       if (error) throw error;
+
       toast({ title: 'Estoque ajustado!' });
       setIsStockOpen(false);
       setStockDelta('0');
@@ -150,7 +182,9 @@ export default function ProductsPage() {
       const { error } = await supabase.from('products').update({
         cost_cents: reaisToCents(formData.cost_cents)
       }).eq('id', selectedProduct.id);
+
       if (error) throw error;
+
       toast({ title: 'Custo atualizado!' });
       setIsCostOpen(false);
       await refreshStatus();
@@ -162,7 +196,7 @@ export default function ProductsPage() {
   };
 
   const handleSoftDelete = async (product: Product) => {
-    if (!confirm(`Deseja realmente desativar o produto "${product.name}"? Ele deixará de aparecer no PDV.`)) return;
+    if (!confirm(`Deseja realmente desativar o produto "${product.name}"?`)) return;
     try {
       const { error } = await supabase.from('products').update({ is_active: false }).eq('id', product.id);
       if (error) throw error;
@@ -178,8 +212,8 @@ export default function ProductsPage() {
     setFormData({
       name: p.name,
       category: p.category || '',
-      price_cents: p.price_cents.toString(),
-      cost_cents: (p.cost_cents || 0).toString(),
+      price_cents: (p.price_cents / 100).toString(),
+      cost_cents: ((p.cost_cents || 0) / 100).toString(),
       stock_quantity: p.stock_quantity.toString(),
       min_stock: (p.min_stock || 0).toString(),
       is_active: p.is_active
@@ -191,7 +225,7 @@ export default function ProductsPage() {
     <div className="space-y-8 animate-in fade-in duration-500">
       <PageHeader title="Meus Produtos" subtitle="Gestão de catálogo, custos e estoque em tempo real.">
         <Button onClick={() => {
-          setFormData({ name: '', category: '', price_cents: '0', cost_cents: '0', stock_quantity: '0', min_stock: '0', is_active: true });
+          setFormData({ name: '', category: '', price_cents: '', cost_cents: '', stock_quantity: '0', min_stock: '0', is_active: true });
           setIsCreateOpen(true);
         }} className="font-black uppercase text-[10px] tracking-widest shadow-lg shadow-primary/20 h-11 px-6">
           <Plus className="h-4 w-4 mr-2" /> Novo Produto
@@ -253,16 +287,16 @@ export default function ProductsPage() {
                     </TableCell>
                     <TableCell className="text-right px-6">
                       <div className="flex justify-end items-center gap-1">
-                        <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-primary hover:text-white rounded-lg" title="Editar Dados" onClick={() => openEdit(p)}>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-primary hover:text-white rounded-lg" onClick={() => openEdit(p)}>
                           <Edit className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-orange-500 hover:text-white rounded-lg" title="Ajustar Estoque" onClick={() => { setSelectedProduct(p); setIsStockOpen(true); }}>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-orange-500 hover:text-white rounded-lg" onClick={() => { setSelectedProduct(p); setIsStockOpen(true); }}>
                           <Package className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-green-600 hover:text-white rounded-lg" title="Ajustar Custo" onClick={() => { setSelectedProduct(p); setFormData({...formData, cost_cents: (p.cost_cents || 0).toString()}); setIsCostOpen(true); }}>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-green-600 hover:text-white rounded-lg" onClick={() => { setSelectedProduct(p); setFormData({...formData, cost_cents: ((p.cost_cents || 0)/100).toString()}); setIsCostOpen(true); }}>
                           <Coins className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-red-600 hover:text-white rounded-lg" title="Desativar" onClick={() => handleSoftDelete(p)}>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-red-600 hover:text-white rounded-lg" onClick={() => handleSoftDelete(p)}>
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
@@ -297,11 +331,11 @@ export default function ProductsPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Preço de Venda (R$)</Label>
-                  <Input type="number" required value={formData.price_cents} onChange={e => setFormData({...formData, price_cents: e.target.value})} className="h-12 font-black text-primary" />
+                  <Input placeholder="0,00" required value={formData.price_cents} onChange={e => setFormData({...formData, price_cents: e.target.value})} className="h-12 font-black text-primary" />
                 </div>
                 <div className="space-y-2">
                   <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Custo CMV (R$)</Label>
-                  <Input type="number" required value={formData.cost_cents} onChange={e => setFormData({...formData, cost_cents: e.target.value})} className="h-12 font-black text-orange-600" />
+                  <Input placeholder="0,00" required value={formData.cost_cents} onChange={e => setFormData({...formData, cost_cents: e.target.value})} className="h-12 font-black text-orange-600" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -335,12 +369,12 @@ export default function ProductsPage() {
               </div>
               <div className="space-y-2">
                 <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Preço de Venda (R$)</Label>
-                <Input type="number" value={formData.price_cents} onChange={e => setFormData({...formData, price_cents: e.target.value})} className="h-12 font-black text-primary" />
+                <Input value={formData.price_cents} onChange={e => setFormData({...formData, price_cents: e.target.value})} className="h-12 font-black text-primary" />
               </div>
               <div className="flex items-center justify-between p-4 bg-muted/20 rounded-2xl border border-primary/5">
                 <div className="space-y-0.5">
                   <Label className="text-[10px] font-black uppercase tracking-widest">Produto Ativo</Label>
-                  <p className="text-[9px] text-muted-foreground font-bold">Disponível para venda no PDV</p>
+                  <p className="text-[9px] text-muted-foreground font-bold">Disponível no PDV</p>
                 </div>
                 <Switch checked={formData.is_active} onCheckedChange={val => setFormData({...formData, is_active: val})} />
               </div>
@@ -358,7 +392,7 @@ export default function ProductsPage() {
             <div className="mx-auto h-12 w-12 rounded-2xl bg-white flex items-center justify-center shadow-sm border border-orange-100 mb-4">
               <Package className="h-6 w-6 text-orange-500" />
             </div>
-            <DialogTitle className="text-xl font-black font-headline uppercase tracking-tighter text-orange-950">Movimentar Estoque</DialogTitle>
+            <DialogTitle className="text-xl font-black font-headline uppercase tracking-tighter text-orange-950">Estoque</DialogTitle>
             <p className="text-[10px] font-black uppercase text-orange-600 mt-1 opacity-60">{selectedProduct?.name}</p>
           </div>
           <form onSubmit={handleAdjustStock} className="p-8 space-y-6 bg-background">
@@ -375,8 +409,8 @@ export default function ProductsPage() {
                 Saldo atual: <span className="text-foreground">{selectedProduct?.stock_quantity}</span>
               </p>
             </div>
-            <Button type="submit" disabled={loading} className="w-full h-14 font-black uppercase text-[11px] tracking-widest bg-orange-500 hover:bg-orange-600 shadow-xl shadow-orange-500/20">
-              {loading ? <Loader2 className="animate-spin h-4 w-4" /> : 'Confirmar Movimentação'}
+            <Button type="submit" disabled={loading} className="w-full h-14 font-black uppercase text-[11px] tracking-widest bg-orange-500 hover:bg-orange-600">
+              {loading ? <Loader2 className="animate-spin h-4 w-4" /> : 'Confirmar'}
             </Button>
           </form>
         </DialogContent>
@@ -388,19 +422,19 @@ export default function ProductsPage() {
             <div className="mx-auto h-12 w-12 rounded-2xl bg-white flex items-center justify-center shadow-sm border border-green-100 mb-4">
               <Coins className="h-6 w-6 text-green-600" />
             </div>
-            <DialogTitle className="text-xl font-black font-headline uppercase tracking-tighter text-green-950">Atualizar Custo (CMV)</DialogTitle>
+            <DialogTitle className="text-xl font-black font-headline uppercase tracking-tighter text-green-950">Atualizar Custo</DialogTitle>
           </div>
           <form onSubmit={handleUpdateCost} className="p-8 space-y-6 bg-background">
             <div className="space-y-2">
-              <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Novo Custo de Compra (R$)</Label>
+              <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Novo Custo (R$)</Label>
               <Input 
-                type="number" 
+                placeholder="0,00"
                 value={formData.cost_cents} 
                 onChange={e => setFormData({...formData, cost_cents: e.target.value})} 
                 className="h-14 font-black text-2xl text-center text-green-700" 
               />
             </div>
-            <Button type="submit" disabled={loading} className="w-full h-14 font-black uppercase text-[11px] tracking-widest bg-green-600 hover:bg-green-700 shadow-xl shadow-green-600/20">
+            <Button type="submit" disabled={loading} className="w-full h-14 font-black uppercase text-[11px] tracking-widest bg-green-600 hover:bg-green-700">
               {loading ? <Loader2 className="animate-spin h-4 w-4" /> : 'Atualizar Custo'}
             </Button>
           </form>
