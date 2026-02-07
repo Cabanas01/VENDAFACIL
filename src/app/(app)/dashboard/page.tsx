@@ -19,7 +19,8 @@ import {
   Loader2,
   ChefHat,
   GlassWater,
-  ClipboardList
+  ClipboardList,
+  CheckCircle
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -37,13 +38,16 @@ const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((value || 0) / 100);
 
 export default function DashboardOverviewPage() {
-  const { store, storeStatus, products, sales, cashRegisters, customers } = useAuth();
+  const { store, storeStatus, products, sales, cashSessions, customers } = useAuth();
   const router = useRouter();
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: addDays(startOfToday(), -6),
     to: new Date(),
   });
+
+  const cashSessionsSafe = useMemo(() => (Array.isArray(cashSessions) ? cashSessions : []), [cashSessions]);
+  const openSession = useMemo(() => cashSessionsSafe.find(s => s.status === 'open'), [cashSessionsSafe]);
 
   const filteredSales = useMemo(() => {
     const safeSales = Array.isArray(sales) ? sales : [];
@@ -78,7 +82,6 @@ export default function DashboardOverviewPage() {
     return { revenue, cost, profit, cmvPercent };
   }, [filteredSales, products]);
 
-  const openCash = useMemo(() => (Array.isArray(cashRegisters) ? cashRegisters : []).find(cr => cr && !cr.closed_at), [cashRegisters]);
   const lowStockCount = useMemo(() => (Array.isArray(products) ? products : []).filter(p => p && (p.stock_qty || 0) <= (p.min_stock_qty || 0)).length, [products]);
 
   if (storeStatus === 'loading_auth' || storeStatus === 'loading_status') {
@@ -96,49 +99,10 @@ export default function DashboardOverviewPage() {
         <DateRangePicker date={dateRange} onDateChange={setDateRange} />
       </PageHeader>
 
-      {/* Atalhos de Produção (Se Ativo) */}
-      {store?.use_comanda && (
-        <div className="grid gap-4 md:grid-cols-3">
-          <Card className="border-primary/10 bg-background hover:border-primary transition-all cursor-pointer shadow-sm group" onClick={() => router.push('/comandas')}>
-            <CardContent className="flex items-center gap-4 py-4">
-              <div className="h-10 w-10 rounded-full bg-primary/5 flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-colors">
-                <ClipboardList className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-xs font-black uppercase tracking-widest text-foreground">Gerir Comandas</p>
-                <p className="text-[10px] text-muted-foreground font-bold">Atendimento de mesas</p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="border-orange-500/10 bg-background hover:border-orange-500 transition-all cursor-pointer shadow-sm group" onClick={() => router.push('/painel/cozinha')}>
-            <CardContent className="flex items-center gap-4 py-4">
-              <div className="h-10 w-10 rounded-full bg-orange-500/5 flex items-center justify-center group-hover:bg-orange-500 group-hover:text-white transition-colors text-orange-600">
-                <ChefHat className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-xs font-black uppercase tracking-widest text-foreground">Painel Cozinha</p>
-                <p className="text-[10px] text-muted-foreground font-bold">Monitor de preparo</p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="border-cyan-500/10 bg-background hover:border-cyan-500 transition-all cursor-pointer shadow-sm group" onClick={() => router.push('/painel/bar')}>
-            <CardContent className="flex items-center gap-4 py-4">
-              <div className="h-10 w-10 rounded-full bg-cyan-500/5 flex items-center justify-center group-hover:bg-cyan-500 group-hover:text-white transition-colors text-cyan-600">
-                <GlassWater className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-xs font-black uppercase tracking-widest text-foreground">Painel Bar</p>
-                <p className="text-[10px] text-muted-foreground font-bold">Monitor de bebidas</p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
       {/* Alertas Críticos */}
       <div className="grid gap-4 md:grid-cols-2">
         {lowStockCount > 0 && (
-          <Card className="border-yellow-500/50 bg-yellow-50/5">
+          <Card className="border-yellow-500/50 bg-yellow-50/5 shadow-sm">
             <CardContent className="flex items-center gap-4 py-4">
               <AlertCircle className="h-5 w-5 text-yellow-600" />
               <div className="flex-1">
@@ -149,15 +113,26 @@ export default function DashboardOverviewPage() {
             </CardContent>
           </Card>
         )}
-        {!openCash && (
-          <Card className="border-red-500/50 bg-red-50/5">
+        {!openSession ? (
+          <Card className="border-red-500/50 bg-red-50/5 shadow-sm">
             <CardContent className="flex items-center gap-4 py-4">
               <Wallet className="h-5 w-5 text-red-600" />
               <div className="flex-1">
                 <p className="text-sm font-bold text-red-900">Seu caixa está fechado</p>
                 <p className="text-xs text-red-700">Abra o turno para iniciar as vendas físicas.</p>
               </div>
-              <Button variant="destructive" size="sm" onClick={() => router.push('/cash')} className="h-8 font-black uppercase text-[10px]">Abrir Caixa</Button>
+              <Button variant="destructive" size="sm" onClick={() => router.push('/cash')} className="h-8 font-black uppercase text-[10px]">Abrir Caixa Agora</Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="border-green-500/50 bg-green-50/5 shadow-sm">
+            <CardContent className="flex items-center gap-4 py-4">
+              <CheckCircle className="h-5 w-5 text-green-600" />
+              <div className="flex-1">
+                <p className="text-sm font-bold text-green-900">Operação em andamento</p>
+                <p className="text-xs text-green-700">Caixa aberto desde as {format(parseISO(openSession.opened_at), 'HH:mm')}.</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => router.push('/cash')} className="h-8 font-black uppercase text-[10px]">Ver Detalhes</Button>
             </CardContent>
           </Card>
         )}

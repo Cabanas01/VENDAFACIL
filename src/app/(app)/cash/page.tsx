@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * @fileOverview Gestão de Caixa Blindada e Sincronizada.
+ * @fileOverview Gestão de Caixa com Fundo Inicial e Sincronização.
  */
 
 import { useState, useMemo } from 'react';
@@ -18,7 +18,8 @@ import {
   PlusCircle, 
   Wallet, 
   Loader2,
-  CircleDollarSign
+  CircleDollarSign,
+  X
 } from 'lucide-react';
 
 import { PageHeader } from '@/components/page-header';
@@ -29,6 +30,16 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/components/auth-provider';
 import { supabase } from '@/lib/supabase/client';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogDescription, 
+  DialogFooter 
+} from '@/components/ui/dialog';
 
 import { DateRangePicker } from '@/components/date-range-picker';
 import type { DateRange } from 'react-day-picker';
@@ -39,8 +50,11 @@ export default function CashPage() {
   const { cashSessions, sales, refreshStatus } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
+  
   const [dateRange, setDateRange] = useState<DateRange | undefined>({ from: new Date(), to: new Date() });
   const [isOpening, setIsOpening] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [initialAmount, setInitialAmount] = useState('');
   
   const cashSessionsSafe = useMemo(() => (Array.isArray(cashSessions) ? cashSessions : []), [cashSessions]);
   const salesSafe = useMemo(() => (Array.isArray(sales) ? sales : []), [sales]);
@@ -49,12 +63,26 @@ export default function CashPage() {
   const hasOpenCash = !!openSession;
 
   const handleOpenCash = async () => {
+    const amountCents = Math.round(parseFloat(initialAmount.replace(',', '.')) * 100);
+    
+    if (isNaN(amountCents) || amountCents < 0) {
+      toast({ variant: 'destructive', title: 'Valor inválido', description: 'Informe o fundo inicial corretamente.' });
+      return;
+    }
+
     setIsOpening(true);
     try {
-      const { error } = await supabase.rpc('open_cash_session');
+      const { error } = await supabase.rpc('open_cash_session', {
+        p_initial_amount: amountCents
+      });
+      
       if (error) throw error;
 
       toast({ title: 'Sucesso!', description: 'Turno de caixa aberto com sucesso.' });
+      setInitialAmount('');
+      setIsModalOpen(false);
+      
+      // Sincronização Global
       await refreshStatus();
       router.refresh();
     } catch (err: any) {
@@ -112,8 +140,12 @@ export default function CashPage() {
                       Para registrar vendas e ter controle de saldo, você precisa iniciar um novo turno de caixa.
                     </p>
                   </div>
-                  <Button size="lg" className="font-black uppercase text-[11px] tracking-widest h-14 px-10" onClick={handleOpenCash} disabled={isOpening}>
-                    {isOpening ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <PlusCircle className="mr-2 h-4 w-4" />}
+                  <Button 
+                    size="lg" 
+                    className="font-black uppercase text-[11px] tracking-widest h-14 px-10" 
+                    onClick={() => setIsModalOpen(true)}
+                  >
+                    <PlusCircle className="mr-2 h-4 w-4" />
                     Abrir Caixa Agora
                   </Button>
                 </CardContent>
@@ -269,6 +301,45 @@ export default function CashPage() {
             </Card>
         </div>
       </div>
+
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <DialogContent className="sm:max-w-md p-0 overflow-hidden rounded-[32px] border-none shadow-2xl">
+          <div className="bg-primary/5 pt-10 pb-6 px-8 text-center border-b">
+            <div className="mx-auto h-12 w-12 rounded-2xl bg-white flex items-center justify-center shadow-sm border border-primary/10 mb-4">
+              <Wallet className="h-6 w-6 text-primary" />
+            </div>
+            <DialogHeader>
+              <DialogTitle className="text-2xl font-black font-headline uppercase tracking-tighter">Abertura de Caixa</DialogTitle>
+              <DialogDescription className="text-sm font-medium">Informe o valor em dinheiro já disponível na gaveta.</DialogDescription>
+            </DialogHeader>
+          </div>
+
+          <div className="space-y-6 p-8 bg-background">
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Fundo Inicial (Dinheiro R$)</Label>
+              <Input 
+                type="number" 
+                placeholder="0.00" 
+                className="h-14 font-black text-2xl border-primary/10 shadow-inner"
+                value={initialAmount}
+                onChange={(e) => setInitialAmount(e.target.value)}
+                autoFocus
+              />
+            </div>
+
+            <DialogFooter className="pt-4">
+              <Button 
+                className="w-full h-14 font-black uppercase text-[11px] tracking-widest shadow-lg shadow-primary/20"
+                onClick={handleOpenCash}
+                disabled={isOpening || !initialAmount}
+              >
+                {isOpening ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : <CheckCircle className="h-4 w-4 mr-2" />}
+                Confirmar Abertura
+              </Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
