@@ -2,6 +2,8 @@
 
 /**
  * @fileOverview Página de Planos (Sincronizada e Segura)
+ * 
+ * Implementa refresh imediato após ativação de trial e exibição rigorosa do status.
  */
 
 import { useState, useEffect, useMemo } from 'react';
@@ -11,7 +13,8 @@ import {
   Calendar,
   AlertTriangle,
   CheckCircle2,
-  Info
+  Info,
+  ArrowRight
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/components/auth-provider';
@@ -50,10 +53,19 @@ export default function BillingPage() {
 
       if (!response.ok) throw new Error(result.error || 'Erro ao ativar trial.');
 
-      toast({ title: 'Avaliação Ativada!', description: 'Você tem 7 dias de acesso completo.' });
+      toast({ 
+        title: 'Avaliação Ativada!', 
+        description: 'Você agora tem 7 dias de acesso completo ao sistema.' 
+      });
+      
+      // 🔥 ESSENCIAL: Atualiza o estado global para que o accessStatus apareça na tela
       await refreshStatus();
     } catch (error: any) {
-      toast({ variant: 'destructive', title: 'Falha ao ativar', description: error.message });
+      toast({ 
+        variant: 'destructive', 
+        title: 'Falha ao ativar', 
+        description: error.message 
+      });
     } finally {
       setIsStartingTrial(false);
     }
@@ -61,7 +73,7 @@ export default function BillingPage() {
 
   const handleCheckout = (planId: PlanID) => {
     if (!store || !user) return;
-    const url = CHECKOUT_LINKS.hotmart[planId];
+    const url = CHECKOUT_LINKS.hotmart[planId as keyof typeof CHECKOUT_LINKS.hotmart];
     if (!url) {
         toast({ variant: 'destructive', title: 'Checkout Indisponível' });
         return;
@@ -106,6 +118,7 @@ export default function BillingPage() {
         </p>
       </div>
 
+      {/* SEÇÃO: SITUAÇÃO DO ACESSO (Onde o plano e data aparecem) */}
       <Card className="border-primary/10 bg-muted/30 shadow-sm overflow-hidden">
         <CardHeader className="bg-primary/5 border-b">
           <CardTitle className="flex items-center gap-2 text-sm uppercase font-black tracking-widest">
@@ -117,12 +130,14 @@ export default function BillingPage() {
             <div className="flex flex-col md:flex-row items-center justify-between gap-6 p-6 bg-background rounded-xl border border-primary/10">
               <div className="space-y-2 text-center md:text-left">
                 <div className="flex items-center justify-center md:justify-start gap-3">
-                  <span className="text-3xl font-black uppercase tracking-tighter">{accessStatus?.plano_nome || 'Sem Plano'}</span>
-                  <Badge variant={accessStatus?.acesso_liberado ? 'default' : 'destructive'} className="font-black text-[10px] uppercase h-5">
-                    {accessStatus?.status || 'Bloqueado'}
+                  <span className="text-3xl font-black uppercase tracking-tighter">
+                    {accessStatus.plano_nome}
+                  </span>
+                  <Badge variant={accessStatus.acesso_liberado ? 'default' : 'destructive'} className="font-black text-[10px] uppercase h-5">
+                    {accessStatus.status === 'ativo' ? 'Plano Ativo' : accessStatus.status}
                   </Badge>
                 </div>
-                <p className="text-sm text-muted-foreground font-bold italic opacity-80">{accessStatus?.mensagem}</p>
+                <p className="text-sm text-muted-foreground font-bold italic opacity-80">{accessStatus.mensagem}</p>
               </div>
 
               {formattedExpiryDate && (
@@ -138,21 +153,25 @@ export default function BillingPage() {
               )}
             </div>
           ) : (
-            <div className="p-10 text-center border-dashed border-2 rounded-xl">
-              <Info className="h-8 w-8 mx-auto text-muted-foreground opacity-50 mb-2" />
-              <p className="text-sm text-muted-foreground font-medium uppercase font-black tracking-widest">Nenhuma assinatura ativa.</p>
+            <div className="p-10 text-center border-dashed border-2 rounded-xl bg-background/50">
+              <Info className="h-8 w-8 mx-auto text-muted-foreground opacity-50 mb-4" />
+              <p className="text-sm text-muted-foreground font-black uppercase tracking-widest">
+                Nenhuma assinatura ativa ou teste iniciado.
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">Escolha um dos planos abaixo para liberar o acesso ao sistema.</p>
             </div>
           )}
           
-          {accessStatus && !accessStatus?.acesso_liberado && (
+          {accessStatus && !accessStatus.acesso_liberado && (
             <div className="mt-4 flex items-center gap-2 text-[10px] text-orange-600 bg-orange-50 p-3 rounded-lg border border-orange-100 font-black uppercase tracking-widest">
               <AlertTriangle className="h-3 w-3" />
-              Aguardando confirmação bancária ou renovação. A tela atualizará automaticamente em instantes.
+              Aguardando confirmação bancária ou renovação. O acesso será liberado automaticamente.
             </div>
           )}
         </CardContent>
       </Card>
 
+      {/* SEÇÃO: CARDS DE PLANOS */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {planOrder.map(planId => {
           const plan = PLANS_CONFIG[planId];
@@ -160,13 +179,13 @@ export default function BillingPage() {
 
           const isTrial = planId === 'trial';
           const isPopular = planId === 'anual';
-          const isCurrent = accessStatus?.plano_tipo === planId && accessStatus?.acesso_liberado;
+          const isCurrentPlan = accessStatus?.plano_tipo === planId && accessStatus?.acesso_liberado;
 
           return (
             <Card key={planId} className={cn(
               "flex flex-col relative transition-all duration-300 border-primary/5",
               isPopular && "border-primary shadow-2xl scale-105 z-10",
-              isCurrent && "border-green-500 bg-green-50/5 ring-1 ring-green-500/20"
+              isCurrentPlan && "border-green-500 bg-green-50/5 ring-1 ring-green-500/20"
             )}>
               {isPopular && (
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-[10px] font-black px-4 py-1.5 rounded-full uppercase tracking-[0.2em] shadow-lg shadow-primary/20">
@@ -200,12 +219,13 @@ export default function BillingPage() {
                     className="w-full h-12 font-black uppercase text-[11px] tracking-widest" 
                     variant="outline"
                     onClick={handleStartTrial}
-                    disabled={isStartingTrial || !!store?.trial_used || !!isCurrent}
+                    disabled={isStartingTrial || !!store?.trial_used || !!accessStatus}
                   >
                     {isStartingTrial ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                      store?.trial_used ? 'Avaliação Utilizada' : 'Testar 7 Dias Grátis'
+                      store?.trial_used ? 'Avaliação Utilizada' : 
+                      accessStatus ? 'Plano Ativo' : 'Testar 7 Dias Grátis'
                     )}
                   </Button>
                 ) : (
@@ -213,9 +233,9 @@ export default function BillingPage() {
                     className="w-full h-12 font-black uppercase text-[11px] tracking-widest shadow-xl shadow-primary/10" 
                     variant={isPopular ? 'default' : 'secondary'}
                     onClick={() => handleCheckout(planId)}
-                    disabled={!!isCurrent}
+                    disabled={isCurrentPlan}
                   >
-                    {isCurrent ? 'Plano Ativo' : 'Assinar Agora'}
+                    {isCurrentPlan ? 'Plano Ativo' : 'Assinar Agora'}
                   </Button>
                 )}
               </CardFooter>
