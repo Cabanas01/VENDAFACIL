@@ -4,34 +4,32 @@
 import { supabase } from './supabase/client';
 
 /**
- * @fileOverview SERVIÇO CANÔNICO v6.0
+ * @fileOverview SERVIÇO CANÔNICO v6.1
  * 
- * Central de mutações transacionais. O frontend não possui lógica financeira.
- * Todas as funções operam sob o padrão RPC-FIRST.
+ * Central de mutações transacionais alinhada ao Schema Cache real.
  */
 
 export const ComandaService = {
   /**
-   * 1. Abre ou Recupera Venda Aberta (Mesa ou PDV)
-   * PDV utiliza p_table = '0'
+   * 1. Abre ou Recupera Venda Aberta
+   * Assinatura detectada: p_numero (int), p_store_id (uuid)
    */
-  async getOrCreateSale(storeId: string, table: string) {
-    const { data, error } = await supabase.rpc('rpc_get_open_sale', {
-      p_store_id: storeId,
-      p_table: String(table)
+  async getOrCreateSale(storeId: string, tableNumber: number) {
+    const { data, error } = await supabase.rpc('rpc_get_or_create_open_comanda', {
+      p_numero: Number(tableNumber),
+      p_store_id: storeId
     });
 
     if (error) {
-      console.error('[RPC_ERROR] rpc_get_open_sale:', error);
+      console.error('[RPC_ERROR] rpc_get_or_create_open_comanda:', error);
       throw new Error(error.message);
     }
 
-    return data as string; // Retorna sale_id (UUID)
+    return data as string; // Retorna comanda_id/sale_id
   },
 
   /**
    * 2. Adiciona Item à Venda
-   * Backend resolve preço e subtotal. Frontend não envia totais.
    */
   async adicionarItem(payload: {
     saleId: string;
@@ -57,8 +55,7 @@ export const ComandaService = {
   },
 
   /**
-   * 3. Fecha Venda e Gera Faturamento
-   * Métodos válidos: 'cash' | 'pix' | 'card'
+   * 3. Fecha Venda
    */
   async finalizarVenda(saleId: string, paymentMethod: 'cash' | 'pix' | 'card') {
     const { error } = await supabase.rpc('rpc_close_sale', {
@@ -73,7 +70,7 @@ export const ComandaService = {
   },
 
   /**
-   * 4. Conclui Item na Produção (KDS/BDS)
+   * 4. Conclui Item
    */
   async concluirItem(saleItemId: string) {
     const { error } = await supabase.rpc('rpc_mark_item_done', {

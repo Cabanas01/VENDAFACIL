@@ -20,7 +20,7 @@ type AuthContextType = {
   accessStatus: StoreAccessStatus | null;
   products: Product[];
   activeSales: Sale[];
-  salesHistory: Sale[];
+  sales: Sale[]; // Alias para histórico exigido por componentes
   customers: Customer[];
   cashRegisters: CashRegister[];
   storeStatus: 'loading_auth' | 'loading_status' | 'ready' | 'no_store' | 'error';
@@ -28,7 +28,6 @@ type AuthContextType = {
   refreshStatus: () => Promise<void>;
   createStore: (storeData: any) => Promise<void>;
   
-  // Operações de Atendimento (RPC-Only)
   getOrCreateSale: (table: string) => Promise<string>;
   adicionarItem: (payload: any) => Promise<void>;
   fecharVenda: (saleId: string, method: 'cash' | 'pix' | 'card') => Promise<void>;
@@ -62,7 +61,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (storeId) {
-        // Busca paralela de dados (True Sync)
         const [storeRes, prodRes, activeSalesRes, custRes, accessRes, historyRes, cashRes] = await Promise.all([
           supabase.from('stores').select('*').eq('id', storeId).single(),
           supabase.from('products').select('*').eq('store_id', storeId).order('name'),
@@ -107,7 +105,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const getOrCreateSale = async (table: string) => {
     if (!store?.id) throw new Error('Unidade não identificada.');
-    return ComandaService.getOrCreateSale(store.id, table);
+    return ComandaService.getOrCreateSale(store.id, Number(table));
   };
 
   const adicionarItem = async (payload: any) => {
@@ -145,7 +143,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider value={{ 
-      user, store, accessStatus, products, activeSales, customers, salesHistory, cashRegisters, storeStatus,
+      user, store, accessStatus, products, activeSales, customers, sales: salesHistory, cashRegisters, storeStatus,
       refreshStatus, createStore, getOrCreateSale, adicionarItem, fecharVenda, marcarItemConcluido, logout 
     }}>
       {children}

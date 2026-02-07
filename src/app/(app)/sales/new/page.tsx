@@ -49,7 +49,8 @@ export default function NewSalePDVPage() {
 
   const filteredProducts = useMemo(() => {
     const term = (search || '').toLowerCase();
-    return products.filter(p => p.active && (
+    const safeProducts = Array.isArray(products) ? products : [];
+    return safeProducts.filter(p => p.active && (
       p.name.toLowerCase().includes(term) || (p.barcode && p.barcode.includes(term))
     ));
   }, [products, search]);
@@ -92,7 +93,7 @@ export default function NewSalePDVPage() {
           productName: item.product_name_snapshot,
           quantity: item.qty,
           price: item.unit_price_cents,
-          destino: 'nenhum' // PDV Balcão assume entrega imediata
+          destino: 'nenhum' 
         });
       }
       
