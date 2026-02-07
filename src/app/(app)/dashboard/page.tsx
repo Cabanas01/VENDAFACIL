@@ -1,4 +1,3 @@
-
 'use client';
 
 /**
@@ -8,7 +7,7 @@
 
 import { useState, useMemo } from 'react';
 import type { DateRange } from 'react-day-picker';
-import { startOfDay, addDays, startOfToday, endOfDay, parseISO } from 'date-fns';
+import { startOfDay, addDays, startOfToday, endOfDay, parseISO, format } from 'date-fns';
 import { 
   DollarSign, 
   ShoppingCart, 
@@ -169,9 +168,10 @@ export default function DashboardOverviewPage() {
       <div className="grid gap-6 md:grid-cols-2">
         <SalesByPaymentMethodChart 
           data={filteredSales.reduce((acc, s) => {
-            const existing = acc.find(i => i.name === (s.payment_method || 'cash'));
+            const method = (s.payment_method || 'cash') as 'cash' | 'pix' | 'card';
+            const existing = acc.find(i => i.name === method);
             if (existing) existing.value += (s.total_cents || 0);
-            else acc.push({ name: (s.payment_method as any) || 'cash', value: (s.total_cents || 0) });
+            else acc.push({ name: method, value: (s.total_cents || 0) });
             return acc;
           }, [] as { name: 'cash' | 'pix' | 'card', value: number }[])} 
         />
