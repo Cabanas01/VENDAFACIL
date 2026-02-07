@@ -1,8 +1,9 @@
+
 'use client';
 
 /**
- * @fileOverview Página de Planos.
- * Blindada contra erros de acesso e com reatividade pós-trial.
+ * @fileOverview Página de Planos v6.0.
+ * Sincronizado para garantir reatividade total após ativação do teste.
  */
 
 import { useState, useEffect } from 'react';
@@ -11,8 +12,7 @@ import {
   Loader2, 
   Calendar,
   CheckCircle2,
-  Info,
-  ArrowRight
+  Info
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/components/auth-provider';
@@ -58,6 +58,7 @@ export default function BillingPage() {
         description: 'Você agora tem 7 dias de acesso completo ao sistema.' 
       });
       
+      // 🔥 Forçar sincronização global e refresh do servidor
       await refreshStatus();
       router.refresh(); 
     } catch (error: any) {
@@ -98,16 +99,14 @@ export default function BillingPage() {
   return (
     <div className="max-w-6xl mx-auto space-y-12 py-8 animate-in fade-in duration-500">
       <div className="text-center space-y-4">
-        <h1 className="text-4xl font-black tracking-tight font-headline text-primary uppercase">Plano e Assinatura</h1>
-        <p className="text-lg text-muted-foreground max-w-2xl mx-auto font-medium">
-          Profissionalize sua gestão hoje mesmo.
-        </p>
+        <h1 className="text-4xl font-black tracking-tight font-headline text-primary uppercase">Assinatura e Acesso</h1>
+        <p className="text-lg text-muted-foreground max-w-2xl mx-auto font-medium">Escolha o plano ideal para profissionalizar sua frente de caixa.</p>
       </div>
 
       <Card className="border-primary/10 bg-muted/30 shadow-sm overflow-hidden">
         <CardHeader className="bg-primary/5 border-b">
           <CardTitle className="flex items-center gap-2 text-sm uppercase font-black tracking-widest">
-            <ShieldCheck className="h-4 w-4 text-primary" /> Situação do seu Acesso
+            <ShieldCheck className="h-4 w-4 text-primary" /> Situação da sua Licença
           </CardTitle>
         </CardHeader>
         <CardContent className="pt-6">
@@ -124,7 +123,7 @@ export default function BillingPage() {
                 <div className="flex items-center gap-4 px-6 py-4 bg-muted/50 rounded-xl">
                   <Calendar className="h-6 w-6 text-primary/60" />
                   <div>
-                    <p className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Válido até</p>
+                    <p className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Vencimento</p>
                     <p className="font-black text-foreground text-lg">
                       {isValid(parseISO(accessStatus.expires_at)) 
                         ? format(parseISO(accessStatus.expires_at), 'dd/MM/yyyy', { locale: ptBR }) 
@@ -137,9 +136,7 @@ export default function BillingPage() {
           ) : (
             <div className="p-10 text-center border-dashed border-2 rounded-xl">
               <Info className="h-8 w-8 mx-auto text-muted-foreground opacity-50 mb-4" />
-              <p className="text-sm text-muted-foreground font-black uppercase tracking-widest">
-                Nenhuma assinatura ativa ou teste iniciado.
-              </p>
+              <p className="text-sm text-muted-foreground font-black uppercase tracking-widest">Nenhuma licença ativa encontrada.</p>
             </div>
           )}
         </CardContent>
@@ -149,13 +146,13 @@ export default function BillingPage() {
         {planOrder.map(planId => {
           const plan = PLANS_CONFIG[planId];
           const isTrial = planId === 'trial';
-          const isActivePlan = accessStatus?.plano_tipo === planId && accessStatus?.acesso_liberado;
+          const isCurrentlyActive = accessStatus?.plano_tipo === planId && accessStatus?.acesso_liberado;
 
           return (
             <Card key={planId} className={cn(
               "flex flex-col relative transition-all border-primary/5",
               planId === 'anual' && "border-primary shadow-xl scale-105 z-10",
-              isActivePlan && "ring-2 ring-green-500"
+              isCurrentlyActive && "ring-2 ring-green-500"
             )}>
               <CardHeader className="text-center">
                 <CardTitle className="text-xl font-black uppercase tracking-tighter">{plan.name}</CardTitle>
@@ -182,15 +179,15 @@ export default function BillingPage() {
                     onClick={handleStartTrial}
                     disabled={isStartingTrial || !!store?.trial_used || !!accessStatus}
                   >
-                    {isStartingTrial ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Testar 7 Dias'}
+                    {isStartingTrial ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Começar Avaliação'}
                   </Button>
                 ) : (
                   <Button 
                     className="w-full h-12 font-black uppercase text-[11px]"
                     onClick={() => handleCheckout(planId)}
-                    disabled={isActivePlan}
+                    disabled={isCurrentlyActive}
                   >
-                    {isActivePlan ? 'Plano Ativo' : 'Assinar Agora'}
+                    {isCurrentlyActive ? 'Plano Ativo' : 'Assinar Agora'}
                   </Button>
                 )}
               </CardFooter>

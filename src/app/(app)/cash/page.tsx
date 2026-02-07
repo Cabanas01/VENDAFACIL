@@ -1,7 +1,9 @@
+
 'use client';
 
 /**
- * @fileOverview Gestão de Caixa com Fundo Inicial e Sincronização.
+ * @fileOverview Gestão de Caixa v6.0.
+ * Adicionado campo obrigatório de Fundo Inicial e sincronização global de estado.
  */
 
 import { useState, useMemo } from 'react';
@@ -18,8 +20,7 @@ import {
   PlusCircle, 
   Wallet, 
   Loader2,
-  CircleDollarSign,
-  X
+  CircleDollarSign
 } from 'lucide-react';
 
 import { PageHeader } from '@/components/page-header';
@@ -56,8 +57,8 @@ export default function CashPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [initialAmount, setInitialAmount] = useState('');
   
-  const cashSessionsSafe = useMemo(() => (Array.isArray(cashSessions) ? cashSessions : []), [cashSessions]);
-  const salesSafe = useMemo(() => (Array.isArray(sales) ? sales : []), [sales]);
+  const cashSessionsSafe = useMemo(() => Array.isArray(cashSessions) ? cashSessions : [], [cashSessions]);
+  const salesSafe = useMemo(() => Array.isArray(sales) ? sales : [], [sales]);
 
   const openSession = useMemo(() => cashSessionsSafe.find(s => s.status === 'open'), [cashSessionsSafe]);
   const hasOpenCash = !!openSession;
@@ -82,7 +83,7 @@ export default function CashPage() {
       setInitialAmount('');
       setIsModalOpen(false);
       
-      // Sincronização Global
+      // 🔥 Forçar sincronização global para que o Dashboard saiba que o caixa abriu
       await refreshStatus();
       router.refresh();
     } catch (err: any) {
@@ -106,7 +107,7 @@ export default function CashPage() {
       const method = (sale.payment_method || '').toLowerCase();
       if (method === 'cash' || method === 'dinheiro') acc.cash += (sale.total_cents || 0);
       if (method === 'pix') acc.pix += (sale.total_cents || 0);
-      if (['card', 'cartao', 'credito', 'debito'].includes(method)) acc.card += (sale.total_cents || 0);
+      if (['card', 'cartao'].includes(method)) acc.card += (sale.total_cents || 0);
       return acc;
     }, { totalCents: 0, count: 0, cash: 0, pix: 0, card: 0 });
   };
@@ -124,7 +125,7 @@ export default function CashPage() {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
-      <PageHeader title="Fluxo de Caixa" subtitle="Gestão financeira e fechamento de turno." />
+      <PageHeader title="Fluxo de Caixa" subtitle="Gestão financeira e controle de turno." />
       
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
@@ -135,18 +136,11 @@ export default function CashPage() {
                     <Wallet className="h-10 w-10 text-primary/40" />
                   </div>
                   <div className="space-y-2">
-                    <h3 className="text-xl font-black uppercase tracking-tight">Nenhum turno aberto</h3>
-                    <p className="text-sm text-muted-foreground max-w-xs font-medium">
-                      Para registrar vendas e ter controle de saldo, você precisa iniciar um novo turno de caixa.
-                    </p>
+                    <h3 className="text-xl font-black uppercase tracking-tight">Caixa Fechado</h3>
+                    <p className="text-sm text-muted-foreground max-w-xs font-medium">Inicie um novo turno para registrar vendas e controlar o saldo da gaveta.</p>
                   </div>
-                  <Button 
-                    size="lg" 
-                    className="font-black uppercase text-[11px] tracking-widest h-14 px-10" 
-                    onClick={() => setIsModalOpen(true)}
-                  >
-                    <PlusCircle className="mr-2 h-4 w-4" />
-                    Abrir Caixa Agora
+                  <Button size="lg" className="font-black uppercase text-[11px] tracking-widest h-14 px-10" onClick={() => setIsModalOpen(true)}>
+                    <PlusCircle className="mr-2 h-4 w-4" /> Abrir Caixa Agora
                   </Button>
                 </CardContent>
               </Card>
@@ -156,14 +150,12 @@ export default function CashPage() {
                     <div className="flex items-center justify-between">
                       <CardTitle className="flex items-center gap-2">
                           <CheckCircle className="text-green-500" />
-                          Caixa em Operação
+                          Operação em Andamento
                       </CardTitle>
-                      <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/20 uppercase font-black text-[9px]">
-                        Ativo
-                      </Badge>
+                      <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/20 uppercase font-black text-[9px]">Ativo</Badge>
                     </div>
                     <CardDescription className="font-bold">
-                         Aberto em {format(parseISO(openSession!.opened_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
+                         Turno aberto em {format(parseISO(openSession!.opened_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
@@ -173,27 +165,12 @@ export default function CashPage() {
                             <p className="text-xl font-black">{formatCurrency(openSession!.opening_amount_cents)}</p>
                         </div>
                         <div className="p-4 bg-background border rounded-xl shadow-sm">
-                            <p className="text-[10px] uppercase font-bold text-muted-foreground">Vendas (Total)</p>
-                            <p className="text-xl font-black text-primary">{formatCurrency(salesInOpenSession?.totalCents || 0)}</p>
+                            <p className="text-[10px] uppercase font-bold text-muted-foreground">Vendas (Cash)</p>
+                            <p className="text-xl font-black text-primary">{formatCurrency(salesInOpenSession?.cash || 0)}</p>
                         </div>
                         <div className="p-4 bg-primary text-primary-foreground rounded-xl shadow-lg">
-                            <p className="text-[10px] uppercase font-bold opacity-80">Saldo Atual (Cash)</p>
+                            <p className="text-[10px] uppercase font-bold opacity-80">Saldo na Gaveta</p>
                             <p className="text-xl font-black">{formatCurrency(openSession!.opening_amount_cents + (salesInOpenSession?.cash || 0))}</p>
-                        </div>
-                    </div>
-
-                    <div className="p-4 bg-muted/30 rounded-lg grid grid-cols-3 gap-4">
-                        <div className="flex flex-col">
-                          <span className="text-[10px] text-muted-foreground font-black uppercase flex items-center gap-1"><Coins className="h-3 w-3" /> Dinheiro</span>
-                          <span className="font-black text-sm">{formatCurrency(salesInOpenSession?.cash || 0)}</span>
-                        </div>
-                        <div className="flex flex-col border-l pl-4">
-                          <span className="text-[10px] text-muted-foreground font-black uppercase flex items-center gap-1"><PiggyBank className="h-3 w-3" /> PIX</span>
-                          <span className="font-black text-sm">{formatCurrency(salesInOpenSession?.pix || 0)}</span>
-                        </div>
-                        <div className="flex flex-col border-l pl-4">
-                          <span className="text-[10px] text-muted-foreground font-black uppercase flex items-center gap-1"><CreditCard className="h-3 w-3" /> Cartão</span>
-                          <span className="font-black text-sm">{formatCurrency(salesInOpenSession?.card || 0)}</span>
                         </div>
                     </div>
                 </CardContent>
@@ -203,10 +180,7 @@ export default function CashPage() {
             <Card>
                 <CardHeader>
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div>
-                        <CardTitle className="flex items-center gap-2 text-lg"><Briefcase className="h-5 w-5 text-primary" /> Histórico Consolidado</CardTitle>
-                        <CardDescription>Resumo de faturamento por período.</CardDescription>
-                      </div>
+                      <CardTitle className="flex items-center gap-2 text-lg"><Briefcase className="h-5 w-5 text-primary" /> Relatórios Consolidados</CardTitle>
                       <DateRangePicker date={dateRange} onDateChange={setDateRange} className="w-full sm:w-auto" />
                     </div>
                 </CardHeader>
@@ -218,7 +192,7 @@ export default function CashPage() {
                                 <p className="text-lg font-black">{formatCurrency(reportData.totalCents)}</p>
                            </div>
                            <div className="p-4 border rounded-lg bg-muted/10">
-                                <p className="text-[10px] uppercase font-bold text-muted-foreground">Dinheiro</p>
+                                <p className="text-[10px] uppercase font-bold text-muted-foreground">Entradas Dinheiro</p>
                                 <p className="text-lg font-black">{formatCurrency(reportData.cash)}</p>
                            </div>
                            <div className="p-4 border rounded-lg bg-muted/10">
@@ -239,13 +213,10 @@ export default function CashPage() {
         
         <div className="space-y-6">
             <Card className="shadow-sm border-primary/10">
-                 <CardHeader><CardTitle className="text-sm font-black uppercase tracking-widest">Ações Rápidas</CardTitle></CardHeader>
+                 <CardHeader><CardTitle className="text-sm font-black uppercase tracking-widest">Ações</CardTitle></CardHeader>
                  <CardContent className="flex flex-col gap-3">
                      <Button variant="outline" className="w-full h-12 font-bold" onClick={() => router.push('/sales/new')}>
-                        <PlusCircle className="mr-2 h-4 w-4"/> Novo PDV
-                     </Button>
-                     <Button variant="ghost" className="w-full text-xs font-bold opacity-60" onClick={() => router.push('/reports')}>
-                        Relatórios Completos
+                        <PlusCircle className="mr-2 h-4 w-4"/> Ir para PDV
                      </Button>
                  </CardContent>
             </Card>
@@ -254,7 +225,7 @@ export default function CashPage() {
         <div className="lg:col-span-3">
             <Card className="border-none shadow-sm overflow-hidden">
                 <CardHeader className="bg-muted/20 border-b">
-                    <CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-widest"><History className="h-4 w-4" /> Log de Sessões</CardTitle>
+                    <CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-widest"><History className="h-4 w-4" /> Histórico de Sessões</CardTitle>
                 </CardHeader>
                 <div className="overflow-x-auto">
                   <Table>
@@ -262,13 +233,13 @@ export default function CashPage() {
                           <TableRow>
                               <TableHead className="px-6">Abertura / Fechamento</TableHead>
                               <TableHead className="text-right">Fundo</TableHead>
-                              <TableHead className="text-right">Entradas (Cash)</TableHead>
+                              <TableHead className="text-right">Vendas (Cash)</TableHead>
                               <TableHead className="text-right">Total Final</TableHead>
                               <TableHead className="text-center">Status</TableHead>
                           </TableRow>
                       </TableHeader>
                       <TableBody>
-                          {cashSessionsSafe.length > 0 ? cashSessionsSafe.map(cr => {
+                          {cashSessionsSafe.map(cr => {
                               const sessionSales = calculateSalesForPeriod(cr.opened_at, cr.closed_at);
                               const totalExpected = (cr.opening_amount_cents || 0) + sessionSales.cash;
                               return (
@@ -276,7 +247,7 @@ export default function CashPage() {
                                   <TableCell className="px-6">
                                       <div className="flex flex-col text-[10px]">
                                         <span className="font-black uppercase">{format(parseISO(cr.opened_at), 'dd/MM/yy HH:mm')}</span>
-                                        <span className="text-muted-foreground font-medium">{cr.closed_at ? format(parseISO(cr.closed_at), 'dd/MM/yy HH:mm') : 'Em andamento...'}</span>
+                                        <span className="text-muted-foreground font-medium">{cr.closed_at ? format(parseISO(cr.closed_at), 'dd/MM/yy HH:mm') : 'Em aberto'}</span>
                                       </div>
                                   </TableCell>
                                   <TableCell className="text-right text-xs font-bold">{formatCurrency(cr.opening_amount_cents)}</TableCell>
@@ -290,11 +261,7 @@ export default function CashPage() {
                                       </Badge>
                                   </TableCell>
                               </TableRow>
-                          )}) : (
-                            <TableRow>
-                              <TableCell colSpan={5} className="text-center py-24 text-muted-foreground font-black uppercase text-[10px] tracking-widest opacity-40">Sem registros</TableCell>
-                            </TableRow>
-                          )}
+                          )})}
                       </TableBody>
                   </Table>
                 </div>
@@ -310,13 +277,13 @@ export default function CashPage() {
             </div>
             <DialogHeader>
               <DialogTitle className="text-2xl font-black font-headline uppercase tracking-tighter">Abertura de Caixa</DialogTitle>
-              <DialogDescription className="text-sm font-medium">Informe o valor em dinheiro já disponível na gaveta.</DialogDescription>
+              <DialogDescription className="text-sm font-medium">Informe o valor em dinheiro disponível para troco.</DialogDescription>
             </DialogHeader>
           </div>
 
           <div className="space-y-6 p-8 bg-background">
             <div className="space-y-2">
-              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Fundo Inicial (Dinheiro R$)</Label>
+              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Fundo Inicial (R$)</Label>
               <Input 
                 type="number" 
                 placeholder="0.00" 
@@ -333,7 +300,7 @@ export default function CashPage() {
                 onClick={handleOpenCash}
                 disabled={isOpening || !initialAmount}
               >
-                {isOpening ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : <CheckCircle className="h-4 w-4 mr-2" />}
+                {isOpening ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : <CircleDollarSign className="h-4 w-4 mr-2" />}
                 Confirmar Abertura
               </Button>
             </DialogFooter>

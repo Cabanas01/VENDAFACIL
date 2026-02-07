@@ -1,8 +1,9 @@
+
 'use client';
 
 /**
- * @fileOverview Gestão de Produtos (Catálogo).
- * Blindagem contra erros de i18n e arrays indefinidos.
+ * @fileOverview Gestão de Produtos (Catálogo) v6.0.
+ * Sincronizado para não enviar colunas inexistentes (active/barcode) e garantir reatividade.
  */
 
 import { useState, useMemo } from 'react';
@@ -12,12 +13,9 @@ import * as z from 'zod';
 import { 
   Search, 
   PlusCircle, 
-  MoreHorizontal, 
-  AlertCircle, 
   Edit, 
-  Trash2, 
-  PackageCheck, 
-  Loader2
+  Loader2,
+  Package
 } from 'lucide-react';
 
 import { PageHeader } from '@/components/page-header';
@@ -31,19 +29,8 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import {
   Form,
   FormControl,
@@ -52,13 +39,6 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 
 import type { Product } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
@@ -85,10 +65,7 @@ export default function ProductsPage() {
   const router = useRouter();
   
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
-  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [search, setSearch] = useState('');
 
@@ -121,9 +98,20 @@ export default function ProductsPage() {
   };
 
   const onSave = async (values: ProductFormValues) => {
+    if (!store?.id) return;
+    
     try {
       setIsSubmitting(true);
-      const payload = { ...values, store_id: store?.id };
+      
+      // REGRA DE OURO: Montar o payload explicitamente para evitar colunas inexistentes no banco
+      const payload = {
+        store_id: store.id,
+        name: values.name,
+        category: values.category || null,
+        stock_qty: values.stock_qty,
+        price_cents: values.price_cents,
+        cost_cents: values.cost_cents || 0,
+      };
 
       const { error } = editingProduct 
         ? await supabase.from('products').update(payload).eq('id', editingProduct.id)
@@ -131,8 +119,10 @@ export default function ProductsPage() {
 
       if (error) throw error;
 
-      toast({ title: 'Sucesso!', description: 'Produto salvo no catálogo.' });
+      toast({ title: 'Sucesso!', description: 'Catálogo atualizado.' });
       setIsModalOpen(false);
+      
+      // 🔥 Sincronizar Estado
       await refreshStatus();
       router.refresh();
     } catch (err: any) {
@@ -144,15 +134,27 @@ export default function ProductsPage() {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
-      <PageHeader title="Catálogo" subtitle="Produtos e controle de estoque.">
-        <Button onClick={() => handleOpenModal()} className="font-black uppercase text-xs">
+      <PageHeader title="Meus Produtos" subtitle="Controle seu estoque e catálogo de vendas.">
+        <Button onClick={() => handleOpenModal()} className="font-black uppercase text-xs tracking-widest shadow-lg shadow-primary/20">
           <PlusCircle className="mr-2 h-4 w-4" /> Novo Produto
         </Button>
       </PageHeader>
 
-      <Card className="border-none shadow-sm overflow-hidden">
-        <div className="p-4 bg-muted/5 border-b">
-          <div className="relative max-w-md">
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card className="border-none shadow-sm">
+          <CardContent className="pt-6 flex items-center justify-between">
+            <div className="space-y-1">
+              <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Total de Itens</p>
+              <p className="text-2xl font-black">{productsSafe.length}</p>
+            </div>
+            <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary"><Package className="h-5 w-5" /></div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="border-none shadow-sm overflow-hidden bg-background">
+        <div className="p-4 bg-muted/5 border-b flex items-center justify-between gap-4">
+          <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input 
               placeholder="Pesquisar catálogo..." 
@@ -163,61 +165,88 @@ export default function ProductsPage() {
           </div>
         </div>
 
-        <Table>
-          <TableHeader className="bg-muted/10">
-            <TableRow>
-              <TableHead className="px-6 font-black uppercase text-[10px]">Descrição</TableHead>
-              <TableHead className="text-right font-black uppercase text-[10px]">Preço</TableHead>
-              <TableHead className="text-center font-black uppercase text-[10px]">Estoque</TableHead>
-              <TableHead className="text-right px-6 font-black uppercase text-[10px]">Ações</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredProducts.map(p => (
-              <TableRow key={p.id} className="hover:bg-primary/5">
-                <TableCell className="px-6 py-4">
-                  <span className="font-black text-sm uppercase">{p.name}</span>
-                </TableCell>
-                <TableCell className="text-right font-black text-primary">
-                  {formatCurrency(p.price_cents)}
-                </TableCell>
-                <TableCell className="text-center">
-                  <Badge variant={p.stock_qty <= 0 ? 'destructive' : 'outline'} className="font-black">
-                    {p.stock_qty}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-right px-6">
-                  <Button variant="ghost" size="icon" onClick={() => handleOpenModal(p)}><Edit className="h-4 w-4" /></Button>
-                </TableCell>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader className="bg-muted/10">
+              <TableRow>
+                <TableHead className="px-6 font-black uppercase text-[10px] tracking-widest">Produto</TableHead>
+                <TableHead className="text-right font-black uppercase text-[10px] tracking-widest">Preço</TableHead>
+                <TableHead className="text-center font-black uppercase text-[10px] tracking-widest">Estoque</TableHead>
+                <TableHead className="text-right px-6 font-black uppercase text-[10px] tracking-widest">Ações</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {filteredProducts.map(p => (
+                <TableRow key={p.id} className="hover:bg-primary/5 transition-colors group">
+                  <TableCell className="px-6 py-4">
+                    <div className="flex flex-col">
+                      <span className="font-black text-sm uppercase tracking-tight group-hover:text-primary transition-colors">{p.name}</span>
+                      <span className="text-[9px] font-bold text-muted-foreground uppercase opacity-60">{p.category || 'Sem Categoria'}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right font-black text-primary text-base">
+                    {formatCurrency(p.price_cents)}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Badge variant={p.stock_qty <= 0 ? 'destructive' : 'outline'} className="font-black h-6 min-w-[40px] justify-center">
+                      {p.stock_qty}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right px-6">
+                    <Button variant="ghost" size="icon" onClick={() => handleOpenModal(p)} className="hover:bg-primary hover:text-white rounded-full transition-all">
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {filteredProducts.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center py-24 text-muted-foreground font-black uppercase text-[10px] tracking-widest opacity-40">
+                    Nenhum produto localizado
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </Card>
 
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl rounded-[32px]">
           <div className="bg-primary/5 py-10 px-8 text-center border-b">
-            <DialogTitle className="text-2xl font-black uppercase tracking-tighter">
+            <DialogTitle className="text-2xl font-black font-headline uppercase tracking-tighter">
               {editingProduct ? 'Editar' : 'Novo'} Produto
             </DialogTitle>
           </div>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSave)} className="space-y-6 p-8">
+            <form onSubmit={form.handleSubmit(onSave)} className="space-y-6 p-8 bg-background">
               <FormField name="name" control={form.control} render={({ field }) => (
-                <FormItem><FormLabel className="text-[10px] font-black uppercase">Nome Comercial</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                <FormItem>
+                  <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nome Comercial</FormLabel>
+                  <FormControl><Input placeholder="Ex: Coca-Cola 350ml" className="h-12 font-bold" {...field} /></FormControl>
+                  <FormMessage className="text-xs font-bold" />
+                </FormItem>
               )} />
+              
               <div className="grid grid-cols-2 gap-4">
                 <FormField name="price_cents" control={form.control} render={({ field }) => (
-                  <FormItem><FormLabel className="text-[10px] font-black uppercase">Preço (Centavos)</FormLabel><FormControl><Input type="number" {...field} /></FormControl></FormItem>
+                  <FormItem>
+                    <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Preço (Em Centavos)</FormLabel>
+                    <FormControl><Input type="number" placeholder="Ex: 500 para R$5,00" className="h-12 font-bold" {...field} /></FormControl>
+                  </FormItem>
                 )} />
                 <FormField name="stock_qty" control={form.control} render={({ field }) => (
-                  <FormItem><FormLabel className="text-[10px] font-black uppercase">Estoque</FormLabel><FormControl><Input type="number" {...field} /></FormControl></FormItem>
+                  <FormItem>
+                    <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Estoque Atual</FormLabel>
+                    <FormControl><Input type="number" placeholder="0" className="h-12 font-bold" {...field} /></FormControl>
+                  </FormItem>
                 )} />
               </div>
+
               <DialogFooter>
-                <Button type="submit" disabled={isSubmitting} className="w-full h-14 font-black uppercase tracking-widest">
-                  {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar Produto'}
+                <Button type="submit" disabled={isSubmitting} className="w-full h-14 font-black uppercase text-[11px] tracking-[0.2em] shadow-xl shadow-primary/20 transition-all active:scale-95">
+                  {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  Confirmar Cadastro
                 </Button>
               </DialogFooter>
             </form>

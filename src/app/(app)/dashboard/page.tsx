@@ -1,7 +1,9 @@
+
 'use client';
 
 /**
- * @fileOverview Visão Geral do Dashboard (Home)
+ * @fileOverview Visão Geral do Dashboard (Home) v6.0.
+ * Sincronizado com o estado global de caixa e vendas.
  */
 
 import { useState, useMemo } from 'react';
@@ -17,9 +19,6 @@ import {
   ArrowUpRight,
   AlertCircle,
   Loader2,
-  ChefHat,
-  GlassWater,
-  ClipboardList,
   CheckCircle
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -46,7 +45,8 @@ export default function DashboardOverviewPage() {
     to: new Date(),
   });
 
-  const cashSessionsSafe = useMemo(() => (Array.isArray(cashSessions) ? cashSessions : []), [cashSessions]);
+  // 🔥 Fonte da Verdade: Sessão de Caixa
+  const cashSessionsSafe = useMemo(() => Array.isArray(cashSessions) ? cashSessions : [], [cashSessions]);
   const openSession = useMemo(() => cashSessionsSafe.find(s => s.status === 'open'), [cashSessionsSafe]);
 
   const filteredSales = useMemo(() => {
@@ -57,12 +57,8 @@ export default function DashboardOverviewPage() {
 
     return safeSales.filter((sale) => {
       if (!sale?.created_at) return false;
-      try {
-        const saleDate = parseISO(sale.created_at);
-        return saleDate >= from && saleDate <= to;
-      } catch {
-        return false;
-      }
+      const saleDate = parseISO(sale.created_at);
+      return saleDate >= from && saleDate <= to;
     });
   }, [sales, dateRange]);
 
@@ -71,8 +67,7 @@ export default function DashboardOverviewPage() {
     const revenue = filteredSales.reduce((sum, s) => sum + (s?.total_cents || 0), 0);
     
     const cost = filteredSales.flatMap(s => s?.items || []).reduce((acc, item) => {
-      if (!item) return acc;
-      const prod = safeProducts.find(p => p?.id === item.product_id);
+      const prod = safeProducts.find(p => p.id === item.product_id);
       return acc + ((prod?.cost_cents || 0) * (item.quantity || 0));
     }, 0);
     
@@ -82,46 +77,31 @@ export default function DashboardOverviewPage() {
     return { revenue, cost, profit, cmvPercent };
   }, [filteredSales, products]);
 
-  const lowStockCount = useMemo(() => (Array.isArray(products) ? products : []).filter(p => p && (p.stock_qty || 0) <= (p.min_stock_qty || 0)).length, [products]);
-
   if (storeStatus === 'loading_auth' || storeStatus === 'loading_status') {
     return (
-      <div className="flex flex-col items-center justify-center h-[60vh] gap-4 text-muted-foreground">
+      <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="animate-pulse font-medium text-sm text-[10px] uppercase tracking-widest">Sincronizando ambiente comercial...</p>
+        <p className="animate-pulse font-black uppercase text-[10px] tracking-widest text-muted-foreground">Sincronizando Dashboard...</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
-      <PageHeader title="Visão Geral">
+      <PageHeader title="Painel de Gestão">
         <DateRangePicker date={dateRange} onDateChange={setDateRange} />
       </PageHeader>
 
-      {/* Alertas Críticos */}
       <div className="grid gap-4 md:grid-cols-2">
-        {lowStockCount > 0 && (
-          <Card className="border-yellow-500/50 bg-yellow-50/5 shadow-sm">
-            <CardContent className="flex items-center gap-4 py-4">
-              <AlertCircle className="h-5 w-5 text-yellow-600" />
-              <div className="flex-1">
-                <p className="text-sm font-bold text-yellow-900">{lowStockCount} produtos com estoque crítico</p>
-                <p className="text-xs text-yellow-700">Evite rupturas no seu faturamento.</p>
-              </div>
-              <Button variant="outline" size="sm" onClick={() => router.push('/dashboard/products')} className="h-8 font-black uppercase text-[10px]">Ver Lista</Button>
-            </CardContent>
-          </Card>
-        )}
         {!openSession ? (
           <Card className="border-red-500/50 bg-red-50/5 shadow-sm">
             <CardContent className="flex items-center gap-4 py-4">
               <Wallet className="h-5 w-5 text-red-600" />
               <div className="flex-1">
-                <p className="text-sm font-bold text-red-900">Seu caixa está fechado</p>
-                <p className="text-xs text-red-700">Abra o turno para iniciar as vendas físicas.</p>
+                <p className="text-sm font-bold text-red-900">Atenção: Turno de Caixa Fechado</p>
+                <p className="text-xs text-red-700">Inicie um novo turno para registrar vendas físicas.</p>
               </div>
-              <Button variant="destructive" size="sm" onClick={() => router.push('/cash')} className="h-8 font-black uppercase text-[10px]">Abrir Caixa Agora</Button>
+              <Button variant="destructive" size="sm" onClick={() => router.push('/cash')} className="h-8 font-black uppercase text-[10px]">Abrir Caixa</Button>
             </CardContent>
           </Card>
         ) : (
@@ -129,16 +109,15 @@ export default function DashboardOverviewPage() {
             <CardContent className="flex items-center gap-4 py-4">
               <CheckCircle className="h-5 w-5 text-green-600" />
               <div className="flex-1">
-                <p className="text-sm font-bold text-green-900">Operação em andamento</p>
-                <p className="text-xs text-green-700">Caixa aberto desde as {format(parseISO(openSession.opened_at), 'HH:mm')}.</p>
+                <p className="text-sm font-bold text-green-900">Operação em Andamento</p>
+                <p className="text-xs text-green-700">Caixa aberto hoje às {format(parseISO(openSession.opened_at), 'HH:mm')}.</p>
               </div>
-              <Button variant="outline" size="sm" onClick={() => router.push('/cash')} className="h-8 font-black uppercase text-[10px]">Ver Detalhes</Button>
+              <Button variant="outline" size="sm" onClick={() => router.push('/cash')} className="h-8 font-black uppercase text-[10px]">Ver Caixa</Button>
             </CardContent>
           </Card>
         )}
       </div>
 
-      {/* KPIs Financeiros */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         <Card className="border-primary/20">
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
@@ -148,7 +127,7 @@ export default function DashboardOverviewPage() {
           <CardContent>
             <div className="text-2xl font-black">{formatCurrency(stats.revenue)}</div>
             <div className="flex items-center text-[10px] text-green-600 font-bold mt-1">
-              <ArrowUpRight className="h-3 w-3 mr-1" /> No período
+              <ArrowUpRight className="h-3 w-3 mr-1" /> Período selecionado
             </div>
           </CardContent>
         </Card>
@@ -160,7 +139,7 @@ export default function DashboardOverviewPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-black text-destructive">{stats.cmvPercent.toFixed(1)}%</div>
-            <p className="text-[10px] text-muted-foreground font-bold mt-1">Custo das Mercadorias</p>
+            <p className="text-[10px] text-muted-foreground font-bold mt-1">Custo Médio de Mercadoria</p>
           </CardContent>
         </Card>
 
@@ -171,7 +150,7 @@ export default function DashboardOverviewPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-black">{formatCurrency(stats.profit)}</div>
-            <p className="text-[10px] font-bold opacity-70 mt-1">Sobra após o custo</p>
+            <p className="text-[10px] font-bold opacity-70 mt-1">Sobra após custos</p>
           </CardContent>
         </Card>
 
@@ -181,8 +160,8 @@ export default function DashboardOverviewPage() {
             <Users className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-black">{(Array.isArray(customers) ? customers : []).length}</div>
-            <p className="text-[10px] text-muted-foreground font-bold mt-1">Ativos na base</p>
+            <div className="text-2xl font-black">{(customers || []).length}</div>
+            <p className="text-[10px] text-muted-foreground font-bold mt-1">Cadastrados na base</p>
           </CardContent>
         </Card>
       </div>
@@ -190,18 +169,15 @@ export default function DashboardOverviewPage() {
       <div className="grid gap-6 md:grid-cols-2">
         <SalesByPaymentMethodChart 
           data={filteredSales.reduce((acc, s) => {
-            if (!s?.payment_method) return acc;
-            const existing = acc.find(i => i.name === s.payment_method);
+            const existing = acc.find(i => i.name === (s.payment_method || 'cash'));
             if (existing) existing.value += (s.total_cents || 0);
-            else acc.push({ name: s.payment_method as any, value: (s.total_cents || 0) });
+            else acc.push({ name: (s.payment_method as any) || 'cash', value: (s.total_cents || 0) });
             return acc;
           }, [] as { name: 'cash' | 'pix' | 'card', value: number }[])} 
         />
         <SalesByProductChart 
-          data={Object.entries(filteredSales.flatMap(s => s?.items || []).reduce((acc, i) => {
-            if (!i) return acc;
-            const name = i.product_name_snapshot || 'Produto';
-            acc[name] = (acc[name] || 0) + (i.subtotal_cents || 0);
+          data={Object.entries(filteredSales.flatMap(s => s.items || []).reduce((acc, i) => {
+            acc[i.product_name_snapshot] = (acc[i.product_name_snapshot] || 0) + (i.subtotal_cents || 0);
             return acc;
           }, {} as Record<string, number>))
           .map(([name, total]) => ({ name, total }))
