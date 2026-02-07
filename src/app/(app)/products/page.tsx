@@ -1,13 +1,12 @@
-
 'use client';
 
 /**
  * @fileOverview Gestão de Produtos (CRUD Direto via Supabase)
  * 
- * Implementa blindagem contra erros de execução e reatividade total.
+ * Removido campo 'active' para compatibilidade com schema real do banco.
  */
 
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -18,7 +17,6 @@ import {
   AlertCircle, 
   Edit, 
   Trash2, 
-  Barcode, 
   ChefHat, 
   GlassWater, 
   PackageCheck, 
@@ -79,7 +77,6 @@ const productSchema = z.object({
   category: z.string().optional(),
   stock_qty: z.coerce.number().int().min(0, 'Estoque não pode ser negativo').default(0),
   min_stock_qty: z.coerce.number().int().optional(),
-  active: z.boolean().default(true),
   price_cents: z.coerce.number().int().min(0, 'Preço deve ser positivo'),
   cost_cents: z.coerce.number().int().optional(),
   production_target: z.enum(['cozinha', 'bar', 'nenhum'], {
@@ -115,14 +112,13 @@ export default function ProductsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   
-  const productsSafe = useMemo(() => Array.isArray(products) ? products : [], [products]);
+  const productsSafe = useMemo(() => (Array.isArray(products) ? products : []), [products]);
 
   const categories = useMemo(() => ['all', ...Array.from(new Set(productsSafe.map(p => p.category).filter(Boolean)))], [productsSafe]);
 
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema),
     defaultValues: {
-      active: true,
       production_target: 'nenhum',
       prep_time_minutes: 5,
       stock_qty: 0,
@@ -157,14 +153,13 @@ export default function ProductsPage() {
         category: product.category || '',
         stock_qty: product.stock_qty,
         min_stock_qty: product.min_stock_qty,
-        active: product.active,
         price_cents: product.price_cents,
         cost_cents: product.cost_cents,
-        production_target: product.production_target || 'nenhum',
+        production_target: (product.production_target as any) || 'nenhum',
         prep_time_minutes: product.prep_time_minutes || 5,
       });
     } else {
-      form.reset({ active: true, stock_qty: 0, price_cents: 0, cost_cents: 0, category: '', min_stock_qty: 0, barcode: '', production_target: 'nenhum', prep_time_minutes: 5 });
+      form.reset({ stock_qty: 0, price_cents: 0, cost_cents: 0, category: '', min_stock_qty: 0, barcode: '', production_target: 'nenhum', prep_time_minutes: 5 });
     }
     setIsModalOpen(true);
   };
@@ -221,7 +216,7 @@ export default function ProductsPage() {
   const kpiData = useMemo(() => ({
       noStock: productsSafe.filter(p => p.stock_qty === 0).length,
       lowStock: productsSafe.filter(p => p.min_stock_qty && p.stock_qty > 0 && p.stock_qty <= p.min_stock_qty).length,
-      inactive: productsSafe.filter(p => !p.active).length,
+      total: productsSafe.length,
   }), [productsSafe]);
 
   return (
@@ -254,8 +249,8 @@ export default function ProductsPage() {
         <Card className="border-none shadow-sm">
           <CardContent className="pt-6 flex items-center justify-between">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Inativos</p>
-              <p className="text-3xl font-black tracking-tighter">{kpiData.inactive}</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total Itens</p>
+              <p className="text-3xl font-black tracking-tighter">{kpiData.total}</p>
             </div>
             <PackageCheck className="h-8 w-8 text-muted-foreground opacity-40" />
           </CardContent>
@@ -283,7 +278,6 @@ export default function ProductsPage() {
                   <TableHead className="font-black uppercase text-[10px]">Destino</TableHead>
                   <TableHead className="text-right font-black uppercase text-[10px]">Venda</TableHead>
                   <TableHead className="text-center font-black uppercase text-[10px]">Estoque</TableHead>
-                  <TableHead className="text-center font-black uppercase text-[10px]">Status</TableHead>
                   <TableHead className="text-right px-6 font-black uppercase text-[10px]">Ações</TableHead>
                 </TableRow>
               </TableHeader>
@@ -307,11 +301,6 @@ export default function ProductsPage() {
                         {p.stock_qty}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-center">
-                      <Badge variant={p.active ? 'default' : 'secondary'} className={p.active ? 'bg-green-500 text-white font-black text-[9px]' : 'font-black text-[9px]'}>
-                        {p.active ? 'ATIVO' : 'INATIVO'}
-                      </Badge>
-                    </TableCell>
                     <TableCell className="text-right px-6">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -331,7 +320,7 @@ export default function ProductsPage() {
                 ))}
                 {filteredProducts.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-24 text-muted-foreground font-black uppercase text-[10px] tracking-widest opacity-40">
+                    <TableCell colSpan={5} className="text-center py-24 text-muted-foreground font-black uppercase text-[10px] tracking-widest opacity-40">
                       Nenhum produto localizado
                     </TableCell>
                   </TableRow>
@@ -414,11 +403,8 @@ export default function ProductsPage() {
                 <FormField name="stock_qty" control={form.control} render={({ field }) => (
                   <FormItem><FormLabel className="text-[10px] font-black uppercase tracking-widest">Estoque Atual</FormLabel><FormControl><Input type="number" className="h-12 font-bold" {...field} /></FormControl></FormItem>
                 )} />
-                <FormField name="active" control={form.control} render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between rounded-2xl border p-4 bg-background h-12 mt-8">
-                    <FormLabel className="text-[9px] font-black uppercase tracking-[0.2em] m-0">Venda Ativa</FormLabel>
-                    <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
-                  </FormItem>
+                <FormField name="barcode" control={form.control} render={({ field }) => (
+                  <FormItem><FormLabel className="text-[10px] font-black uppercase tracking-widest">Cód. de Barras</FormLabel><FormControl><Input className="h-12 font-bold" {...field} /></FormControl></FormItem>
                 )} />
               </div>
 

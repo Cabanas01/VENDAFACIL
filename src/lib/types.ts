@@ -61,7 +61,6 @@ export type Product = {
   cost_cents?: number;
   stock_qty: number;
   min_stock_qty?: number;
-  active: boolean;
   barcode?: string;
   created_at: string;
   production_target: 'cozinha' | 'bar' | 'nenhum';

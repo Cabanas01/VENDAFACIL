@@ -54,7 +54,7 @@ export default function NewSalePDVPage() {
   const filteredProducts = useMemo(() => {
     const term = (search || '').toLowerCase();
     const safeProducts = Array.isArray(products) ? products : [];
-    return safeProducts.filter(p => p.active && (
+    return safeProducts.filter(p => (
       p.name.toLowerCase().includes(term) || (p.barcode && p.barcode.includes(term))
     ));
   }, [products, search]);
