@@ -1,5 +1,9 @@
-
 'use client';
+
+/**
+ * @fileOverview Frente de Caixa (PDV) v5.3
+ * Sincronizado com ComandaService (Mesa 0).
+ */
 
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
@@ -37,7 +41,7 @@ const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((value || 0) / 100);
 
 export default function NewSalePDVPage() {
-  const { products, getOrCreateSale, adicionarItem, fecharVenda } = useAuth();
+  const { products, getOrCreateComanda, adicionarItem, finalizarAtendimento } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
   
@@ -82,23 +86,16 @@ export default function NewSalePDVPage() {
     
     setIsSubmitting(true);
     try {
-      // 1. Inicia Venda no Balcão (Mesa 0)
-      const saleId = await getOrCreateSale('0');
+      // 1. Inicia Comanda no Balcão (Mesa 0)
+      const comandaId = await getOrCreateComanda(0, customerName || 'Consumidor PDV');
       
       // 2. Lança Itens via RPC
       for (const item of cart) {
-        await adicionarItem({
-          saleId,
-          productId: item.product_id,
-          productName: item.product_name_snapshot,
-          quantity: item.qty,
-          price: item.unit_price_cents,
-          destino: 'nenhum' 
-        });
+        await adicionarItem(comandaId, item.product_id, item.qty);
       }
       
-      // 3. Fecha Venda (Faturamento Atômico)
-      await fecharVenda(saleId, method);
+      // 3. Fecha Atendimento (Faturamento Atômico)
+      await finalizarAtendimento(comandaId, method);
       
       toast({ title: 'Venda Concluída!', description: `Valor: ${formatCurrency(cartTotalDisplay)}` });
       setCart([]);
@@ -116,7 +113,7 @@ export default function NewSalePDVPage() {
       <div className="mb-6 flex justify-between items-end">
         <div className="space-y-1">
           <h1 className="text-3xl font-headline font-black uppercase tracking-tighter">Terminal de Vendas</h1>
-          <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-[0.3em]">Operação Direta de Balcão</p>
+          <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-[0.3em]">Operação Direta de Balcão (Mesa 0)</p>
         </div>
       </div>
 
@@ -148,7 +145,7 @@ export default function NewSalePDVPage() {
                     <h3 className="font-black text-[11px] leading-tight line-clamp-2 uppercase tracking-tighter group-hover:text-primary transition-colors">{product.name}</h3>
                     <div className="flex items-end justify-between">
                       <span className="text-primary font-black text-xl tracking-tighter">{formatCurrency(product.price_cents)}</span>
-                      <span className="text-[9px] font-black text-slate-300 uppercase">{product.stock_qty} UN</span>
+                      <span className="text-[10px] font-black text-slate-300 uppercase">{product.stock_qty} UN</span>
                     </div>
                   </CardContent>
                 </Card>

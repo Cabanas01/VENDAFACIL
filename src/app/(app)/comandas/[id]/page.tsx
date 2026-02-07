@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
@@ -32,7 +31,7 @@ const formatCurrency = (val: number) =>
 
 export default function ComandaDetailsPage() {
   const { id } = useParams();
-  const { store, adicionarItem, fecharVenda, products } = useAuth();
+  const { products, adicionarItem, finalizarAtendimento, refreshStatus } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -59,7 +58,7 @@ export default function ComandaDetailsPage() {
       if (error) throw error;
       setSale(data as Sale);
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Erro ao carregar venda', description: err.message });
+      toast({ variant: 'destructive', title: 'Erro ao carregar atendimento', description: err.message });
     } finally {
       setLoading(false);
     }
@@ -72,18 +71,12 @@ export default function ComandaDetailsPage() {
     setIsSubmitting(true);
     try {
       for (const item of localCart) {
-        await adicionarItem({
-          saleId: id as string,
-          productId: item.product.id,
-          productName: item.product.name,
-          quantity: item.qty,
-          price: item.product.price_cents,
-          destino: item.product.production_target || 'nenhum'
-        });
+        await adicionarItem(id as string, item.product.id, item.qty);
       }
       toast({ title: 'Itens Lançados!' });
       setLocalCart([]);
       setIsAddingItems(false);
+      await refreshStatus();
       await fetchData();
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Falha ao lançar pedido', description: err.message });
@@ -96,8 +89,9 @@ export default function ComandaDetailsPage() {
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
-      await fecharVenda(id as string, method);
+      await finalizarAtendimento(id as string, method);
       toast({ title: 'Pagamento Confirmado!' });
+      await refreshStatus();
       router.push('/comandas');
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Erro ao fechar conta', description: err.message });
@@ -109,7 +103,7 @@ export default function ComandaDetailsPage() {
   if (loading) return (
     <div className="h-screen flex flex-col items-center justify-center gap-4">
       <Loader2 className="animate-spin text-primary" />
-      <p className="text-[10px] font-black uppercase tracking-widest animate-pulse">Sincronizando Banco de Dados...</p>
+      <p className="text-[10px] font-black uppercase tracking-widest animate-pulse">Sincronizando Atendimento...</p>
     </div>
   );
 
@@ -131,7 +125,7 @@ export default function ComandaDetailsPage() {
           </div>
         </div>
         <div className="text-right">
-          <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Total Acumulado</p>
+          <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Saldo Parcial</p>
           <p className="text-4xl font-black text-primary tracking-tighter">{formatCurrency(sale?.total_cents || 0)}</p>
         </div>
       </div>
@@ -139,8 +133,8 @@ export default function ComandaDetailsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <Card className="lg:col-span-2 border-none shadow-sm overflow-hidden bg-background">
           <CardHeader className="bg-muted/10 border-b flex flex-row items-center justify-between py-4">
-            <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Itens da Conta</CardTitle>
-            <Button size="sm" className="font-black uppercase text-[10px] h-9" onClick={() => setIsAddingItems(true)}>+ Adicionar Itens</Button>
+            <CardTitle className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Itens Consumidos</CardTitle>
+            <Button size="sm" className="font-black uppercase text-[10px] h-9" onClick={() => setIsAddingItems(true)}>+ Lançar Pedido</Button>
           </CardHeader>
           <Table>
             <TableHeader>
@@ -151,7 +145,7 @@ export default function ComandaDetailsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sale?.items?.map((item) => (
+              {(sale?.items || []).map((item) => (
                 <TableRow key={item.id} className="hover:bg-muted/5 transition-colors">
                   <TableCell className="px-6 py-4">
                     <div className="flex flex-col">
@@ -169,7 +163,7 @@ export default function ComandaDetailsPage() {
               ))}
               {(!sale?.items || sale.items.length === 0) && (
                 <TableRow>
-                  <TableCell colSpan={3} className="text-center py-12 text-muted-foreground font-black uppercase text-[10px] tracking-widest opacity-40">Conta vazia</TableCell>
+                  <TableCell colSpan={3} className="text-center py-12 text-muted-foreground font-black uppercase text-[10px] tracking-widest opacity-40">Nenhum item lançado</TableCell>
                 </TableRow>
               )}
             </TableBody>
@@ -275,7 +269,7 @@ export default function ComandaDetailsPage() {
               <span className="font-black uppercase text-xs tracking-[0.2em]">PIX</span>
             </Button>
             <Button variant="outline" className="w-full h-24 justify-start gap-8 border-none bg-slate-50 hover:bg-slate-100 rounded-[32px] px-10 transition-all" onClick={() => handleFinalize('card')}>
-              <div className="h-14 w-14 rounded-full bg-blue-100 flex items-center justify-center shadow-inner"><CreditCard className="text-blue-600 h-7 w-7" /></div>
+              <div className="h-14 w-14 rounded-full bg-blue-100 flex items-center justify-center shadow-inner"><CreditCard className="h-7 w-7 text-blue-600" /></div>
               <span className="font-black uppercase text-xs tracking-[0.2em]">Cartão</span>
             </Button>
           </div>

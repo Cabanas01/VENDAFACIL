@@ -1,5 +1,9 @@
-
 'use client';
+
+/**
+ * @fileOverview Painel Cozinha (KDS).
+ * Consome a View production_snapshot e conclui itens via ComandaService.
+ */
 
 import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/components/auth-provider';
@@ -15,7 +19,7 @@ import { useToast } from '@/hooks/use-toast';
 import type { ProductionSnapshotView } from '@/lib/types';
 
 export default function CozinhaPage() {
-  const { store, marcarItemConcluido } = useAuth();
+  const { store, concluirPreparo } = useAuth();
   const { toast } = useToast();
   const [pedidos, setPedidos] = useState<ProductionSnapshotView[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,7 +45,6 @@ export default function CozinhaPage() {
 
   useEffect(() => {
     fetchPedidos();
-    // Realtime Sync via Postgres Changes
     const channel = supabase
       .channel('kds_realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sale_items' }, () => fetchPedidos())
@@ -52,9 +55,8 @@ export default function CozinhaPage() {
 
   const handleConcluir = async (itemId: string) => {
     try {
-      await marcarItemConcluido(itemId);
+      await concluirPreparo(itemId);
       toast({ title: 'Prato Liberado!' });
-      // Item sumirá automaticamente do snapshot filtrado
       await fetchPedidos();
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Erro', description: err.message });
@@ -62,7 +64,7 @@ export default function CozinhaPage() {
   };
 
   if (loading && pedidos.length === 0) return (
-    <div className="h-[60vh] flex flex-col items-center justify-center gap-4">
+    <div className="h-[60vh] flex flex-col items-center justify-center gap-4 text-muted-foreground">
       <Loader2 className="animate-spin text-primary h-8 w-8" />
       <p className="font-black uppercase text-[10px] tracking-widest animate-pulse">Sincronizando Cozinha...</p>
     </div>
@@ -83,7 +85,7 @@ export default function CozinhaPage() {
             <div className="px-6 py-4 flex justify-between items-center border-b bg-muted/30">
               <div className="flex flex-col">
                 <span className="text-xl font-black font-headline uppercase leading-none">Mesa {p.mesa || 'Balcão'}</span>
-                <span className="text-[9px] font-bold text-muted-foreground uppercase mt-1">Ref: {p.sale_id.substring(0,8)}</span>
+                <span className="text-[9px] font-bold text-muted-foreground uppercase mt-1">Ref: {p.comanda_id.substring(0,8)}</span>
               </div>
               <div className="flex items-center gap-2 text-[10px] font-black uppercase text-muted-foreground">
                 <Clock className="h-3 w-3" /> {formatDistanceToNow(parseISO(p.created_at), { locale: ptBR })}

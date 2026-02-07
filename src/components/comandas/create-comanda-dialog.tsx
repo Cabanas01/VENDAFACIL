@@ -25,7 +25,7 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
 }) {
-  const { getOrCreateComanda } = useAuth();
+  const { getOrCreateComanda, refreshStatus } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -41,6 +41,7 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
   const onSubmit = async (values: ComandaFormValues) => {
     setIsSubmitting(true);
     try {
+      // Chama o serviço centralizado via AuthContext
       const comandaId = await getOrCreateComanda(Number(values.mesa), values.cliente || null);
 
       toast({ 
@@ -51,13 +52,16 @@ export function CreateComandaDialog({ isOpen, onOpenChange, onSuccess }: {
       onOpenChange(false);
       form.reset();
       
+      // Sincroniza UI antes de navegar
+      await refreshStatus();
       if (onSuccess) await onSuccess();
+      
       router.push(`/comandas/${comandaId}`);
     } catch (err: any) {
       toast({ 
         variant: 'destructive', 
-        title: 'Erro ao abrir mesa', 
-        description: err.message || 'Verifique sua conexão.' 
+        title: 'Falha na Operação', 
+        description: err.message || 'Não foi possível abrir a comanda.' 
       });
     } finally {
       setIsSubmitting(false);

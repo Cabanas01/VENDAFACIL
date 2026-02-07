@@ -27,10 +27,10 @@ type AuthContextType = {
   refreshStatus: () => Promise<void>;
   createStore: (storeData: any) => Promise<void>;
   
-  getOrCreateSale: (table: string) => Promise<string>;
-  adicionarItem: (payload: any) => Promise<void>;
-  fecharVenda: (saleId: string, method: 'cash' | 'pix' | 'card') => Promise<void>;
-  marcarItemConcluido: (itemId: string) => Promise<void>;
+  getOrCreateComanda: (table: number, customerName?: string | null) => Promise<string>;
+  adicionarItem: (comandaId: string, productId: string, quantity: number) => Promise<void>;
+  finalizarAtendimento: (comandaId: string, method: 'cash' | 'pix' | 'card') => Promise<void>;
+  concluirPreparo: (itemId: string) => Promise<void>;
   
   logout: () => Promise<void>;
 };
@@ -60,14 +60,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (storeId) {
+        // Leitura Passiva: O banco cuida do isolamento via RLS
         const [storeRes, prodRes, activeSalesRes, custRes, accessRes, historyRes, cashRes] = await Promise.all([
-          supabase.from('stores').select('*').eq('id', storeId).single(),
-          supabase.from('products').select('*').eq('store_id', storeId).order('name'),
-          supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeId).eq('status', 'open').order('created_at', { ascending: true }),
-          supabase.from('customers').select('*').eq('store_id', storeId).order('name'),
+          supabase.from('stores').select('*').single(),
+          supabase.from('products').select('*').order('name'),
+          supabase.from('sales').select('*, items:sale_items(*)').eq('status', 'open').order('created_at', { ascending: true }),
+          supabase.from('customers').select('*').order('name'),
           supabase.rpc('get_store_access_status', { p_store_id: storeId }),
-          supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeId).eq('status', 'paid').order('created_at', { ascending: false }).limit(50),
-          supabase.from('cash_sessions').select('*').eq('store_id', storeId).order('opened_at', { ascending: false })
+          supabase.from('sales').select('*, items:sale_items(*)').eq('status', 'paid').order('created_at', { ascending: false }).limit(50),
+          supabase.from('cash_sessions').select('*').order('opened_at', { ascending: false })
         ]);
 
         setStore(storeRes.data || null);
@@ -88,8 +89,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const refreshStatus = useCallback(async () => {
-    if (user?.id) await fetchAppData(user.id);
-  }, [user?.id, fetchAppData]);
+    const { data: { user: sessionUser } } = await supabase.auth.getUser();
+    if (sessionUser) await fetchAppData(sessionUser.id);
+  }, [fetchAppData]);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user: sessionUser } }) => {
@@ -102,24 +104,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, [fetchAppData]);
 
-  const getOrCreateSale = async (table: string) => {
-    if (!store?.id) throw new Error('Unidade não identificada.');
-    return ComandaService.getOrCreateSale(store.id, Number(table));
+  // Mutações delegadas ao ComandaService (v5.3)
+  const getOrCreateComanda = async (table: number, customerName?: string | null) => {
+    return ComandaService.getOrCreateComanda(table, customerName);
   };
 
-  const adicionarItem = async (payload: any) => {
-    await ComandaService.adicionarItem(payload);
-    await refreshStatus();
+  const adicionarItem = async (comandaId: string, productId: string, quantity: number) => {
+    await ComandaService.adicionarItem(comandaId, productId, quantity);
   };
 
-  const fecharVenda = async (saleId: string, method: 'cash' | 'pix' | 'card') => {
-    await ComandaService.finalizarVenda(saleId, method);
-    await refreshStatus();
+  const finalizarAtendimento = async (comandaId: string, method: 'cash' | 'pix' | 'card') => {
+    await ComandaService.finalizarAtendimento(comandaId, method);
   };
 
-  const marcarItemConcluido = async (itemId: string) => {
-    await ComandaService.concluirItem(itemId);
-    await refreshStatus();
+  const concluirPreparo = async (itemId: string) => {
+    await ComandaService.concluirPreparo(itemId);
   };
 
   const createStore = async (storeData: any) => {
@@ -143,7 +142,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider value={{ 
       user, store, accessStatus, products, comandas: activeSales, activeSales, customers, sales: salesHistory, cashSessions, storeStatus,
-      refreshStatus, createStore, getOrCreateSale, adicionarItem, fecharVenda, marcarItemConcluido, logout 
+      refreshStatus, createStore, getOrCreateComanda, adicionarItem, finalizarAtendimento, concluirPreparo, logout 
     }}>
       {children}
     </AuthContext.Provider>

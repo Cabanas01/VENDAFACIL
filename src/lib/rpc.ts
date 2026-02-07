@@ -1,23 +1,23 @@
-
 'use client';
 
 import { supabase } from './supabase/client';
 
 /**
- * @fileOverview SERVIÇO CANÔNICO v6.1
+ * @fileOverview SERVIÇO CANÔNICO v5.3 (OFICIAL)
  * 
- * Central de mutações transacionais alinhada ao Schema Cache real.
+ * Central de mutações transacionais. 
+ * Regra: Componentes NÃO chamam supabase.rpc direto — usam este serviço.
  */
 
 export const ComandaService = {
   /**
-   * 1. Abre ou Recupera Venda Aberta
-   * Assinatura detectada: p_numero (int), p_store_id (uuid)
+   * 1. Abre ou Recupera Comanda Aberta (PDV = Mesa 0)
+   * Assinatura v5.3: p_table_number (int), p_customer_name (text)
    */
-  async getOrCreateSale(storeId: string, tableNumber: number) {
+  async getOrCreateComanda(tableNumber: number, customerName?: string | null) {
     const { data, error } = await supabase.rpc('rpc_get_or_create_open_comanda', {
-      p_numero: Number(tableNumber),
-      p_store_id: storeId
+      p_table_number: Number(tableNumber),
+      p_customer_name: customerName ?? null
     });
 
     if (error) {
@@ -25,60 +25,53 @@ export const ComandaService = {
       throw new Error(error.message);
     }
 
-    return data as string; // Retorna comanda_id/sale_id
+    return data as string; // Retorna comanda_id
   },
 
   /**
-   * 2. Adiciona Item à Venda
+   * 2. Adiciona Item à Comanda
+   * Assinatura v5.3: p_comanda_id (uuid), p_product_id (uuid), p_quantity (numeric)
    */
-  async adicionarItem(payload: {
-    saleId: string;
-    productId: string;
-    productName: string;
-    quantity: number;
-    price: number;
-    destino: 'cozinha' | 'bar' | 'nenhum';
-  }) {
-    const { error } = await supabase.rpc('rpc_add_item_to_sale', {
-      p_sale_id: payload.saleId,
-      p_product_id: payload.productId,
-      p_product_name: payload.productName,
-      p_quantity: Number(payload.quantity),
-      p_price: Number(payload.price),
-      p_destino: payload.destino
+  async adicionarItem(comandaId: string, productId: string, quantity: number) {
+    const { error } = await supabase.rpc('rpc_add_item_to_comanda', {
+      p_comanda_id: comandaId,
+      p_product_id: productId,
+      p_quantity: Number(quantity)
     });
 
     if (error) {
-      console.error('[RPC_ERROR] rpc_add_item_to_sale:', error);
+      console.error('[RPC_ERROR] rpc_add_item_to_comanda:', error);
       throw new Error(error.message);
     }
   },
 
   /**
-   * 3. Fecha Venda
+   * 3. Fecha Comanda e Gera Venda (Atômico)
+   * Assinatura v5.3: p_comanda_id (uuid), p_payment_method (text)
    */
-  async finalizarVenda(saleId: string, paymentMethod: 'cash' | 'pix' | 'card') {
-    const { error } = await supabase.rpc('rpc_close_sale', {
-      p_sale: saleId,
-      p_payment: paymentMethod
+  async finalizarAtendimento(comandaId: string, paymentMethod: 'cash' | 'pix' | 'card') {
+    const { error } = await supabase.rpc('rpc_close_comanda_to_sale', {
+      p_comanda_id: comandaId,
+      p_payment_method: paymentMethod
     });
 
     if (error) {
-      console.error('[RPC_ERROR] rpc_close_sale:', error);
+      console.error('[RPC_ERROR] rpc_close_comanda_to_sale:', error);
       throw new Error(error.message);
     }
   },
 
   /**
-   * 4. Conclui Item
+   * 4. Conclui Item na Produção (KDS/BDS)
+   * Assinatura v5.3: p_order_item_id (uuid)
    */
-  async concluirItem(saleItemId: string) {
-    const { error } = await supabase.rpc('rpc_mark_item_done', {
-      p_item: saleItemId
+  async concluirPreparo(orderItemId: string) {
+    const { error } = await supabase.rpc('rpc_mark_order_item_done', {
+      p_order_item_id: orderItemId
     });
 
     if (error) {
-      console.error('[RPC_ERROR] rpc_mark_item_done:', error);
+      console.error('[RPC_ERROR] rpc_mark_order_item_done:', error);
       throw new Error(error.message);
     }
   }
