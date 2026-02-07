@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * @fileOverview Gestão Profissional de Produtos v7.1
- * Corrigido handler de criação e tipos financeiros.
+ * @fileOverview Gestão Profissional de Produtos v7.2
+ * Corrigido caminhos de importação e funções de exclusão.
  */
 
 import { useState, useMemo } from 'react';
@@ -15,8 +15,7 @@ import {
   Trash2, 
   Coins,
   Loader2,
-  ChevronRight,
-  AlertTriangle
+  ChevronRight
 } from 'lucide-react';
 
 import { PageHeader } from '@/components/page-header';
@@ -191,6 +190,18 @@ export default function ProductsPage() {
       toast({ variant: 'destructive', title: 'Erro no custo', description: err.message });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSoftDelete = async (p: Product) => {
+    if (!confirm(`Deseja realmente desativar o produto "${p.name}"?`)) return;
+    try {
+      const { error } = await supabase.from('products').update({ is_active: false }).eq('id', p.id);
+      if (error) throw error;
+      toast({ title: 'Produto Desativado' });
+      await refreshStatus();
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Erro ao desativar', description: err.message });
     }
   };
 

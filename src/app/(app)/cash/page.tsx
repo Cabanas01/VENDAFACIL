@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * @fileOverview Gestão de Caixa v6.1.
- * Corrigido nome da tabela para cash_registers e sincronização global.
+ * @fileOverview Gestão de Caixa v6.2.
+ * Corrigido insert para evitar erro de coluna 'status' inexistente.
  */
 
 import { useEffect, useState, useMemo } from 'react';
@@ -12,7 +12,6 @@ import { ptBR } from 'date-fns/locale';
 import { 
   Wallet, 
   CircleDollarSign, 
-  Clock, 
   Lock, 
   History, 
   Loader2,
@@ -21,7 +20,7 @@ import {
 } from 'lucide-react';
 
 import { PageHeader } from '@/components/page-header';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -43,9 +42,9 @@ export default function CaixaPage() {
   const [openingAmount, setOpeningAmount] = useState('');
   const [closingAmount, setClosingAmount] = useState('');
 
-  // Localizar sessão aberta no estado global
+  // Sessão aberta = qualquer uma sem closed_at
   const openSession = useMemo(() => 
-    (cashSessions || []).find(s => s.status === 'open'), 
+    (cashSessions || []).find(s => s.closed_at === null), 
   [cashSessions]);
 
   const handleAbrirCaixa = async (e: React.FormEvent) => {
@@ -59,7 +58,6 @@ export default function CaixaPage() {
       const { error } = await supabase.from('cash_registers').insert({
         store_id: store.id,
         opening_amount_cents: amountCents,
-        status: 'open',
         opened_at: new Date().toISOString()
       });
 
@@ -88,7 +86,6 @@ export default function CaixaPage() {
         .from('cash_registers')
         .update({
           closing_amount_cents: finalCents,
-          status: 'closed',
           closed_at: new Date().toISOString()
         })
         .eq('id', openSession.id);
@@ -200,7 +197,6 @@ export default function CaixaPage() {
           </Card>
         )}
 
-        {/* LADO DIREITO: HISTÓRICO E INFO */}
         <div className="space-y-6">
           <Card className="border-none shadow-sm bg-background">
             <CardHeader className="bg-muted/10 border-b">
@@ -223,15 +219,15 @@ export default function CaixaPage() {
                       <TableCell className="px-6">
                         <div className="flex flex-col">
                           <span className="font-bold text-[10px]">{s.opened_at ? format(parseISO(s.opened_at), 'dd/MM/yy HH:mm') : '--/--'}</span>
-                          <span className="text-[9px] text-muted-foreground">{s.closed_at ? format(parseISO(s.closed_at), 'HH:mm') : '—'}</span>
+                          <span className="text-[9px] text-muted-foreground">{s.closed_at ? format(parseISO(s.closed_at), 'HH:mm') : 'Ativo'}</span>
                         </div>
                       </TableCell>
                       <TableCell className="text-right font-black text-xs">
                         {s.closing_amount_cents ? formatCurrency(s.closing_amount_cents) : '—'}
                       </TableCell>
                       <TableCell className="text-center px-6">
-                        <Badge variant={s.status === 'open' ? 'default' : 'secondary'} className="text-[8px] font-black uppercase h-5">
-                          {s.status === 'open' ? 'Ativo' : 'Fechado'}
+                        <Badge variant={s.closed_at === null ? 'default' : 'secondary'} className="text-[8px] font-black uppercase h-5">
+                          {s.closed_at === null ? 'Ativo' : 'Fechado'}
                         </Badge>
                       </TableCell>
                     </TableRow>
@@ -244,18 +240,6 @@ export default function CaixaPage() {
                 </TableBody>
               </Table>
             </div>
-          </Card>
-
-          <Card className="border-dashed border-2 bg-muted/5">
-            <CardContent className="p-6 flex items-start gap-4">
-              <AlertCircle className="h-5 w-5 text-muted-foreground mt-0.5" />
-              <div className="space-y-1">
-                <p className="text-xs font-black uppercase tracking-widest">Importante</p>
-                <p className="text-[11px] text-muted-foreground font-medium leading-relaxed">
-                  O fechamento de caixa registra o valor físico contado. O sistema comparará automaticamente este valor com as vendas registradas para identificar possíveis furos.
-                </p>
-              </div>
-            </CardContent>
           </Card>
         </div>
       </div>

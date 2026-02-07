@@ -94,7 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           closed_at: r.closed_at,
           opening_amount_cents: r.opening_amount_cents || r.opening_amount || 0,
           closing_amount_cents: r.closing_amount_cents || r.closing_amount || null,
-          status: r.status as 'open' | 'closed'
+          status: r.closed_at ? 'closed' : 'open'
         }));
         
         setCashSessions(mappedSessions);
