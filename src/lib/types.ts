@@ -61,6 +61,7 @@ export type Product = {
   cost_cents?: number;
   stock_qty: number;
   min_stock_qty?: number;
+  active: boolean;
   barcode?: string;
   created_at: string;
   production_target: 'cozinha' | 'bar' | 'nenhum';
@@ -104,6 +105,7 @@ export type Sale = {
   payment_method: 'cash' | 'pix' | 'card';
   created_at: string;
   items?: any[];
+  customer_id?: string;
 };
 
 export type CartItem = {
@@ -153,4 +155,5 @@ export type StoreAccessStatus = {
     status: string;
     plano_nome: string;
     mensagem: string;
+    plano_tipo: string;
 }
