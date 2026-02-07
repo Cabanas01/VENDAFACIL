@@ -49,8 +49,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [storeStatus, setStoreStatus] = useState<'loading_auth' | 'loading_status' | 'ready' | 'no_store' | 'error'>('loading_auth');
 
   const fetchAppData = useCallback(async (userId: string) => {
-    setStoreStatus('loading_status');
     try {
+      setStoreStatus('loading_status');
+      
       const { data: ownerStore } = await supabase.from('stores').select('id').eq('user_id', userId).maybeSingle();
       let storeId = ownerStore?.id;
 
@@ -103,9 +104,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, [fetchAppData]);
 
-  const getOrCreateComanda = async (table: number) => {
+  const getOrCreateComanda = async (table: number, customerName: string | null = null) => {
     if (!store?.id) throw new Error('Unidade não identificada.');
-    return ComandaService.getOrCreateComanda(table, store.id);
+    return ComandaService.getOrCreateComanda(table, customerName);
   };
 
   const adicionarItem = async (comandaId: string, productId: string, quantity: number) => {

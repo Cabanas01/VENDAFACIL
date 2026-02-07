@@ -3,21 +3,21 @@
 import { supabase } from './supabase/client';
 
 /**
- * @fileOverview SERVIÇO CANÔNICO v5.3 (OFICIAL)
+ * @fileOverview SERVIÇO CANÔNICO v6.0 (DEFINITIVO)
  * 
  * Central de mutações transacionais. 
- * Ajustado para a assinatura real detectada: (p_numero, p_store_id)
+ * O store_id NÃO é enviado pelo client, sendo resolvido no banco via auth.uid().
  */
 
 export const ComandaService = {
   /**
    * 1. Abre ou Recupera Comanda Aberta (PDV = Mesa 0)
-   * Assinatura real: p_numero (int), p_store_id (uuid)
+   * Assinatura: p_table_number (int), p_customer_name (text)
    */
-  async getOrCreateComanda(tableNumber: number, storeId: string) {
+  async getOrCreateComanda(tableNumber: number, customerName: string | null = null) {
     const { data, error } = await supabase.rpc('rpc_get_or_create_open_comanda', {
-      p_numero: Number(tableNumber),
-      p_store_id: storeId
+      p_table_number: Number(tableNumber),
+      p_customer_name: customerName || null
     });
 
     if (error) {

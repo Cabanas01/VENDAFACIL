@@ -1,17 +1,15 @@
 'use client';
 
 /**
- * @fileOverview Página de Planos (Sincronizada e Segura)
- * 
- * Implementa refresh imediato após ativação de trial e exibição rigorosa do status.
+ * @fileOverview Página de Planos.
+ * Blindada contra erros de acesso e com reatividade pós-trial.
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   ShieldCheck, 
   Loader2, 
   Calendar,
-  AlertTriangle,
   CheckCircle2,
   Info,
   ArrowRight
@@ -35,6 +33,7 @@ import type { PlanID } from '@/lib/billing/checkoutLinks';
 import { format, parseISO, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase/client';
 
 export default function BillingPage() {
   const { user, store, accessStatus, refreshStatus, storeStatus } = useAuth();
@@ -48,12 +47,11 @@ export default function BillingPage() {
   }, []);
 
   const handleStartTrial = async () => {
-    setIsStartingTrial(true);
     try {
-      const response = await fetch('/api/billing/start-trial', { method: 'POST' });
-      const result = await response.json();
+      setIsStartingTrial(true);
+      const { error } = await supabase.rpc('start_trial');
 
-      if (!response.ok) throw new Error(result.error || 'Erro ao ativar trial.');
+      if (error) throw error;
 
       toast({ 
         title: 'Avaliação Ativada!', 
@@ -86,25 +84,11 @@ export default function BillingPage() {
     window.open(finalUrl, '_blank');
   };
 
-  const formattedExpiryDate = useMemo(() => {
-    if (!accessStatus?.expires_at) return null;
-    try {
-      const date = parseISO(accessStatus.expires_at);
-      if (!isValid(date)) return null;
-      return format(date, "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
-    } catch {
-      return null;
-    }
-  }, [accessStatus?.expires_at]);
-
   if (!isMounted || storeStatus === 'loading_auth' || storeStatus === 'loading_status') {
     return (
-      <div className="max-w-6xl mx-auto space-y-12 py-8">
+      <div className="max-w-6xl mx-auto space-y-8 py-8">
         <Skeleton className="h-12 w-64 mx-auto" />
         <Skeleton className="h-40 w-full" />
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-96 w-full" />)}
-        </div>
       </div>
     );
   }
@@ -116,7 +100,7 @@ export default function BillingPage() {
       <div className="text-center space-y-4">
         <h1 className="text-4xl font-black tracking-tight font-headline text-primary uppercase">Plano e Assinatura</h1>
         <p className="text-lg text-muted-foreground max-w-2xl mx-auto font-medium">
-          Escolha como quer impulsionar o seu negócio. Teste grátis ou escolha um plano profissional.
+          Profissionalize sua gestão hoje mesmo.
         </p>
       </div>
 
@@ -130,36 +114,32 @@ export default function BillingPage() {
           {accessStatus ? (
             <div className="flex flex-col md:flex-row items-center justify-between gap-6 p-6 bg-background rounded-xl border border-primary/10">
               <div className="space-y-2 text-center md:text-left">
-                <div className="flex items-center justify-center md:justify-start gap-3">
-                  <span className="text-3xl font-black uppercase tracking-tighter">
-                    {accessStatus.status === 'trial' ? 'Avaliação Gratuita' : accessStatus.plano_nome}
-                  </span>
-                  <Badge variant={accessStatus.acesso_liberado ? 'default' : 'destructive'} className="font-black text-[10px] uppercase h-5">
-                    {accessStatus.acesso_liberado ? 'Acesso Liberado' : 'Acesso Bloqueado'}
-                  </Badge>
-                </div>
-                <p className="text-sm text-muted-foreground font-bold italic opacity-80">{accessStatus.mensagem}</p>
+                <p className="text-3xl font-black uppercase tracking-tighter">
+                  {accessStatus.status === 'trial' ? 'Avaliação Gratuita' : accessStatus.plano_nome}
+                </p>
+                <p className="text-sm text-muted-foreground font-bold italic">{accessStatus.mensagem}</p>
               </div>
 
-              {formattedExpiryDate && (
-                <div className="flex items-center gap-4 px-6 py-4 bg-muted/50 rounded-xl border border-primary/5">
+              {accessStatus.expires_at && (
+                <div className="flex items-center gap-4 px-6 py-4 bg-muted/50 rounded-xl">
                   <Calendar className="h-6 w-6 text-primary/60" />
                   <div>
-                    <p className="text-[10px] uppercase font-black text-muted-foreground tracking-widest mb-0.5">Válido até</p>
+                    <p className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Válido até</p>
                     <p className="font-black text-foreground text-lg">
-                      {formattedExpiryDate}
+                      {isValid(parseISO(accessStatus.expires_at)) 
+                        ? format(parseISO(accessStatus.expires_at), 'dd/MM/yyyy', { locale: ptBR }) 
+                        : '---'}
                     </p>
                   </div>
                 </div>
               )}
             </div>
           ) : (
-            <div className="p-10 text-center border-dashed border-2 rounded-xl bg-background/50">
+            <div className="p-10 text-center border-dashed border-2 rounded-xl">
               <Info className="h-8 w-8 mx-auto text-muted-foreground opacity-50 mb-4" />
               <p className="text-sm text-muted-foreground font-black uppercase tracking-widest">
-                Informações de acesso não localizadas.
+                Nenhuma assinatura ativa ou teste iniciado.
               </p>
-              <p className="text-xs text-muted-foreground mt-1">Inicie um teste ou assine um plano para começar a vender.</p>
             </div>
           )}
         </CardContent>
@@ -168,67 +148,49 @@ export default function BillingPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {planOrder.map(planId => {
           const plan = PLANS_CONFIG[planId];
-          if (!plan) return null;
-
           const isTrial = planId === 'trial';
-          const isPopular = planId === 'anual';
-          const isCurrentPlan = accessStatus?.plano_tipo === planId && accessStatus?.acesso_liberado;
+          const isActivePlan = accessStatus?.plano_tipo === planId && accessStatus?.acesso_liberado;
 
           return (
             <Card key={planId} className={cn(
-              "flex flex-col relative transition-all duration-300 border-primary/5",
-              isPopular && "border-primary shadow-2xl scale-105 z-10",
-              isCurrentPlan && "border-green-500 bg-green-50/5 ring-1 ring-green-500/20"
+              "flex flex-col relative transition-all border-primary/5",
+              planId === 'anual' && "border-primary shadow-xl scale-105 z-10",
+              isActivePlan && "ring-2 ring-green-500"
             )}>
-              {isPopular && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-[10px] font-black px-4 py-1.5 rounded-full uppercase tracking-[0.2em] shadow-lg shadow-primary/20">
-                  Mais Popular
-                </div>
-              )}
-
-              <CardHeader className="text-center pb-8 border-b border-primary/5">
-                <CardTitle className="text-xl font-headline font-black uppercase tracking-tighter">{plan.name}</CardTitle>
-                <CardDescription className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground">{plan.description}</CardDescription>
+              <CardHeader className="text-center">
+                <CardTitle className="text-xl font-black uppercase tracking-tighter">{plan.name}</CardTitle>
+                <CardDescription className="text-[10px] uppercase font-bold">{plan.description}</CardDescription>
               </CardHeader>
-
-              <CardContent className="flex-1 space-y-8 pt-8 px-6">
+              <CardContent className="flex-1 space-y-6 pt-4">
                 <div className="text-center">
-                  <span className="text-4xl font-black tracking-tighter">{plan.price}</span>
-                  <span className="text-muted-foreground text-[10px] font-black uppercase ml-1 opacity-60">/{plan.periodicity}</span>
+                  <span className="text-4xl font-black">{plan.price}</span>
+                  <span className="text-muted-foreground text-[10px] font-black uppercase ml-1">/{plan.periodicity}</span>
                 </div>
-                <ul className="space-y-4">
+                <ul className="space-y-3">
                   {(plan.benefits || []).map((benefit, i) => (
-                    <li key={i} className="flex items-start gap-3 text-xs text-muted-foreground font-bold">
-                      <CheckCircle2 className="h-4 w-4 text-primary shrink-0 mt-0.5" /> 
-                      <span className="leading-tight">{benefit}</span>
+                    <li key={i} className="flex items-start gap-2 text-xs font-bold text-muted-foreground">
+                      <CheckCircle2 className="h-4 w-4 text-primary shrink-0" /> {benefit}
                     </li>
                   ))}
                 </ul>
               </CardContent>
-
-              <CardFooter className="pt-6 px-6 pb-8 border-t border-primary/5">
+              <CardFooter>
                 {isTrial ? (
                   <Button 
-                    className="w-full h-12 font-black uppercase text-[11px] tracking-widest" 
+                    className="w-full h-12 font-black uppercase text-[11px]" 
                     variant="outline"
                     onClick={handleStartTrial}
                     disabled={isStartingTrial || !!store?.trial_used || !!accessStatus}
                   >
-                    {isStartingTrial ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      store?.trial_used ? 'Avaliação Utilizada' : 
-                      accessStatus ? 'Já Ativado' : 'Testar 7 Dias Grátis'
-                    )}
+                    {isStartingTrial ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Testar 7 Dias'}
                   </Button>
                 ) : (
                   <Button 
-                    className="w-full h-12 font-black uppercase text-[11px] tracking-widest shadow-xl shadow-primary/10" 
-                    variant={isPopular ? 'default' : 'secondary'}
+                    className="w-full h-12 font-black uppercase text-[11px]"
                     onClick={() => handleCheckout(planId)}
-                    disabled={isCurrentPlan}
+                    disabled={isActivePlan}
                   >
-                    {isCurrentPlan ? 'Plano Ativo' : 'Assinar Agora'}
+                    {isActivePlan ? 'Plano Ativo' : 'Assinar Agora'}
                   </Button>
                 )}
               </CardFooter>
