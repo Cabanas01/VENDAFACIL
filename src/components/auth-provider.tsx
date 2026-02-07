@@ -1,4 +1,3 @@
-
 'use client';
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -62,13 +61,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (storeId) {
         const [storeRes, prodRes, activeSalesRes, custRes, accessRes, historyRes, cashRes] = await Promise.all([
-          supabase.from('stores').select('*').single(),
-          supabase.from('products').select('*').order('name'),
-          supabase.from('sales').select('*, items:sale_items(*)').eq('status', 'open').order('created_at', { ascending: true }),
-          supabase.from('customers').select('*').order('name'),
+          supabase.from('stores').select('*').eq('id', storeId).single(),
+          supabase.from('products').select('*').eq('store_id', storeId).order('name'),
+          supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeId).eq('status', 'open').order('created_at', { ascending: true }),
+          supabase.from('customers').select('*').eq('store_id', storeId).order('name'),
           supabase.rpc('get_store_access_status', { p_store_id: storeId }),
-          supabase.from('sales').select('*, items:sale_items(*)').eq('status', 'paid').order('created_at', { ascending: false }).limit(50),
-          supabase.from('cash_sessions').select('*').order('opened_at', { ascending: false })
+          supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', storeId).eq('status', 'paid').order('created_at', { ascending: false }).limit(50),
+          supabase.from('cash_sessions').select('*').eq('store_id', storeId).order('opened_at', { ascending: false })
         ]);
 
         setStore(storeRes.data || null);
@@ -104,8 +103,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, [fetchAppData]);
 
-  const getOrCreateComanda = async (table: number, customerName?: string | null) => {
-    return ComandaService.getOrCreateComanda(table, customerName);
+  const getOrCreateComanda = async (table: number) => {
+    if (!store?.id) throw new Error('Unidade não identificada.');
+    return ComandaService.getOrCreateComanda(table, store.id);
   };
 
   const adicionarItem = async (comandaId: string, productId: string, quantity: number) => {

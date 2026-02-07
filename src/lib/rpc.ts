@@ -6,18 +6,18 @@ import { supabase } from './supabase/client';
  * @fileOverview SERVIÇO CANÔNICO v5.3 (OFICIAL)
  * 
  * Central de mutações transacionais. 
- * Regra: Componentes NÃO chamam supabase.rpc direto — usam este serviço.
+ * Ajustado para a assinatura real detectada: (p_numero, p_store_id)
  */
 
 export const ComandaService = {
   /**
    * 1. Abre ou Recupera Comanda Aberta (PDV = Mesa 0)
-   * Assinatura v5.3: p_table_number (int), p_customer_name (text)
+   * Assinatura real: p_numero (int), p_store_id (uuid)
    */
-  async getOrCreateComanda(tableNumber: number, customerName?: string | null) {
+  async getOrCreateComanda(tableNumber: number, storeId: string) {
     const { data, error } = await supabase.rpc('rpc_get_or_create_open_comanda', {
-      p_table_number: Number(tableNumber),
-      p_customer_name: customerName ?? null
+      p_numero: Number(tableNumber),
+      p_store_id: storeId
     });
 
     if (error) {
@@ -30,7 +30,7 @@ export const ComandaService = {
 
   /**
    * 2. Adiciona Item à Comanda
-   * Assinatura v5.3: p_comanda_id (uuid), p_product_id (uuid), p_quantity (numeric)
+   * Assinatura: p_comanda_id (uuid), p_product_id (uuid), p_quantity (numeric)
    */
   async adicionarItem(comandaId: string, productId: string, quantity: number) {
     const { error } = await supabase.rpc('rpc_add_item_to_comanda', {
@@ -47,7 +47,7 @@ export const ComandaService = {
 
   /**
    * 3. Fecha Comanda e Gera Venda (Atômico)
-   * Assinatura v5.3: p_comanda_id (uuid), p_payment_method (text)
+   * Assinatura: p_comanda_id (uuid), p_payment_method (text)
    */
   async finalizarAtendimento(comandaId: string, paymentMethod: 'cash' | 'pix' | 'card') {
     const { error } = await supabase.rpc('rpc_close_comanda_to_sale', {
@@ -63,7 +63,7 @@ export const ComandaService = {
 
   /**
    * 4. Conclui Item na Produção (KDS/BDS)
-   * Assinatura v5.3: p_order_item_id (uuid)
+   * Assinatura: p_order_item_id (uuid)
    */
   async concluirPreparo(orderItemId: string) {
     const { error } = await supabase.rpc('rpc_mark_order_item_done', {

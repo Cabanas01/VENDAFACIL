@@ -1,4 +1,3 @@
-
 'use client';
 
 /**
@@ -7,7 +6,7 @@
 
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { format, formatDistanceToNow, parseISO, startOfDay, endOfDay } from 'date-fns';
+import { format, parseISO, startOfDay, endOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { 
   Coins, 
@@ -18,7 +17,6 @@ import {
   CheckCircle, 
   PlusCircle, 
   Wallet, 
-  AlertTriangle, 
   Loader2,
   CircleDollarSign
 } from 'lucide-react';
@@ -44,8 +42,8 @@ export default function CashPage() {
   const [dateRange, setDateRange] = useState<DateRange | undefined>({ from: new Date(), to: new Date() });
   const [isOpening, setIsOpening] = useState(false);
   
-  const cashSessionsSafe = useMemo(() => Array.isArray(cashSessions) ? cashSessions : [], [cashSessions]);
-  const salesSafe = useMemo(() => Array.isArray(sales) ? sales : [], [sales]);
+  const cashSessionsSafe = useMemo(() => (Array.isArray(cashSessions) ? cashSessions : []), [cashSessions]);
+  const salesSafe = useMemo(() => (Array.isArray(sales) ? sales : []), [sales]);
 
   const openSession = useMemo(() => cashSessionsSafe.find(s => s.status === 'open'), [cashSessionsSafe]);
   const hasOpenCash = !!openSession;
@@ -77,9 +75,10 @@ export default function CashPage() {
     }).reduce((acc, sale) => {
       acc.totalCents += (sale.total_cents || 0);
       acc.count += 1;
-      if (sale.payment_method === 'cash' || sale.payment_method === 'dinheiro') acc.cash += (sale.total_cents || 0);
-      if (sale.payment_method === 'pix') acc.pix += (sale.total_cents || 0);
-      if (sale.payment_method === 'card' || sale.payment_method === 'cartao' || sale.payment_method === 'credito' || sale.payment_method === 'debito') acc.card += (sale.total_cents || 0);
+      const method = (sale.payment_method || '').toLowerCase();
+      if (method === 'cash' || method === 'dinheiro') acc.cash += (sale.total_cents || 0);
+      if (method === 'pix') acc.pix += (sale.total_cents || 0);
+      if (['card', 'cartao', 'credito', 'debito'].includes(method)) acc.card += (sale.total_cents || 0);
       return acc;
     }, { totalCents: 0, count: 0, cash: 0, pix: 0, card: 0 });
   };
